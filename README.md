@@ -289,6 +289,14 @@ usuario, la contraseña y la base del servicio. El compose pasa
 Tampoco se verificó un build de Docker en este entorno de trabajo. La imagen no
 está probada.
 
+La imagen corre como usuario `app` (uid 10001) y SQLite vive en el bind mount
+`data/`: ese directorio debe pertenecer al UID/GID con el que corre el
+contenedor. Compose ya fija `user: "${PAYROLL_UID:-1000}:${PAYROLL_GID:-1000}"`,
+así que `PAYROLL_UID`/`PAYROLL_GID` en `.env` deben coincidir con el dueño de
+`data/` en el host (`ls -nd data`). Si no coinciden, el arranque falla con
+`sqlite3.OperationalError: unable to open database file`; en ese caso ajustar
+`.env` o cambiar el dueño con `sudo chown -R "$(id -u):$(id -g)" data`.
+
 ## Ejecutable de escritorio
 
 Los scripts de compilación existen, pero no se verificó un build de PyInstaller:

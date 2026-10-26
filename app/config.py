@@ -2,8 +2,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET_KEY = "change-me-in-production"
 
 
 class Settings(BaseSettings):
@@ -23,6 +25,19 @@ class Settings(BaseSettings):
     web_data_source: Literal["demo", "sql"] = "demo"
     web_auth_enabled: bool = True
     normative_cct_dir: Path = Path("normative/cct")
+
+    @model_validator(mode="after")
+    def _require_production_secret(self) -> "Settings":
+        # Fuera de development, un secreto vacio o igual al ejemplo deja las
+        # sesiones firmadas triviales de forjar: fallar al arrancar (B-16).
+        if self.environment.strip().lower() != "development" and (
+            not self.secret_key.strip() or self.secret_key == DEFAULT_SECRET_KEY
+        ):
+            raise ValueError(
+                "PAYROLL_SECRET_KEY debe definirse con un valor propio cuando "
+                "PAYROLL_ENVIRONMENT no es 'development'."
+            )
+        return self
 
 
 @lru_cache

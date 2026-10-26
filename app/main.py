@@ -1,5 +1,7 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api import (
     agreements,
@@ -16,6 +18,7 @@ from app.api import (
     settlements,
 )
 from app.config import get_settings
+from app.database.session import engine
 from app.web.routes import router as web_router
 from app.web.sql_data_source import SqlAlchemyDataSource
 
@@ -63,8 +66,18 @@ def create_app() -> FastAPI:
         application.include_router(ai_router, prefix="/api/v1")
     application.include_router(web_router)
 
-    @application.get("/health", tags=["system"])
-    def health() -> dict[str, str]:
+    @application.get("/health", tags=["system"], response_model=None)
+    def health() -> dict[str, str] | JSONResponse:
+        # B-24: el healthcheck de Docker usa esta URL; sin SELECT 1 un
+        # contenedor sin base figura sano.
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except Exception:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "error", "environment": settings.environment},
+            )
         return {"status": "ok", "environment": settings.environment}
 
     return application

@@ -332,6 +332,16 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal.begin() as session:
         seed(session)
+    # B-22: create_all no deja version de alembic y el upgrade posterior falla
+    # con "table ... already exists"; sellar head tras crear (idempotente).
+    from alembic.command import stamp
+    from alembic.config import Config
+
+    from app.config import get_settings
+
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
+    stamp(config, "head")
     print("Seed demo listo: admin@example.com y 2 empleados (datos ilustrativos).")
 
 
