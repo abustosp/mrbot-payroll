@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
+from app.config import Settings, get_settings
 from app.web.demo_data import DemoDataStore
 from app.web.routes import router
 
@@ -17,6 +18,10 @@ def app() -> FastAPI:
     application = FastAPI(title="Payroll web test")
     application.include_router(router)
     application.state.payroll_data_source = DemoDataStore()
+    # Las pruebas existentes de presentación no son de autenticación; se
+    # desactiva la sesión con un override explícito. La autenticación real se
+    # cubre en tests/unit/test_web_auth.py.
+    application.dependency_overrides[get_settings] = lambda: Settings(web_auth_enabled=False)
     return application
 
 
@@ -315,6 +320,7 @@ def test_health_page_reports_components(client: TestClient) -> None:
 def test_router_can_be_mounted_with_prefix() -> None:
     application = FastAPI()
     application.include_router(router, prefix="/panel")
+    application.dependency_overrides[get_settings] = lambda: Settings(web_auth_enabled=False)
     with TestClient(application) as test_client:
         response = test_client.get("/panel/")
         assert response.status_code == 200

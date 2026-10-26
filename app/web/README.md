@@ -27,6 +27,8 @@ visual está en `GET /salud` y en el alias `GET /health/visual`.
 
 | Ruta | Pantalla |
 |---|---|
+| `/login` | Ingreso con formulario HTML |
+| `/logout` | Cierre de sesión (POST con CSRF) |
 | `/` | Dashboard |
 | `/empresas` | Listado de empresas con búsqueda HTMX |
 | `/empresas/{id}` | Ficha de empresa, empleados y documentos |
@@ -49,6 +51,21 @@ visual está en `GET /salud` y en el alias `GET /health/visual`.
 Las acciones de estado de propuestas solo se ejecutan en el store demo. La
 publicación real de reglas debe hacerse en el servicio de IA con permisos y
 auditoría; la capa web no duplica esas reglas.
+
+## Autenticación y CSRF
+
+`PAYROLL_WEB_AUTH_ENABLED` vale `true` por defecto. Las rutas privadas usan
+`require_web_user` y redirigen a `/login?next=...`; si la petición es HTMX
+devuelven `401` con `HX-Redirect`. `/login`, `/salud` y `/static/*` son públicas.
+
+La UI reutiliza `sign_session`, `read_session` y `verify_password` de
+`app.auth.security` y la misma cookie que la API. En modo demo las credenciales
+se comparan con `PAYROLL_ADMIN_EMAIL` y `PAYROLL_ADMIN_PASSWORD`; en modo SQL se
+consulta la tabla `users` (rol `viewer` sólo lectura).
+
+Cada POST valida un token CSRF firmado con `itsdangerous`. El token viaja en la
+cookie `payroll_csrf` y en el campo oculto `csrf_token`; ambos deben coincidir y
+la firma debe ser válida. También se acepta el header `X-CSRF-Token`.
 
 ## Fuente de datos
 

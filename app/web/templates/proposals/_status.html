@@ -38,11 +38,13 @@
     </div>
   </div>
 
+  {% if current_user and current_user.role in ["admin", "editor"] %}
   <div style="display: grid; gap: 8px; margin-top: 18px;">
     {% if proposal.status in ["draft", "in_review"] %}
       <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
             hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
             hx-target="#proposal-status-panel" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="status" value="approved">
         <button class="btn btn--success" type="submit" style="width: 100%;">{{ icon("check") }} Aprobar propuesta</button>
       </form>
@@ -50,6 +52,7 @@
         <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
               hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
               hx-target="#proposal-status-panel" hx-swap="outerHTML">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="status" value="in_review">
           <button class="btn btn--outline" type="submit" style="width: 100%;">{{ icon("clock") }} Enviar a revisión</button>
         </form>
@@ -57,6 +60,7 @@
       <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
             hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
             hx-target="#proposal-status-panel" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="status" value="rejected">
         <button class="btn btn--danger" type="submit" style="width: 100%;">{{ icon("x") }} Rechazar propuesta</button>
       </form>
@@ -64,9 +68,15 @@
       <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
             hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
             hx-target="#proposal-status-panel" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="status" value="in_review">
         <button class="btn btn--outline" type="submit" style="width: 100%;">{{ icon("refresh") }} Devolver a revisión</button>
       </form>
     {% endif %}
   </div>
+  {% else %}
+  <div class="callout" style="margin-top: 18px;">
+    <strong>Solo lectura:</strong> tu rol no permite modificar el estado de la propuesta.
+  </div>
+  {% endif %}
 </div>

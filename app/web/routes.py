@@ -21,13 +21,29 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
+from app.database.session import get_db
 from app.exporters.pdf.receipts import (
     ReceiptContextError,
     pdf_backend_status,
     render_receipt_html,
     render_receipt_pdf,
     render_receipts_zip,
+)
+from app.web.auth import (
+    WebUser,
+    authenticate_web_user,
+    clear_web_session,
+    create_csrf_token,
+    csrf_token_for,
+    enforce_csrf,
+    require_web_user,
+    resolve_web_user,
+    safe_next_url,
+    set_csrf_cookie,
+    start_web_session,
 )
 from app.web.dependencies import get_data_source
 from app.web.formatting import (
@@ -75,8 +91,12 @@ templates.env.globals.update(
 
 router = APIRouter()
 web_router = router
+protected_router = APIRouter(dependencies=[Depends(require_web_user)])
 
 DataSource = Annotated[Any, Depends(get_data_source)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+SessionDep = Annotated[Session, Depends(get_db)]
+WebUserDep = Annotated[WebUser, Depends(require_web_user)]
 
 PAYROLL_STATUS_OPTIONS = [
     ("", "Todos los estados"),
@@ -112,11 +132,26 @@ def _render(
     status_code: int = 200,
     **context: Any,
 ) -> HTMLResponse:
+    data = get_data_source(request)
+    current_user = getattr(request.state, "web_user", None)
+    settings = getattr(request.state, "web_settings", None)
+    csrf_token = ""
+    if (
+        isinstance(current_user, WebUser)
+        and isinstance(settings, Settings)
+        and settings.web_auth_enabled
+    ):
+        csrf_token = csrf_token_for(request, settings, current_user.id)
+
     base_context: dict[str, Any] = {
         "app_name": APP_NAME,
         "app_short_name": APP_SHORT_NAME,
         "current_year": date.today().year,
-        "demo_mode": True,
+        "current_user": current_user,
+        "csrf_token": csrf_token,
+        "demo_mode": bool(getattr(data, "is_demo", False)),
+        "data_source_name": getattr(data, "source_name", "Fuente de datos"),
+        "data_source_explanation": getattr(data, "explanation", ""),
         "active_nav": "",
     }
     base_context.update(context)
@@ -126,8 +161,43 @@ def _render(
         context=base_context,
         status_code=status_code,
     )
+    if csrf_token and isinstance(settings, Settings):
+        set_csrf_cookie(response, csrf_token, settings)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
+
+
+def _render_login(
+    request: Request,
+    settings: Settings,
+    *,
+    email: str = "",
+    error: str | None = None,
+    next_url: str = "/",
+    status_code: int = 200,
+) -> HTMLResponse:
+    csrf_token = csrf_token_for(request, settings, None)
+    response = templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={
+            "app_name": APP_NAME,
+            "app_short_name": APP_SHORT_NAME,
+            "current_year": date.today().year,
+            "csrf_token": csrf_token,
+            "email": email,
+            "error": error,
+            "next_url": next_url,
+        },
+        status_code=status_code,
+    )
+    set_csrf_cookie(response, csrf_token, settings)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Cache-Control", "no-store")
     return response
 
 
@@ -171,11 +241,81 @@ def _attachment_header(filename: str) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Autenticación
+# ---------------------------------------------------------------------------
+
+
+@router.get("/login", name="login_page")
+def login_page(
+    request: Request,
+    settings: SettingsDep,
+    db: SessionDep,
+    data: DataSource,
+) -> Response:
+    next_url = safe_next_url(request.query_params.get("next"))
+    if not settings.web_auth_enabled:
+        return RedirectResponse(url=next_url, status_code=303)
+    if resolve_web_user(request, db, settings, data) is not None:
+        return RedirectResponse(url=next_url, status_code=303)
+    return _render_login(request, settings, next_url=next_url)
+
+
+@router.post("/login", name="login_submit")
+def login_submit(
+    request: Request,
+    settings: SettingsDep,
+    db: SessionDep,
+    data: DataSource,
+    email: Annotated[str, Form()] = "",
+    password: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form()] = "",
+    next: Annotated[str, Form()] = "",
+) -> Response:
+    next_url = safe_next_url(next or request.query_params.get("next"))
+    if not settings.web_auth_enabled:
+        return RedirectResponse(url=next_url, status_code=303)
+    enforce_csrf(request, csrf_token, settings, None)
+    user = authenticate_web_user(
+        email=email[:254],
+        password=password,
+        db=db,
+        settings=settings,
+        data=data,
+    )
+    if user is None:
+        return _render_login(
+            request,
+            settings,
+            email=email.strip()[:254],
+            error="Credenciales inválidas. Revisá el email y la contraseña.",
+            next_url=next_url,
+            status_code=401,
+        )
+    response = RedirectResponse(url=next_url, status_code=303)
+    start_web_session(response, user, settings)
+    set_csrf_cookie(response, create_csrf_token(settings.secret_key, user.id), settings)
+    return response
+
+
+@protected_router.post("/logout", name="logout")
+def logout(
+    request: Request,
+    user: WebUserDep,
+    settings: SettingsDep,
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    response = RedirectResponse(url=request.url_for("login_page").path, status_code=303)
+    clear_web_session(response, settings)
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Dashboard y salud
 # ---------------------------------------------------------------------------
 
 
-@router.get("/", name="dashboard")
+@protected_router.get("/", name="dashboard")
 def dashboard(request: Request, data: DataSource) -> HTMLResponse:
     metrics = data.dashboard_metrics()
     return _render(
@@ -256,7 +396,7 @@ def health_visual(request: Request, data: DataSource) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/empresas", name="companies_list")
+@protected_router.get("/empresas", name="companies_list")
 def companies_list(
     request: Request,
     data: DataSource,
@@ -276,7 +416,7 @@ def companies_list(
     return _render(request, "companies/list.html", **context)
 
 
-@router.get("/empresas/{company_id}", name="company_detail")
+@protected_router.get("/empresas/{company_id}", name="company_detail")
 def company_detail(request: Request, company_id: str, data: DataSource) -> HTMLResponse:
     company = data.get_company(company_id)
     if company is None:
@@ -307,7 +447,7 @@ def company_detail(request: Request, company_id: str, data: DataSource) -> HTMLR
 # ---------------------------------------------------------------------------
 
 
-@router.get("/empleados", name="employees_list")
+@protected_router.get("/empleados", name="employees_list")
 def employees_list(
     request: Request,
     data: DataSource,
@@ -333,7 +473,7 @@ def employees_list(
     return _render(request, "employees/list.html", **context)
 
 
-@router.get("/empleados/{employee_id}", name="employee_detail")
+@protected_router.get("/empleados/{employee_id}", name="employee_detail")
 def employee_detail(request: Request, employee_id: str, data: DataSource) -> HTMLResponse:
     employee = data.get_employee(employee_id)
     if employee is None:
@@ -363,7 +503,7 @@ def employee_detail(request: Request, employee_id: str, data: DataSource) -> HTM
 # ---------------------------------------------------------------------------
 
 
-@router.get("/convenios", name="agreements_list")
+@protected_router.get("/convenios", name="agreements_list")
 def agreements_list(
     request: Request,
     data: DataSource,
@@ -381,7 +521,7 @@ def agreements_list(
     )
 
 
-@router.get("/convenios/{agreement_id}", name="agreement_detail")
+@protected_router.get("/convenios/{agreement_id}", name="agreement_detail")
 def agreement_detail(request: Request, agreement_id: str, data: DataSource) -> HTMLResponse:
     agreement = data.get_agreement(agreement_id)
     if agreement is None:
@@ -410,7 +550,7 @@ def agreement_detail(request: Request, agreement_id: str, data: DataSource) -> H
 # ---------------------------------------------------------------------------
 
 
-@router.get("/liquidaciones", name="payrolls_list")
+@protected_router.get("/liquidaciones", name="payrolls_list")
 def payrolls_list(
     request: Request,
     data: DataSource,
@@ -433,7 +573,7 @@ def payrolls_list(
     return _render(request, "payrolls/list.html", **context)
 
 
-@router.get("/liquidaciones/{payroll_id}", name="payroll_detail")
+@protected_router.get("/liquidaciones/{payroll_id}", name="payroll_detail")
 def payroll_detail(request: Request, payroll_id: str, data: DataSource) -> HTMLResponse:
     payroll = data.get_payroll(payroll_id)
     if payroll is None:
@@ -460,7 +600,7 @@ def payroll_detail(request: Request, payroll_id: str, data: DataSource) -> HTMLR
 # ---------------------------------------------------------------------------
 
 
-@router.get("/propuestas-ia", name="proposals_list")
+@protected_router.get("/propuestas-ia", name="proposals_list")
 def proposals_list(
     request: Request,
     data: DataSource,
@@ -480,7 +620,7 @@ def proposals_list(
     return _render(request, "proposals/list.html", **context)
 
 
-@router.get("/propuestas-ia/{proposal_id}", name="proposal_detail")
+@protected_router.get("/propuestas-ia/{proposal_id}", name="proposal_detail")
 def proposal_detail(request: Request, proposal_id: str, data: DataSource) -> HTMLResponse:
     proposal = data.get_proposal(proposal_id)
     if proposal is None:
@@ -501,13 +641,19 @@ def proposal_detail(request: Request, proposal_id: str, data: DataSource) -> HTM
     )
 
 
-@router.post("/propuestas-ia/{proposal_id}/estado", name="proposal_update_status")
+@protected_router.post("/propuestas-ia/{proposal_id}/estado", name="proposal_update_status")
 def proposal_update_status(
     request: Request,
     proposal_id: str,
     data: DataSource,
+    user: WebUserDep,
+    settings: SettingsDep,
     status: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form()] = "",
 ) -> Response:
+    if user.role not in {"admin", "editor"}:
+        raise HTTPException(status_code=403, detail="Permiso insuficiente.")
+    enforce_csrf(request, csrf_token, settings, user.id)
     allowed = {"draft", "in_review", "approved", "rejected"}
     if status not in allowed:
         raise HTTPException(status_code=400, detail="Estado de propuesta no válido.")
@@ -535,7 +681,7 @@ def proposal_update_status(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/recibos", name="receipts_list")
+@protected_router.get("/recibos", name="receipts_list")
 def receipts_list(
     request: Request,
     data: DataSource,
@@ -569,7 +715,7 @@ def receipts_list(
     return _render(request, "receipts/list.html", **context)
 
 
-@router.get("/recibos/lote.zip", name="receipts_zip")
+@protected_router.get("/recibos/lote.zip", name="receipts_zip")
 def receipts_zip(
     data: DataSource,
     company_id: Annotated[str, Query(max_length=80)] = "",
@@ -590,7 +736,7 @@ def receipts_zip(
     )
 
 
-@router.get("/recibos/{receipt_id}", name="receipt_detail")
+@protected_router.get("/recibos/{receipt_id}", name="receipt_detail")
 def receipt_detail(request: Request, receipt_id: str, data: DataSource) -> HTMLResponse:
     receipt = data.get_receipt(receipt_id)
     if receipt is None:
@@ -612,7 +758,7 @@ def receipt_detail(request: Request, receipt_id: str, data: DataSource) -> HTMLR
     )
 
 
-@router.get("/recibos/{receipt_id}/vista", name="receipt_preview")
+@protected_router.get("/recibos/{receipt_id}/vista", name="receipt_preview")
 def receipt_preview(receipt_id: str, data: DataSource) -> HTMLResponse:
     receipt = data.get_receipt(receipt_id)
     if receipt is None:
@@ -634,7 +780,7 @@ def receipt_preview(receipt_id: str, data: DataSource) -> HTMLResponse:
     )
 
 
-@router.get("/recibos/{receipt_id}/pdf", name="receipt_pdf")
+@protected_router.get("/recibos/{receipt_id}/pdf", name="receipt_pdf")
 def receipt_pdf(receipt_id: str, data: DataSource) -> Response:
     receipt = data.get_receipt(receipt_id)
     if receipt is None:
@@ -671,6 +817,9 @@ def web_js() -> FileResponse:
         media_type="application/javascript",
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+router.include_router(protected_router)
 
 
 __all__ = ["router", "templates", "web_router"]

@@ -64,8 +64,17 @@
     </nav>
 
     <div class="sidebar-footer">
-      <div class="mode-chip"><span class="status-dot"></span> Modo demo</div>
-      <p>Datos de ejemplo en memoria. Sin conexión a base de datos.</p>
+      <div class="mode-chip">
+        <span class="status-dot"></span>
+        {% if demo_mode %}Modo demo{% else %}{{ data_source_name }}{% endif %}
+      </div>
+      <p>
+        {% if demo_mode %}
+          Datos de ejemplo en memoria. Sin conexión a base de datos.
+        {% else %}
+          {{ data_source_name }} · fuente de solo lectura.
+        {% endif %}
+      </p>
     </div>
   </aside>
 
@@ -92,13 +101,21 @@
           <span class="status-dot" aria-hidden="true"></span>
           <span>Sistema operativo</span>
         </a>
-        <div class="user-chip" title="Sesión de demostración">
-          <span class="avatar avatar--admin">AD</span>
-          <span class="user-meta">
-            <strong>Administrador</strong>
-            <small>Entorno demo</small>
-          </span>
-        </div>
+        {% if current_user %}
+          <div class="user-chip" title="Sesión de {{ current_user.email }}">
+            <span class="avatar avatar--{% if current_user.role == 'admin' %}admin{% elif current_user.role == 'editor' %}accent{% else %}warm{% endif %}">{{ current_user.initials }}</span>
+            <span class="user-meta">
+              <strong>{{ current_user.display_name }}</strong>
+              <small>{{ current_user.role_label }} · {{ current_user.email }}</small>
+            </span>
+          </div>
+          <form method="post" action="{{ url_for('logout') }}" class="logout-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn--ghost btn--sm" type="submit">{{ icon("lock") }} Salir</button>
+          </form>
+        {% else %}
+          <a class="header-health" href="{{ url_for('login_page') }}">Iniciar sesión</a>
+        {% endif %}
       </div>
     </header>
 
@@ -116,7 +133,7 @@
     </main>
 
     <footer class="app-footer">
-      <span>{{ app_name }} · Interfaz de demostración</span>
+      <span>{{ app_name }} · {{ data_source_name }}</span>
       <span>© {{ current_year }} · Jinja2 + HTMX</span>
     </footer>
   </div>

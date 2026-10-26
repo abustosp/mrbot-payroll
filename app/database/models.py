@@ -217,6 +217,38 @@ class FormulaVersion(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AiProposal(Base):
+    """Persisted, human-supervised AI proposal.
+
+    A proposal is *not* a payroll rule. Publication is a separate, explicit
+    operation that always creates a ``DRAFT`` formula version.
+    """
+
+    __tablename__ = "ai_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'validated', 'approved', 'rejected', 'published')",
+            name="valid_status",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    document_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    document_hash: Mapped[str | None] = mapped_column(String(128))
+    title: Mapped[str | None] = mapped_column(String(500))
+    raw_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    validation_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), default="draft", nullable=False)
+    approved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_formula_id: Mapped[int | None] = mapped_column(ForeignKey("formula_definitions.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+# Backwards/forwards compatible naming for imports in application code.
+AIProposal = AiProposal
+
+
 class NormativeDocument(Base):
     __tablename__ = "normative_documents"
     id: Mapped[int] = mapped_column(primary_key=True)

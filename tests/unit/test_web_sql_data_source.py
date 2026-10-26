@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.main as main
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.database import Base
 from app.database.models import PayrollRun
 from app.services.payroll_calculation import calculate_payroll_run
@@ -107,13 +107,24 @@ def test_web_source_setting_defaults_to_demo_and_can_select_sql(monkeypatch) -> 
 
     monkeypatch.setenv("PAYROLL_WEB_DATA_SOURCE", "sql")
     assert Settings(_env_file=None).web_data_source == "sql"
-    monkeypatch.setattr(main, "get_settings", lambda: Settings(web_data_source="sql"))
+    monkeypatch.setattr(
+        main,
+        "get_settings",
+        lambda: Settings(web_data_source="sql", web_auth_enabled=False),
+    )
     sql_app = main.create_app()
     assert isinstance(sql_app.state.payroll_data_source, SqlAlchemyDataSource)
+    monkeypatch.delenv("PAYROLL_WEB_AUTH_ENABLED", raising=False)
+    assert Settings(_env_file=None).web_auth_enabled is True
 
     monkeypatch.delenv("PAYROLL_WEB_DATA_SOURCE")
-    monkeypatch.setattr(main, "get_settings", lambda: Settings())
+    monkeypatch.setattr(
+        main,
+        "get_settings",
+        lambda: Settings(web_auth_enabled=False),
+    )
     demo_app = main.create_app()
+    demo_app.dependency_overrides[get_settings] = lambda: Settings(web_auth_enabled=False)
     with TestClient(demo_app) as client:
         response = client.get("/")
     assert response.status_code == 200

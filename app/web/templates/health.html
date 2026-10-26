@@ -69,16 +69,22 @@
             <h2 class="card-title">Modo de datos</h2>
             <p class="card-subtitle">Integración actual de la capa web.</p>
           </div>
-          <span class="badge badge--info">Demo</span>
+          <span class="badge badge--{{ 'info' if demo_mode else 'success' }}">{{ "Demo" if demo_mode else "SQL" }}</span>
         </div>
         <div class="card-body">
-          <div class="callout callout--warning">
-            <strong>Sin base de datos real.</strong> La interfaz usa un repositorio de lectura en memoria para que pueda probarse sin infraestructura. Las rutas no contienen reglas de liquidación ni escriben datos contables.
-          </div>
+          {% if demo_mode %}
+            <div class="callout callout--warning">
+              <strong>Sin base de datos real.</strong> La interfaz usa un repositorio de lectura en memoria para que pueda probarse sin infraestructura. Las rutas no contienen reglas de liquidación ni escriben datos contables.
+            </div>
+          {% else %}
+            <div class="callout">
+              <strong>{{ data_source_name }}.</strong> {{ data_source_explanation }}
+            </div>
+          {% endif %}
           <div class="summary-list" style="margin-top: 18px;">
             <div class="summary-row">
               <span class="summary-label">Fuente de datos</span>
-              <span class="summary-value">Datos demo en memoria</span>
+              <span class="summary-value">{{ data_source_name }}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Punto de integración</span>

@@ -10,9 +10,13 @@ operation.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.ai import (
     AgreementAnalysis,
@@ -31,8 +35,17 @@ from app.ai import (
     validate_formula_proposal,
     validate_proposal,
 )
+from app.api.common import commit_or_conflict, get_scoped
+from app.api.schemas import AiProposalPublishRead, AiProposalRead
 from app.auth.dependencies import require_role, require_user
-from app.database.models import User
+from app.database.models import (
+    AiProposal,
+    AuditLog,
+    FormulaDefinition,
+    FormulaVersion,
+    User,
+)
+from app.database.session import get_db
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -40,6 +53,14 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 # abusive request is rejected before prompts, hashes and validation run.
 MAX_AGREEMENT_TEXT_CHARS = 100_000
 _MOCK_EFFECTIVE_FROM = "2026-10-01"
+
+
+class PersistProposalRequest(BaseModel):
+    """Optional wrapper for clients that post ``{"analysis": {...}}``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analysis: AgreementAnalysis
 
 
 class AnalyzeAgreementRequest(BaseModel):
@@ -188,6 +209,246 @@ def _with_validation_reports(analysis: AgreementAnalysis) -> AgreementAnalysis:
         for formula in analysis.formulas
     ]
     return analysis.model_copy(update={"formulas": formulas})
+
+
+def _reports_for_analysis(analysis: AgreementAnalysis) -> list[ValidationReport]:
+    return [
+        validate_formula_proposal(formula, analysis=analysis)
+        for formula in analysis.formulas
+    ]
+
+
+def _validation_summary(reports: list[ValidationReport]) -> dict[str, Any]:
+    return {
+        "is_valid": all(report.is_valid for report in reports),
+        "reports": [report.model_dump(mode="json") for report in reports],
+        "validated_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _stored_validation_is_valid(value: Any) -> bool:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return False
+    if isinstance(value, dict):
+        return value.get("is_valid") is True
+    if isinstance(value, list):
+        return bool(value) and all(
+            isinstance(item, dict) and item.get("is_valid") is True for item in value
+        )
+    return False
+
+
+def _analysis_from_proposal(proposal: AiProposal) -> AgreementAnalysis:
+    raw = proposal.raw_json
+    try:
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        return AgreementAnalysis.model_validate(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"La propuesta persistida no contiene un análisis válido: {exc}",
+        ) from exc
+
+
+def _ensure_valid_reports(reports: list[ValidationReport]) -> None:
+    invalid = [report for report in reports if not report.is_valid]
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "La propuesta no supera la validación determinística.",
+                "errors": [
+                    issue.model_dump(mode="json")
+                    for report in invalid
+                    for issue in report.errors
+                ],
+            },
+        )
+
+
+@router.post(
+    "/proposals",
+    response_model=AiProposalRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_ai_proposal(
+    payload: AgreementAnalysis | PersistProposalRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "editor")),
+):
+    """Persist a validated analysis as a draft proposal.
+
+    The body may be the analysis itself or ``{"analysis": {...}}``.
+    Persistence is not an approval: the stored status is always ``draft`` and
+    no formula definition is created.
+    """
+
+    if isinstance(payload, PersistProposalRequest):
+        payload = payload.analysis
+    reports = _reports_for_analysis(payload)
+    _ensure_valid_reports(reports)
+    row = AiProposal(
+        organization_id=user.organization_id,
+        document_id=payload.document.document_id,
+        document_hash=payload.document.content_hash,
+        title=payload.document.title or payload.agreement_title,
+        raw_json=payload.model_dump(mode="json"),
+        validation_json=_validation_summary(reports),
+        status="draft",
+    )
+    db.add(row)
+    commit_or_conflict(db)
+    db.refresh(row)
+    return row
+
+
+@router.post("/proposals/{proposal_id}/approve", response_model=AiProposalRead)
+def approve_persisted_ai_proposal(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "editor")),
+):
+    """Approve a persisted, valid draft/validated proposal.
+
+    The approval is recorded with the authenticated user's identity. It does
+    not publish anything or create a formula.
+    """
+
+    row = get_scoped(db, AiProposal, proposal_id, user.organization_id)
+    if row.status not in {"draft", "validated"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se aprueban propuestas en estado draft o validated",
+        )
+    if not _stored_validation_is_valid(row.validation_json):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La propuesta no tiene una validación determinística satisfactoria",
+        )
+    analysis = _analysis_from_proposal(row)
+    _ensure_valid_reports(_reports_for_analysis(analysis))
+
+    row.status = "approved"
+    row.approved_by = user.id
+    row.approved_at = datetime.now(UTC)
+    commit_or_conflict(db)
+    db.refresh(row)
+    return row
+
+
+@router.post(
+    "/proposals/{proposal_id}/publish",
+    response_model=AiProposalPublishRead,
+)
+def publish_ai_proposal(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    """Publish an approved proposal as *draft* formula versions.
+
+    Only administrators may publish. Every created version is ``DRAFT``: the
+    endpoint never copies an approval into production rules. An existing
+    formula with the same code is a conflict, never silently reused.
+    """
+
+    row = get_scoped(db, AiProposal, proposal_id, user.organization_id)
+    if row.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La propuesta debe estar aprobada antes de publicarse",
+        )
+    analysis = _analysis_from_proposal(row)
+    _ensure_valid_reports(_reports_for_analysis(analysis))
+    if not analysis.formulas:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La propuesta no contiene fórmulas para publicar",
+        )
+
+    for formula in analysis.formulas:
+        if len(formula.code) > 80:
+            raise HTTPException(
+                status_code=422,
+                detail=f"El código {formula.code!r} supera el máximo de 80 caracteres",
+            )
+        existing = db.scalar(
+            select(FormulaDefinition).where(
+                FormulaDefinition.organization_id == user.organization_id,
+                FormulaDefinition.code == formula.code,
+            )
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Ya existe una fórmula con el código {formula.code!r}; "
+                    "no se reutiliza silenciosamente. Cree una nueva versión explícita."
+                ),
+            )
+
+    published: list[tuple[FormulaDefinition, FormulaVersion]] = []
+    for formula in analysis.formulas:
+        definition = FormulaDefinition(
+            organization_id=user.organization_id,
+            code=formula.code,
+            description=formula.description[:240],
+            current_version=1,
+        )
+        db.add(definition)
+        db.flush()
+        version = FormulaVersion(
+            formula_id=definition.id,
+            version=1,
+            expression=formula.formula,
+            status="DRAFT",
+            valid_from=formula.effective_from,
+            valid_to=formula.effective_to,
+        )
+        db.add(version)
+        db.flush()
+        published.append((definition, version))
+
+    first_definition, first_version = published[0]
+    row.status = "published"
+    row.published_formula_id = first_definition.id
+    db.add(
+        AuditLog(
+            organization_id=user.organization_id,
+            user_id=user.id,
+            action="ai_proposal.published",
+            entity_type="AiProposal",
+            entity_id=str(row.id),
+            before={"status": "approved"},
+            after={
+                "status": "published",
+                "published_formula_id": first_definition.id,
+                "formulas": [
+                    {
+                        "formula_id": definition.id,
+                        "formula_version_id": version.id,
+                        "code": definition.code,
+                        "version": version.version,
+                        "status": version.status,
+                    }
+                    for definition, version in published
+                ],
+            },
+        )
+    )
+    commit_or_conflict(db)
+    db.refresh(row)
+    base = AiProposalRead.model_validate(row)
+    return AiProposalPublishRead(
+        **base.model_dump(),
+        formula_id=first_definition.id,
+        formula_version_id=first_version.id,
+        formula_status=first_version.status,
+    )
 
 
 @router.post("/analyze-agreement", response_model=AgreementAnalysis)

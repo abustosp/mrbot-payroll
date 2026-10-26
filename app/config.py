@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     session_max_age: int = 28800
     web_data_source: Literal["demo", "sql"] = "demo"
+    web_auth_enabled: bool = True
+    normative_cct_dir: Path = Path("normative/cct")
 
 
 @lru_cache
@@ -34,4 +36,3 @@ def ensure_sqlite_directory(database_url: str) -> None:
     database_path = database_url.removeprefix("sqlite:///")
     if database_path != ":memory:":
         Path(database_path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
-

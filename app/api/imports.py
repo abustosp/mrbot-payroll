@@ -1,0 +1,294 @@
+# ruff: noqa: B008 -- FastAPI resolves File/Depends defaults at request time.
+"""API de importacion de empleados y novedades desde CSV/XLSX.
+
+Los endpoints reutilizan los importadores puros de ``app.importers``: primero
+se arma un :class:`~app.importers.models.ImportPreview` y, en los commits de
+empleados, se revalidan las filas con ``import_rows`` antes de persistirlas.
+El ``dry_run`` es el modo por defecto, por lo que un pedido sin ``dry_run=false``
+nunca modifica la base de datos.
+
+La importacion de **novedades** solo admite ``dry_run=true``. No existe una
+tabla de novedades en el modelo de datos actual, asi que un pedido con
+``dry_run=false`` se rechaza con 422 en lugar de inventar persistencia.
+"""
+
+from __future__ import annotations
+
+import io
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.api.common import commit_or_conflict
+from app.auth.dependencies import require_user
+from app.database.models import Company, Employee, EmploymentContract, User
+from app.database.session import get_db
+from app.importers.models import (
+    DuplicateRow,
+    EmployeeRow,
+    ImportPreview,
+    ImportResult,
+    RowError,
+)
+from app.importers.readers import ImportFileError
+from app.importers.service import analyze_file, import_rows
+
+router = APIRouter(prefix="/imports", tags=["imports"])
+
+MAX_IMPORT_BYTES = 5 * 1024 * 1024
+ALLOWED_SUFFIXES = frozenset({".csv", ".xlsx", ".xlsm"})
+COMMIT_ROLES = frozenset({"admin", "editor"})
+
+
+class _NamedBytesIO(io.BytesIO):
+    """``BytesIO`` con nombre para que el reader detecte la extension."""
+
+    def __init__(self, content: bytes, name: str) -> None:
+        super().__init__(content)
+        self.name = name
+
+
+def _serialize(outcome: ImportPreview | ImportResult, **extra: Any) -> dict[str, Any]:
+    """Serializa un preview/resultado e incorpora los conteos derivados."""
+    payload = outcome.model_dump(mode="json")
+    payload.update(
+        valid_count=outcome.valid_count,
+        error_count=outcome.error_count,
+        duplicate_count=outcome.duplicate_count,
+    )
+    payload.update(extra)
+    return payload
+
+
+def _read_upload(upload: UploadFile) -> tuple[bytes, str]:
+    """Lee y valida extension, tamano, encoding basico y contenido vacio."""
+    filename = (upload.filename or "").strip()
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_SUFFIXES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Extension no soportada. Adjunte un archivo .csv, .xlsx o .xlsm.",
+        )
+
+    upload.file.seek(0)
+    content = upload.file.read(MAX_IMPORT_BYTES + 1)
+    if len(content) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "El archivo supera el tamano maximo permitido de "
+                f"{MAX_IMPORT_BYTES // (1024 * 1024)} MB."
+            ),
+        )
+    if not content or not content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo esta vacio.",
+        )
+    if suffix == ".csv" and b"\x00" in content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El CSV contiene datos binarios o una codificacion no soportada.",
+        )
+    return content, filename
+
+
+def _analyze(content: bytes, filename: str, kind: str) -> ImportPreview:
+    """Ejecuta ``analyze_file`` preservando el nombre original del archivo."""
+    stream = _NamedBytesIO(content, filename)
+    try:
+        return analyze_file(stream, kind)
+    except ImportFileError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+def _ensure_commit_role(user: User) -> None:
+    if user.role not in COMMIT_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permiso insuficiente para confirmar una importacion.",
+        )
+
+
+def _scoped_company(db: Session, company_id: int, organization_id: int) -> Company:
+    company = db.scalar(
+        select(Company).where(
+            Company.id == company_id,
+            Company.organization_id == organization_id,
+        )
+    )
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Empresa no encontrada.",
+        )
+    return company
+
+
+def _commit_employees(
+    db: Session,
+    user: User,
+    preview: ImportPreview,
+    company_id: int | None,
+) -> dict[str, Any]:
+    """Persiste las filas validas sin abortar el lote por filas con conflicto.
+
+    La idempotencia se garantiza por ``(organization_id, employee_code)``: un
+    legajo ya existente se informa como duplicado y no se vuelve a crear. Si se
+    informa ``company_id`` se crea un contrato minimo por empleado nuevo; sin
+    ese dato no se crean contratos y los empleados se importan igualmente.
+    """
+    result = import_rows(list(preview.valid_rows), "employees")
+    result.total = preview.total
+    result.errors = [*preview.errors, *result.errors]
+    result.duplicates = [*preview.duplicates, *result.duplicates]
+    result.dry_run = False
+
+    company = (
+        _scoped_company(db, company_id, user.organization_id)
+        if company_id is not None
+        else None
+    )
+    existing_codes = set(
+        db.scalars(
+            select(Employee.employee_code).where(
+                Employee.organization_id == user.organization_id
+            )
+        ).all()
+    )
+
+    created = 0
+    skipped = 0
+    contracts_created = 0
+    for index, row in enumerate(result.valid_rows):
+        if not isinstance(row, EmployeeRow):
+            continue
+        row_number = index + 2
+        if row.legajo in existing_codes:
+            skipped += 1
+            result.duplicates.append(
+                DuplicateRow(
+                    row=row_number,
+                    first_row=row_number,
+                    key=f"legajo:{row.legajo}",
+                    message=(
+                        "Ya existe un empleado con ese legajo en la organizacion; "
+                        "la fila se omite."
+                    ),
+                )
+            )
+            continue
+
+        employee = Employee(
+            organization_id=user.organization_id,
+            employee_code=row.legajo,
+            first_name=row.nombre,
+            last_name=row.apellido,
+            cuil=row.cuil,
+            email=row.email,
+            hire_date=row.fecha_ingreso,
+        )
+        contract_created = False
+        try:
+            with db.begin_nested():
+                db.add(employee)
+                db.flush()
+                if company is not None:
+                    db.add(
+                        EmploymentContract(
+                            employee_id=employee.id,
+                            company_id=company.id,
+                            valid_from=row.fecha_ingreso,
+                        )
+                    )
+                    contract_created = True
+        except IntegrityError:
+            skipped += 1
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field="legajo",
+                    code="conflicto_bd",
+                    message=(
+                        "La fila entra en conflicto con un empleado existente "
+                        "(legajo o CUIL duplicado)."
+                    ),
+                    value=row.legajo,
+                )
+            )
+            continue
+
+        existing_codes.add(row.legajo)
+        created += 1
+        if contract_created:
+            contracts_created += 1
+
+    commit_or_conflict(db)
+    return _serialize(
+        result,
+        created=created,
+        skipped=skipped,
+        contracts_created=contracts_created,
+    )
+
+
+@router.post("/employees")
+def import_employees(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(default=True),
+    company_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict[str, Any]:
+    """Importa empleados desde un CSV/XLSX.
+
+    Con ``dry_run=true`` (por defecto) devuelve solo el preview. Con
+    ``dry_run=false`` crea los empleados validos y devuelve el resultado del
+    commit junto con los conteos de creados y omitidos. Los errores de fila y
+    los duplicados no interrumpen el resto del lote. ``company_id`` es opcional
+    y solo se usa para crear contratos minimos de los empleados nuevos.
+    """
+    if not dry_run:
+        _ensure_commit_role(user)
+
+    content, filename = _read_upload(file)
+    preview = _analyze(content, filename, "employees")
+    if dry_run:
+        return _serialize(preview)
+    return _commit_employees(db, user, preview, company_id)
+
+
+@router.post("/novelties")
+def import_novelties(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(default=True),
+    user: User = Depends(require_user),
+) -> dict[str, Any]:
+    """Analiza novedades desde un CSV/XLSX en modo dry-run.
+
+    El modelo de datos actual no tiene una tabla de novedades, por lo que este
+    endpoint solo soporta ``dry_run=true``. Un pedido con ``dry_run=false``
+    responde 422 de forma explicita: no se persiste ni se simula persistencia.
+    """
+    if not dry_run:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "La importacion de novedades solo admite dry_run=true: no existe "
+                "una tabla de novedades donde persistirlas."
+            ),
+        )
+
+    content, filename = _read_upload(file)
+    preview = _analyze(content, filename, "novelties")
+    return _serialize(preview)
+
+
+__all__ = ["MAX_IMPORT_BYTES", "router"]

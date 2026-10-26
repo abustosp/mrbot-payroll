@@ -1,0 +1,293 @@
+from __future__ import annotations
+
+import re
+from collections.abc import Generator
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.auth.security import hash_password
+from app.config import Settings, get_settings
+from app.database import Base
+from app.database.models import Organization, User
+from app.database.session import get_db
+from app.web.auth import CSRF_COOKIE
+from app.web.demo_data import DemoDataStore
+from app.web.routes import router
+from app.web.sql_data_source import SqlAlchemyDataSource
+
+
+def _test_settings() -> Settings:
+    return Settings(
+        web_auth_enabled=True,
+        admin_email="admin@example.com",
+        admin_password="admin",
+        secret_key="web-auth-test-secret",
+    )
+
+
+@pytest.fixture()
+def app() -> FastAPI:
+    application = FastAPI(title="Payroll web auth test")
+    application.include_router(router)
+    application.state.payroll_data_source = DemoDataStore()
+    application.dependency_overrides[get_settings] = _test_settings
+    return application
+
+
+@pytest.fixture()
+def client(app: FastAPI) -> Generator[TestClient, None, None]:
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _csrf_from(html: str) -> str:
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    assert match is not None, "No se encontró el token CSRF en el formulario"
+    return match.group(1)
+
+
+def _csrf_cookie(client: TestClient) -> str:
+    token = client.cookies.get(CSRF_COOKIE)
+    assert token
+    return token
+
+
+def _login(
+    client: TestClient,
+    *,
+    email: str = "admin@example.com",
+    password: str = "admin",
+    next_url: str = "/",
+):
+    page = client.get("/login", params={"next": next_url})
+    assert page.status_code == 200
+    return client.post(
+        "/login",
+        data={
+            "email": email,
+            "password": password,
+            "next": next_url,
+            "csrf_token": _csrf_from(page.text),
+        },
+        follow_redirects=False,
+    )
+
+
+def test_login_is_public_and_business_routes_redirect(client: TestClient) -> None:
+    login = client.get("/login")
+    assert login.status_code == 200
+    assert "Ingresar" in login.text
+    assert 'name="csrf_token"' in login.text
+
+    assert client.get("/salud").status_code == 200
+    assert client.get("/static/app.css").status_code == 200
+
+    redirect = client.get("/", follow_redirects=False)
+    assert redirect.status_code == 303
+    assert "/login?next=" in redirect.headers["location"]
+
+    htmx = client.get(
+        "/empresas",
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
+    )
+    assert htmx.status_code == 401
+    assert "/login?next=" in htmx.headers["HX-Redirect"]
+
+
+def test_valid_login_and_logout(client: TestClient) -> None:
+    response = _login(client)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    set_cookie = response.headers.get("set-cookie", "").lower()
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert client.cookies.get("payroll_session")
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert "admin@example.com" in dashboard.text
+    assert "Salir" in dashboard.text
+    assert "Modo demo" in dashboard.text
+
+    already_logged_in = client.get("/login", follow_redirects=False)
+    assert already_logged_in.status_code == 303
+
+    token = _csrf_cookie(client)
+    logout = client.post(
+        "/logout",
+        data={"csrf_token": token},
+        follow_redirects=False,
+    )
+    assert logout.status_code == 303
+    assert logout.headers["location"] == "/login"
+    assert client.cookies.get("payroll_session") is None
+
+    protected = client.get("/", follow_redirects=False)
+    assert protected.status_code == 303
+    assert "/login?next=" in protected.headers["location"]
+
+
+def test_invalid_login_is_rejected(client: TestClient) -> None:
+    page = client.get("/login")
+    response = client.post(
+        "/login",
+        data={
+            "email": "admin@example.com",
+            "password": "incorrecta",
+            "csrf_token": _csrf_from(page.text),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 401
+    assert "Credenciales inválidas" in response.text
+    assert client.cookies.get("payroll_session") is None
+
+
+def test_login_requires_csrf_token(client: TestClient) -> None:
+    client.get("/login")
+    response = client.post(
+        "/login",
+        data={"email": "admin@example.com", "password": "admin"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+    assert client.cookies.get("payroll_session") is None
+
+
+def test_login_honors_local_next_and_rejects_external_redirects(client: TestClient) -> None:
+    response = _login(client, next_url="/empresas")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/empresas"
+
+    client.post(
+        "/logout",
+        data={"csrf_token": _csrf_cookie(client)},
+        follow_redirects=False,
+    )
+    external = _login(client, next_url="https://evil.example/robo")
+    assert external.status_code == 303
+    assert external.headers["location"] == "/"
+
+    client.post(
+        "/logout",
+        data={"csrf_token": _csrf_cookie(client)},
+        follow_redirects=False,
+    )
+    protocol_relative = _login(client, next_url="//evil.example/robo")
+    assert protocol_relative.status_code == 303
+    assert protocol_relative.headers["location"] == "/"
+
+
+def test_proposal_status_requires_csrf(client: TestClient) -> None:
+    _login(client)
+
+    missing = client.post(
+        "/propuestas-ia/prop-001/estado",
+        data={"status": "approved"},
+        follow_redirects=False,
+    )
+    assert missing.status_code == 403
+
+    tampered = client.post(
+        "/propuestas-ia/prop-001/estado",
+        data={"status": "approved", "csrf_token": "token-falso"},
+        follow_redirects=False,
+    )
+    assert tampered.status_code == 403
+
+    valid = client.post(
+        "/propuestas-ia/prop-001/estado",
+        data={"status": "approved", "csrf_token": _csrf_cookie(client)},
+        follow_redirects=False,
+    )
+    assert valid.status_code == 303
+    assert "updated=1" in valid.headers["location"]
+
+
+def test_logout_requires_csrf(client: TestClient) -> None:
+    _login(client)
+
+    missing = client.post("/logout", data={}, follow_redirects=False)
+    assert missing.status_code == 403
+    assert client.get("/").status_code == 200
+
+    valid = client.post(
+        "/logout",
+        data={"csrf_token": _csrf_cookie(client)},
+        follow_redirects=False,
+    )
+    assert valid.status_code == 303
+
+
+def test_auth_can_be_disabled_with_explicit_override(tmp_path: Path) -> None:
+    application = FastAPI()
+    application.include_router(router)
+    application.state.payroll_data_source = DemoDataStore()
+    application.dependency_overrides[get_settings] = lambda: Settings(web_auth_enabled=False)
+    with TestClient(application) as client:
+        response = client.get("/")
+    assert response.status_code == 200
+    assert "Modo demo" in response.text
+
+
+def test_viewer_can_read_but_cannot_change_proposal_status(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-auth.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        organization = Organization(name="Test", slug="default")
+        session.add(organization)
+        session.flush()
+        session.add(
+            User(
+                organization_id=organization.id,
+                email="viewer@example.test",
+                password_hash=hash_password("viewer-pass"),
+                role="viewer",
+            )
+        )
+
+    application = FastAPI()
+    application.include_router(router)
+    application.state.payroll_data_source = SqlAlchemyDataSource(factory)
+
+    def override_db() -> Generator[Session, None, None]:
+        with factory() as session:
+            yield session
+
+    application.dependency_overrides[get_db] = override_db
+    application.dependency_overrides[get_settings] = _test_settings
+
+    try:
+        with TestClient(application) as client:
+            response = _login(
+                client,
+                email="viewer@example.test",
+                password="viewer-pass",
+            )
+            assert response.status_code == 303
+
+            dashboard = client.get("/")
+            assert dashboard.status_code == 200
+            assert "viewer@example.test" in dashboard.text
+            assert "Solo lectura" in dashboard.text
+            assert "Base de datos SQL" in dashboard.text
+            assert "Modo demo" not in dashboard.text
+
+            proposals = client.get("/propuestas-ia")
+            assert proposals.status_code == 200
+
+            forbidden = client.post(
+                "/propuestas-ia/prop-001/estado",
+                data={"status": "approved", "csrf_token": _csrf_cookie(client)},
+                follow_redirects=False,
+            )
+            assert forbidden.status_code == 403
+    finally:
+        engine.dispose()

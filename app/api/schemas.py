@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class ORMModel(BaseModel):
@@ -136,6 +136,35 @@ class FormulaInput(BaseModel):
         return value
 
 
+class FormulaVersionInput(BaseModel):
+    """Payload for creating a new version of an existing formula.
+
+    ``expression`` is accepted as an alias of ``formula`` because both names are
+    used across the engine and the API documentation.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    formula: dict[str, Any] = Field(validation_alias=AliasChoices("formula", "expression"))
+    valid_from: date = Field(default_factory=date.today)
+    valid_to: date | None = None
+
+    @field_validator("formula")
+    @classmethod
+    def formula_is_nonempty_object(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not value:
+            raise ValueError("La fórmula debe contener una expresión DSL")
+        return value
+
+    @field_validator("valid_to")
+    @classmethod
+    def validity_is_inclusive(cls, value: date | None, info):
+        start = info.data.get("valid_from")
+        if value is not None and start is not None and value < start:
+            raise ValueError("valid_to debe ser igual o posterior a valid_from")
+        return value
+
+
 class FormulaRead(BaseModel):
     id: int
     code: str
@@ -145,6 +174,27 @@ class FormulaRead(BaseModel):
     status: str
     valid_from: date
     valid_to: date | None
+
+
+class AiProposalRead(ORMModel):
+    id: int
+    organization_id: int
+    document_id: str
+    document_hash: str | None
+    title: str | None
+    raw_json: Any
+    validation_json: Any | None
+    status: str
+    approved_by: int | None
+    approved_at: datetime | None
+    published_formula_id: int | None
+    created_at: datetime
+
+
+class AiProposalPublishRead(AiProposalRead):
+    formula_id: int
+    formula_version_id: int
+    formula_status: str
 
 
 class PayrollRunInput(BaseModel):

@@ -9,7 +9,10 @@ from app.api import (
     employees,
     exports,
     formulas,
+    imports,
+    normative_packages,
     payroll_runs,
+    reports,
 )
 from app.config import get_settings
 from app.web.routes import router as web_router
@@ -49,6 +52,9 @@ def create_app() -> FastAPI:
         formulas.router,
         payroll_runs.router,
         exports.router,
+        imports.router,
+        normative_packages.router,
+        reports.router,
     ):
         application.include_router(router, prefix="/api/v1")
     if ai_router is not None:
@@ -63,4 +69,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
