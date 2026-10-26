@@ -1,0 +1,914 @@
+[
+  {
+    "code": "130/75",
+    "name": "Convenio Colectivo de Trabajo para Empleados de Comercio y Servicios (Rama General)",
+    "activity": "Comercio mayorista y minorista, servicios administrativos, maestranza, cajeros, auxiliares y ventas",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf",
+      "https://www.faecys.org.ar/cct-130-75/",
+      "https://www.redcame.org.ar/novedades/acuerdos-y-escalas-salariales-cct-130-75",
+      "http://servicios.infoleg.gob.ar/infolegInternet/anexos/205000-209999/207038/norma.htm"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_130_75.pdf",
+    "pdf_sha256": "85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "MAESTRANZA_A",
+        "name": "Personal de Maestranza y Limpieza A"
+      },
+      {
+        "code": "MAESTRANZA_B",
+        "name": "Personal de Maestranza y Limpieza B"
+      },
+      {
+        "code": "MAESTRANZA_C",
+        "name": "Personal de Maestranza y Limpieza C"
+      },
+      {
+        "code": "ADMIN_A",
+        "name": "Personal Administrativo A"
+      },
+      {
+        "code": "ADMIN_B",
+        "name": "Personal Administrativo B"
+      },
+      {
+        "code": "ADMIN_C",
+        "name": "Personal Administrativo C"
+      },
+      {
+        "code": "ADMIN_D",
+        "name": "Personal Administrativo D"
+      },
+      {
+        "code": "ADMIN_E",
+        "name": "Personal Administrativo E"
+      },
+      {
+        "code": "ADMIN_F",
+        "name": "Personal Administrativo F"
+      },
+      {
+        "code": "CAJERO_A",
+        "name": "Cajeros A"
+      },
+      {
+        "code": "CAJERO_B",
+        "name": "Cajeros B"
+      },
+      {
+        "code": "CAJERO_C",
+        "name": "Cajeros C"
+      },
+      {
+        "code": "AUXILIAR_A",
+        "name": "Personal Auxiliar A"
+      },
+      {
+        "code": "AUXILIAR_B",
+        "name": "Personal Auxiliar B"
+      },
+      {
+        "code": "AUXILIAR_C",
+        "name": "Personal Auxiliar C"
+      },
+      {
+        "code": "AUX_ESP_A",
+        "name": "Auxiliar Especializado A"
+      },
+      {
+        "code": "AUX_ESP_B",
+        "name": "Auxiliar Especializado B"
+      },
+      {
+        "code": "VENTAS_A",
+        "name": "Personal de Ventas A"
+      },
+      {
+        "code": "VENTAS_B",
+        "name": "Personal de Ventas B"
+      },
+      {
+        "code": "VENTAS_C",
+        "name": "Personal de Ventas C"
+      },
+      {
+        "code": "VENTAS_D",
+        "name": "Personal de Ventas D"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "ADMIN_A",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-12-31",
+        "fuente": "Paritaria Mercantil FAECYS - CAC - CAME - UDECA / Homologación Secretaría de Trabajo",
+        "pagina_articulo": "Acuerdo Paritario - Escala General (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "850000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "ADMIN_B",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-12-31",
+        "fuente": "Paritaria Mercantil FAECYS - CAC - CAME - UDECA / Homologación Secretaría de Trabajo",
+        "pagina_articulo": "Acuerdo Paritario - Escala General (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "900000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "MAESTRANZA_A",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-12-31",
+        "fuente": "Paritaria Mercantil FAECYS - CAC - CAME - UDECA / Homologación Secretaría de Trabajo",
+        "pagina_articulo": "Acuerdo Paritario - Escala General (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "820000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "VENTAS_A",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-12-31",
+        "fuente": "Paritaria Mercantil FAECYS - CAC - CAME - UDECA / Homologación Secretaría de Trabajo",
+        "pagina_articulo": "Acuerdo Paritario - Escala General (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "870000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_130_75_ANTIGUEDAD",
+      "CCT_130_75_PRESENTISMO"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio con mayor cobertura del sector privado en Argentina (estimación sectorial de partes paritarias ~1.200.000 trabajadores; sin padrón oficial del Estado). Firmado entre FAECYS y las cámaras patronales CAC, CAME y UDECA. Las escalas salariales de 2026 se encuentran en estado unverified al no contarse en el repositorio con el acta paritaria homologada correspondiente."
+  },
+  {
+    "code": "260/75",
+    "name": "Convenio Colectivo de Trabajo para la Industria Metalúrgica",
+    "activity": "Industria metalmecánica, siderurgia, automotriz de autopartes, fundición, electrónica y ramas afines",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://uomrosario.org.ar/documentos_varios/Convenio_Colectivo_nro_260-75.pdf",
+      "https://uom.org.ar/",
+      "https://adimra.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_260_75.pdf",
+    "pdf_sha256": "985421aa7e86bbcddb23f51c2264893ba0bc378bea1615f834174402c99ea84e",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "OPERARIO",
+        "name": "Operario"
+      },
+      {
+        "code": "OPERARIO_CALIFICADO",
+        "name": "Operario Calificado"
+      },
+      {
+        "code": "MEDIO_OFICIAL",
+        "name": "Medio Oficial"
+      },
+      {
+        "code": "OFICIAL",
+        "name": "Oficial"
+      },
+      {
+        "code": "OFICIAL_MULTIPLE",
+        "name": "Oficial Múltiple"
+      },
+      {
+        "code": "ADMIN_1",
+        "name": "Empleado Administrativo 1ra categoría"
+      },
+      {
+        "code": "TECNICO_1",
+        "name": "Empleado Técnico 1ra categoría"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "OFICIAL",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria UOMRA - ADIMRA / CAMIMA / AFAC / FEDEHOGAR / CAIAMA",
+        "pagina_articulo": "Rama 17 (Metalmecánica General) - Acta Acuerdo (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "845000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "OPERARIO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria UOMRA - ADIMRA / CAMIMA / AFAC / FEDEHOGAR / CAIAMA",
+        "pagina_articulo": "Rama 17 (Metalmecánica General) - Acta Acuerdo (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "760000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_260_75_ANTIGUEDAD"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio de la industria metalúrgica argentina (estimación sectorial UOMRA ~180.000 - 220.000 trabajadores; sin registro estatal desagregado por CCT). Escalas 2026 en estado unverified al carecer de acta paritaria oficial homologada en el repositorio."
+  },
+  {
+    "code": "76/75",
+    "name": "Convenio Colectivo de Trabajo para Obreros de la Construcción",
+    "activity": "Industria de la construcción civil, obras públicas, privadas y de infraestructura",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%2076-1975.pdf",
+      "https://www.uocra.org/",
+      "https://www.camarco.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_76_75.pdf",
+    "pdf_sha256": "25c7e43e209c09767f7c61e25df8197e89d8e53b10d2e4800b4b85f62bcd24e1",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "OFICIAL_ESPECIALIZADO",
+        "name": "Oficial Especializado"
+      },
+      {
+        "code": "OFICIAL",
+        "name": "Oficial"
+      },
+      {
+        "code": "MEDIO_OFICIAL",
+        "name": "Medio Oficial"
+      },
+      {
+        "code": "AYUDANTE",
+        "name": "Ayudante"
+      },
+      {
+        "code": "SERENO",
+        "name": "Sereno"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "OFICIAL_ESPECIALIZADO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "1975-06-01",
+        "vigencia_hasta": null,
+        "fuente": "CCT 76/75 Original Homologado",
+        "pagina_articulo": "Art. 47 (Salarios mínimos profesionales)",
+        "estado": "unverified",
+        "estimated_value": "336.66",
+        "verification_source": null,
+        "verification_note": "Escala histórica no verificada como ARS. El Art. 47 del CCT 76/75 original fija jornales diarios en Pesos Ley 18.188 () discriminados por zona (Zona A Oficial: $ 260,73; Zona C Sereno: $ 5.105,70), no coincidiendo con 336.66 ni con moneda ARS. Sin acta paritaria reciente homologada en el repositorio."
+      },
+      {
+        "categoria": "OFICIAL",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "1975-06-01",
+        "vigencia_hasta": null,
+        "fuente": "CCT 76/75 Original Homologado",
+        "pagina_articulo": "Art. 47 (Salarios mínimos profesionales)",
+        "estado": "unverified",
+        "estimated_value": "309.68",
+        "verification_source": null,
+        "verification_note": "Escala histórica no verificada como ARS. El Art. 47 del CCT 76/75 original fija jornales diarios en Pesos Ley 18.188 () discriminados por zona (Zona A Oficial: $ 260,73; Zona C Sereno: $ 5.105,70), no coincidiendo con 309.68 ni con moneda ARS. Sin acta paritaria reciente homologada en el repositorio."
+      },
+      {
+        "categoria": "AYUDANTE",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "1975-06-01",
+        "vigencia_hasta": null,
+        "fuente": "CCT 76/75 Original Homologado",
+        "pagina_articulo": "Art. 47 (Salarios mínimos profesionales)",
+        "estado": "unverified",
+        "estimated_value": "274.00",
+        "verification_source": null,
+        "verification_note": "Escala histórica no verificada como ARS. El Art. 47 del CCT 76/75 original fija jornales diarios en Pesos Ley 18.188 () discriminados por zona (Zona A Oficial: $ 260,73; Zona C Sereno: $ 5.105,70), no coincidiendo con 274.00 ni con moneda ARS. Sin acta paritaria reciente homologada en el repositorio."
+      },
+      {
+        "categoria": "SERENO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "1975-06-01",
+        "vigencia_hasta": null,
+        "fuente": "CCT 76/75 Original Homologado",
+        "pagina_articulo": "Art. 47 (Salarios mínimos profesionales)",
+        "estado": "unverified",
+        "estimated_value": "5105.70",
+        "verification_source": null,
+        "verification_note": "Escala histórica no verificada como ARS. El Art. 47 del CCT 76/75 original fija jornales diarios en Pesos Ley 18.188 () discriminados por zona (Zona A Oficial: $ 260,73; Zona C Sereno: $ 5.105,70), no coincidiendo con 5105.70 ni con moneda ARS. Sin acta paritaria reciente homologada en el repositorio."
+      }
+    ],
+    "formula_codes": [
+      "CCT_76_75_ASISTENCIA",
+      "CCT_76_75_FONDO_CESE"
+    ],
+    "confidence": "medium",
+    "notes": "Rige la industria de la construcción privada y obra pública. Cobertura estimada de ~350.000 - 400.000 trabajadores según registros de IERIC y UOCRA. Escalas salariales en estado unverified al no disponer de acta paritaria reciente homologada en el repositorio."
+  },
+  {
+    "code": "18/75",
+    "name": "Convenio Colectivo de Trabajo para el Personal Bancario y Financiero",
+    "activity": "Entidades bancarias y financieras públicas, privadas y mixtas",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.bancariasba.com.ar/wp-content/uploads/2019/11/Convenio-18_75.pdf",
+      "https://bancarios.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_18_75.pdf",
+    "pdf_sha256": "f26c04f3de75c99627c74b13d1719b2e3199fd63296487444392641bc2961bcf",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "INICIAL",
+        "name": "Personal Administrativo Inicial / Ingresante"
+      },
+      {
+        "code": "ADMIN_1",
+        "name": "Personal Administrativo Categoría 1"
+      },
+      {
+        "code": "ADMIN_2",
+        "name": "Personal Administrativo Categoría 2"
+      },
+      {
+        "code": "JEFE_SECCION",
+        "name": "Jefe de Sección"
+      },
+      {
+        "code": "JEFE_DIVISION_3",
+        "name": "2do Jefe de División de 3ra"
+      },
+      {
+        "code": "CAJERO_RECIBIDOR",
+        "name": "Cajero Recibidor"
+      },
+      {
+        "code": "CAJERO_PAGADOR",
+        "name": "Cajero Pagador"
+      },
+      {
+        "code": "CAJERO_MIXTO",
+        "name": "Cajero Recibidor y Pagador"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "INICIAL",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Asociación Bancaria - Cámaras ABAPPRA / ADEBA / ABA / ABE - Acta Homologada",
+        "pagina_articulo": "Acuerdo Paritario Bancario Vigente (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "1450000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_18_75_FALLA_CAJA"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio del personal bancario argentino (dotación estimada del sistema financiero ~90.000 - 95.000 trabajadores s/ BCRA y Asociación Bancaria). Escala 2026 en estado unverified por falta de acta paritaria homologada en el repositorio."
+  },
+  {
+    "code": "40/89",
+    "name": "Convenio Colectivo de Trabajo para el Transporte Automotor de Cargas y Logística",
+    "activity": "Transporte de cargas generales, peligrosas, caudales, logística, mudanzas y distribución",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.fadeeac.org.ar/wp-content/uploads/2021/08/CCT-40-89.pdf",
+      "https://www.trabajo.gba.gov.ar/documentos/convenios/c40-89.pdf"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_40_89.pdf",
+    "pdf_sha256": "d52b2bae0abb69492ee3760044ead5cf576fc32470ca1a70cb3ea58f17916810",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "CHOFER_1",
+        "name": "Chofer de Primera Categoría"
+      },
+      {
+        "code": "CHOFER_2",
+        "name": "Chofer de Segunda Categoría"
+      },
+      {
+        "code": "CHOFER_3",
+        "name": "Chofer de Tercera Categoría"
+      },
+      {
+        "code": "PEON_GENERAL",
+        "name": "Peón General de Carga y Descarga"
+      },
+      {
+        "code": "PEON_ESPECIALIZADO",
+        "name": "Peón Especializado"
+      },
+      {
+        "code": "CHOFER_BLINDADO",
+        "name": "Chofer de Camión Blindado"
+      },
+      {
+        "code": "AUX_OPERATIVO_1",
+        "name": "Auxiliar Operativo de Primera"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "CHOFER_1",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "FEDCAM - FADEEAC Acta Paritaria Homologada",
+        "pagina_articulo": "Planilla Salarial Choferes de Cargas Generales (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "980000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "PEON_GENERAL",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "FEDCAM - FADEEAC Acta Paritaria Homologada",
+        "pagina_articulo": "Planilla Salarial Choferes de Cargas Generales (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "860000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_40_89_ANTIGUEDAD",
+      "CCT_40_89_COMIDA"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio de choferes y operarios del transporte automotor de cargas y logística (estimación sectorial FEDCAM/FADEEAC ~150.000 - 200.000 trabajadores; sin registro estatal desagregado por CCT). Escalas 2026 unverified por ausencia de acta homologada en el repositorio."
+  },
+  {
+    "code": "389/04",
+    "name": "Convenio Colectivo de Trabajo para la Actividad Hotelera y Gastronómica",
+    "activity": "Hoteles, hosterías, restaurantes, bares, confiterías y servicios de catering",
+    "scope": "Nacional (excepto Tucumán)",
+    "source_urls": [
+      "http://cabogadosbv.org.ar/wp/wp-content/uploads/2010/08/389-04-hoteleros-y-gastronomicos1.pdf",
+      "https://www.uthgra.org.ar/wp-content/uploads/2017/05/Escalas-CABA-FEHGRA.pdf",
+      "https://www.fehgra.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_389_04.pdf",
+    "pdf_sha256": "302a2d1f94a3d72489992dac8276247e5ccaf041a8e444836bc749f4d4ef8d61",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "COCINERO",
+        "name": "Cocinero"
+      },
+      {
+        "code": "AYUDANTE_COCINA",
+        "name": "Ayudante de Cocina"
+      },
+      {
+        "code": "MOZO",
+        "name": "Mozo de Salón / Comis"
+      },
+      {
+        "code": "MUCAMA",
+        "name": "Mucama / Valet"
+      },
+      {
+        "code": "RECEPCIONISTA",
+        "name": "Recepcionista / Conserje"
+      },
+      {
+        "code": "PEON_GENERAL",
+        "name": "Peón General"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "COCINERO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria UTHGRA - FEHGRA Escalas CABA y GBA",
+        "pagina_articulo": "Anexo Planilla Salarial Establecimientos 3 estrellas (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "810000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "MOZO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria UTHGRA - FEHGRA Escalas CABA y GBA",
+        "pagina_articulo": "Anexo Planilla Salarial Establecimientos 3 estrellas (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "760000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_389_04_ASISTENCIA"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio marco del sector gastronómico y hotelero nacional (estimación sectorial UTHGRA/FEHGRA ~200.000 - 250.000 trabajadores; sin padrón oficial único). Escalas 2026 en estado unverified por carecer de acta paritaria homologada en el repositorio."
+  },
+  {
+    "code": "122/75",
+    "name": "Convenio Colectivo de Trabajo para la Sanidad (Clínicas, Sanatorios y Hospitales Privados)",
+    "activity": "Establecimientos médico-asistenciales privados, sanatorios, geriátricos e institutos neuropsiquiátricos",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20122-1975.pdf",
+      "https://www.sanidad.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_122_75.pdf",
+    "pdf_sha256": "debda11d0e473ab17c77566e921ca810f926cdb9bab1395d4787b630940729bd",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "ENFERMERO_PISO",
+        "name": "Enfermero/a de Piso"
+      },
+      {
+        "code": "INSTRUMENTADOR",
+        "name": "Instrumentador/a Quirúrgico/a"
+      },
+      {
+        "code": "CABO_CIRUGIA",
+        "name": "Cabo/a de Cirugía"
+      },
+      {
+        "code": "MUCAMO",
+        "name": "Mucamo/a de Hospital"
+      },
+      {
+        "code": "CAMILLERO",
+        "name": "Camillero"
+      },
+      {
+        "code": "ADMIN_SANIDAD",
+        "name": "Personal Administrativo de Clínicas"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "ENFERMERO_PISO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria FATSA - ADECRA / CEDIM / CEPSAL / CONFECLISA",
+        "pagina_articulo": "Acuerdo Salarial Homologado CCT 122/75 (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "890000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "CAMILLERO",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria FATSA - ADECRA / CEDIM / CEPSAL / CONFECLISA",
+        "pagina_articulo": "Acuerdo Salarial Homologado CCT 122/75 (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "790000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_122_75_ESCALAFON"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio asistencial para clínicas, sanatorios y hospitales privados (estimación FATSA/ADECRA ~200.000 - 220.000 trabajadores; sin padrón estatal por CCT). Escalas 2026 unverified al carecer de acta homologada en el repositorio."
+  },
+  {
+    "code": "264/95",
+    "name": "Convenio Colectivo de Trabajo para la Actividad de Seguros y Reaseguros",
+    "activity": "Compañías de seguros generales, vida, retiro, reaseguros y Aseguradoras de Riesgos del Trabajo (ART)",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.trabajo.gba.gov.ar/documentos/convenios/c264-95.pdf",
+      "https://www.sindicatodelseguro.com.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_264_95.pdf",
+    "pdf_sha256": "546a5095ba62bc2b7780482a8c28600e6fead834fd916ad8cfa4a5b2e03a285c",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "GRUPO_I",
+        "name": "Grupo I - Administrativo Inicial / Auxiliar de Oficina"
+      },
+      {
+        "code": "GRUPO_II",
+        "name": "Grupo II - Administrativo Operativo / Cuentas Técnicas"
+      },
+      {
+        "code": "GRUPO_III",
+        "name": "Grupo III - Administrativo Especializado / Liquidador de Siniestros"
+      },
+      {
+        "code": "GRUPO_IV",
+        "name": "Grupo IV - Técnico Especialista / Analista de Riesgos"
+      },
+      {
+        "code": "GRUPO_V",
+        "name": "Grupo V - Jerárquicos / Jefaturas de Área"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "GRUPO_I",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Sindicato del Seguro - AACS / ADEAA / UART / ADIRA Paritaria Homologada",
+        "pagina_articulo": "Planilla Salarial Grupo General Rama Seguros (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "920000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "GRUPO_II",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Sindicato del Seguro - AACS / ADEAA / UART / ADIRA Paritaria Homologada",
+        "pagina_articulo": "Planilla Salarial Grupo General Rama Seguros (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "1040000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [
+      "CCT_264_95_FALLA_CAJA"
+    ],
+    "confidence": "medium",
+    "notes": "Convenio para entidades de seguros y aseguradoras de riesgos del trabajo (estimación sectorial SSN / Sindicato del Seguro ~50.000 - 55.000 dependientes). Escalas 2026 unverified por ausencia de acta homologada en el repositorio."
+  },
+  {
+    "code": "244/94",
+    "name": "Convenio Colectivo de Trabajo para las Industrias de la Alimentación",
+    "activity": "Elaboración de productos alimenticios, conservas, golosinas, molinería y alimentos procesados",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20244-1994.pdf",
+      "https://www.stia.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_244_94.pdf",
+    "pdf_sha256": "089ed72b1dc6fd1867232aa0378847c4686b637a6efbda5cd3a2b014d35f0c42",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "OPERARIO_PLANTA",
+        "name": "Operario de Planta Elaboradora"
+      },
+      {
+        "code": "OPERARIO_CALIFICADO",
+        "name": "Operario Calificado"
+      },
+      {
+        "code": "MEDIO_OFICIAL",
+        "name": "Medio Oficial de Mantenimiento"
+      },
+      {
+        "code": "OFICIAL",
+        "name": "Oficial de Mantenimiento"
+      },
+      {
+        "code": "ADMIN_PLANTA",
+        "name": "Personal Administrativo de Fábrica"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "OPERARIO_PLANTA",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria FTIA - FIPAA Acta Homologada Secretaría de Trabajo",
+        "pagina_articulo": "Planilla de Remuneraciones Mínimas Conformadas CCT 244/94 (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "810000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      },
+      {
+        "categoria": "OFICIAL",
+        "importe": null,
+        "moneda": "ARS",
+        "vigencia_desde": "2026-01-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "Paritaria FTIA - FIPAA Acta Homologada Secretaría de Trabajo",
+        "pagina_articulo": "Planilla de Remuneraciones Mínimas Conformadas CCT 244/94 (Pendiente en repositorio)",
+        "estado": "unverified",
+        "estimated_value": "940000.00",
+        "verification_source": null,
+        "verification_note": "Escala salarial 2026 estimada sin acta paritaria oficial homologada en el repositorio. Valor estimado con fines técnicos, pendiente de verificación oficial."
+      }
+    ],
+    "formula_codes": [],
+    "confidence": "medium",
+    "notes": "Convenio nacional para la industria de la alimentación (estimación gremial FTIA ~100.000 - 110.000 trabajadores; sin registro estatal desagregado). Escalas 2026 unverified por carecer de acta paritaria homologada en el repositorio."
+  },
+  {
+    "code": "507/07",
+    "name": "Convenio Colectivo de Trabajo para la Seguridad y Vigilancia Privada",
+    "activity": "Seguridad física, vigilancia privada, investigaciones, monitoreo electrónico y custodia",
+    "scope": "Nacional",
+    "source_urls": [
+      "https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/RESOLUCI%C3%93N%20732-2007%20CCT%20507-2007%20VIGILADORES.pdf",
+      "https://caesi.org.ar/",
+      "https://upsra.org.ar/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_507_07.pdf",
+    "pdf_sha256": "96499621c5ea6ab613e0ce32c19b55fc984241bb32c2c4041e6509571e256cc8",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "VIGILADOR_GENERAL",
+        "name": "Vigilador General"
+      },
+      {
+        "code": "VIGILADOR_BOMBERO",
+        "name": "Vigilador Bombero"
+      },
+      {
+        "code": "ADMINISTRATIVO",
+        "name": "Personal Administrativo de Seguridad"
+      },
+      {
+        "code": "VIGILADOR_PRINCIPAL",
+        "name": "Vigilador Principal"
+      },
+      {
+        "code": "VERIFICADOR_EVENTOS",
+        "name": "Verificador de Eventos"
+      },
+      {
+        "code": "OPERADOR_MONITOREO",
+        "name": "Operador de Monitoreo"
+      },
+      {
+        "code": "INSTALADOR_SEGURIDAD",
+        "name": "Instalador de Elementos de Seguridad Electrónica"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "VIGILADOR_GENERAL",
+        "importe": "940.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-07-01",
+        "vigencia_hasta": "2007-09-30",
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo julio-septiembre 2007."
+      },
+      {
+        "categoria": "VIGILADOR_GENERAL",
+        "importe": "1002.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-10-01",
+        "vigencia_hasta": null,
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo octubre 2007 en adelante."
+      },
+      {
+        "categoria": "VIGILADOR_BOMBERO",
+        "importe": "1034.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-07-01",
+        "vigencia_hasta": "2007-09-30",
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo julio-septiembre 2007."
+      },
+      {
+        "categoria": "VIGILADOR_BOMBERO",
+        "importe": "1102.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-10-01",
+        "vigencia_hasta": null,
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo octubre 2007 en adelante."
+      },
+      {
+        "categoria": "ADMINISTRATIVO",
+        "importe": "1081.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-07-01",
+        "vigencia_hasta": "2007-09-30",
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo julio-septiembre 2007."
+      },
+      {
+        "categoria": "ADMINISTRATIVO",
+        "importe": "1152.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-10-01",
+        "vigencia_hasta": null,
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo octubre 2007 en adelante."
+      },
+      {
+        "categoria": "VIGILADOR_PRINCIPAL",
+        "importe": "1128.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-07-01",
+        "vigencia_hasta": "2007-09-30",
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo julio-septiembre 2007."
+      },
+      {
+        "categoria": "VIGILADOR_PRINCIPAL",
+        "importe": "1202.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2007-10-01",
+        "vigencia_hasta": null,
+        "fuente": "Resolución (Sec. Trabajo) 732/2007 Homologación CCT 507/07",
+        "pagina_articulo": "Resolución 732/2007, Anexo Salarial pág. 15",
+        "estado": "verified",
+        "estimated_value": null,
+        "verification_source": "normative/cct/pdfs/cct_507_07.pdf",
+        "verification_note": "Escala verificada en el anexo de la Resolución (Sec. Trabajo) 732/2007 (pág. 15) obrante en el repositorio local. Básico mensual en ARS para el tramo octubre 2007 en adelante."
+      }
+    ],
+    "formula_codes": [
+      "CCT_507_07_ANTIGUEDAD"
+    ],
+    "confidence": "high",
+    "notes": "Convenio nacional para la actividad de vigilancia privada (estimación CAESI/UPSRA ~100.000 - 130.000 dependientes; sin registro oficial unificado). Escalas salariales 2007 verificadas directamente contra el anexo salarial de la Resolución (Sec. Trabajo) 732/2007 (pág. 15)."
+  }
+]

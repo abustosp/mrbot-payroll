@@ -1,0 +1,667 @@
+[
+  {
+    "code": "CCT_130_75_ANTIGUEDAD",
+    "description": "Adicional por antigüedad CCT 130/75 (Art. 24): 1% por cada año de antigüedad sobre el sueldo básico",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "variable": "anios_antiguedad"
+        },
+        {
+          "parameter": "cct13075_porcentaje_antiguedad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "documento: CCT 130/75; articulo: Art. 24; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 5
+        },
+        "parameters": {
+          "cct13075_porcentaje_antiguedad": "0.01"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "50000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 0
+        },
+        "parameters": {
+          "cct13075_porcentaje_antiguedad": "0.01"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_130_75_PRESENTISMO",
+    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual",
+    "formula": {
+      "operator": "divide",
+      "arguments": [
+        {
+          "operator": "add",
+          "arguments": [
+            {
+              "concept": "SUELDO_BASICO"
+            },
+            {
+              "concept": "CCT_130_75_ANTIGUEDAD"
+            }
+          ]
+        },
+        {
+          "constant": "12"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "asistencia_perfecta",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO",
+      "CCT_130_75_ANTIGUEDAD"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "documento: CCT 130/75; articulo: Art. 40; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "asistencia_perfecta": 1
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1200000.00",
+          "CCT_130_75_ANTIGUEDAD": "0.00"
+        },
+        "expected": "100000.00"
+      },
+      {
+        "variables": {
+          "asistencia_perfecta": 0
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1200000.00",
+          "CCT_130_75_ANTIGUEDAD": "0.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_76_75_ASISTENCIA",
+    "description": "Adicional por asistencia perfecta quincenal CCT 76/75 (Art. 52): 20% del salario básico quincenal",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "JORNAL_BASICO_QUINCENA"
+        },
+        {
+          "parameter": "cct7675_porcentaje_asistencia"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "asistencia_perfecta_quincena",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "JORNAL_BASICO_QUINCENA"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "documento: CCT 76/75; articulo: Art. 52; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%2076-1975.pdf; sha256: 25c7e43e209c09767f7c61e25df8197e89d8e53b10d2e4800b4b85f62bcd24e1",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "asistencia_perfecta_quincena": 1
+        },
+        "parameters": {
+          "cct7675_porcentaje_asistencia": "0.20"
+        },
+        "concepts": {
+          "JORNAL_BASICO_QUINCENA": "500000.00"
+        },
+        "expected": "100000.00"
+      },
+      {
+        "variables": {
+          "asistencia_perfecta_quincena": 0
+        },
+        "parameters": {
+          "cct7675_porcentaje_asistencia": "0.20"
+        },
+        "concepts": {
+          "JORNAL_BASICO_QUINCENA": "500000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_76_75_FONDO_CESE",
+    "description": "Aporte patronal al Fondo de Cese Laboral Ley 22.250 / CCT 76/75: 12% primer año, 8% siguientes",
+    "formula": {
+      "operator": "if",
+      "arguments": [
+        {
+          "operator": "lte",
+          "arguments": [
+            {
+              "variable": "meses_antiguedad"
+            },
+            {
+              "constant": "12"
+            }
+          ]
+        },
+        {
+          "operator": "multiply",
+          "arguments": [
+            {
+              "concept": "REMUNERACION_SUJETA_CESE"
+            },
+            {
+              "parameter": "cct7675_tasa_fondo_primer_anio"
+            }
+          ]
+        },
+        {
+          "operator": "multiply",
+          "arguments": [
+            {
+              "concept": "REMUNERACION_SUJETA_CESE"
+            },
+            {
+              "parameter": "cct7675_tasa_fondo_segundo_anio"
+            }
+          ]
+        }
+      ]
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "REMUNERACION_SUJETA_CESE"
+    ],
+    "nature": "CONTRIBUTION",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "documento: Ley 22.250 / CCT 76/75; articulo: Art. 15 Ley 22.250; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%2076-1975.pdf; sha256: 25c7e43e209c09767f7c61e25df8197e89d8e53b10d2e4800b4b85f62bcd24e1",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "meses_antiguedad": 6
+        },
+        "parameters": {
+          "cct7675_tasa_fondo_primer_anio": "0.12",
+          "cct7675_tasa_fondo_segundo_anio": "0.08"
+        },
+        "concepts": {
+          "REMUNERACION_SUJETA_CESE": "1000000.00"
+        },
+        "expected": "120000.00"
+      },
+      {
+        "variables": {
+          "meses_antiguedad": 24
+        },
+        "parameters": {
+          "cct7675_tasa_fondo_primer_anio": "0.12",
+          "cct7675_tasa_fondo_segundo_anio": "0.08"
+        },
+        "concepts": {
+          "REMUNERACION_SUJETA_CESE": "1000000.00"
+        },
+        "expected": "80000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_260_75_ANTIGUEDAD",
+    "description": "Escalafón por antigüedad CCT 260/75 (Art. 27): 1% del sueldo o jornal básico por año de antigüedad",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "variable": "anios_antiguedad"
+        },
+        {
+          "parameter": "cct26075_porcentaje_antiguedad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-07-24",
+    "valid_to": null,
+    "source": "documento: CCT 260/75; articulo: Art. 27; url: https://uomrosario.org.ar/documentos_varios/Convenio_Colectivo_nro_260-75.pdf; sha256: 985421aa7e86bbcddb23f51c2264893ba0bc378bea1615f834174402c99ea84e",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 4
+        },
+        "parameters": {
+          "cct26075_porcentaje_antiguedad": "0.01"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "800000.00"
+        },
+        "expected": "32000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_18_75_FALLA_CAJA",
+    "description": "Adicional mensual por falla de caja CCT 18/75 (Art. 22): porcentaje sobre el sueldo inicial según función",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "parameter": "bancarios_sueldo_inicial"
+        },
+        {
+          "variable": "alicuota_falla_caja"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "desempenia_caja",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-01-01",
+    "valid_to": null,
+    "source": "documento: CCT 18/75; articulo: Art. 22; url: https://www.bancariasba.com.ar/wp-content/uploads/2019/11/Convenio-18_75.pdf; sha256: f26c04f3de75c99627c74b13d1719b2e3199fd63296487444392641bc2961bcf",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "desempenia_caja": 1,
+          "alicuota_falla_caja": "0.30"
+        },
+        "parameters": {
+          "bancarios_sueldo_inicial": "1500000.00"
+        },
+        "concepts": {},
+        "expected": "450000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_40_89_ANTIGUEDAD",
+    "description": "Adicional por antigüedad CCT 40/89 (Art. 6.1.5): 1% por año de antigüedad sobre el sueldo básico",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "variable": "anios_antiguedad"
+        },
+        {
+          "parameter": "cct4089_porcentaje_antiguedad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1989-01-01",
+    "valid_to": null,
+    "source": "documento: CCT 40/89; articulo: Art. 6.1.5; url: https://www.fadeeac.org.ar/wp-content/uploads/2021/08/CCT-40-89.pdf; sha256: d52b2bae0abb69492ee3760044ead5cf576fc32470ca1a70cb3ea58f17916810",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 10
+        },
+        "parameters": {
+          "cct4089_porcentaje_antiguedad": "0.01"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "900000.00"
+        },
+        "expected": "90000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_40_89_COMIDA",
+    "description": "Viático por comida CCT 40/89 (Art. 4.1.12): importe no remunerativo por día trabajado",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "variable": "dias_efectivamente_trabajados"
+        },
+        {
+          "parameter": "cct4089_valor_comida_diaria"
+        }
+      ]
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "NON_REMUNERATIVE",
+    "valid_from": "1989-01-01",
+    "valid_to": null,
+    "source": "documento: CCT 40/89; articulo: Art. 4.1.12; url: https://www.fadeeac.org.ar/wp-content/uploads/2021/08/CCT-40-89.pdf; sha256: d52b2bae0abb69492ee3760044ead5cf576fc32470ca1a70cb3ea58f17916810",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "dias_efectivamente_trabajados": 22
+        },
+        "parameters": {
+          "cct4089_valor_comida_diaria": "15000.00"
+        },
+        "concepts": {},
+        "expected": "330000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_389_04_ASISTENCIA",
+    "description": "Adicional por asistencia perfecta CCT 389/04 (Punto 11.5): 10% sobre el salario básico sin inasistencias",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "parameter": "cct38904_porcentaje_asistencia"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "asistencia_perfecta_mes",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "2004-08-12",
+    "valid_to": null,
+    "source": "documento: CCT 389/04; articulo: Punto 11.5; url: http://cabogadosbv.org.ar/wp/wp-content/uploads/2010/08/389-04-hoteleros-y-gastronomicos1.pdf; sha256: 302a2d1f94a3d72489992dac8276247e5ccaf041a8e444836bc749f4d4ef8d61",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "asistencia_perfecta_mes": 1
+        },
+        "parameters": {
+          "cct38904_porcentaje_asistencia": "0.10"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "700000.00"
+        },
+        "expected": "70000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_122_75_ESCALAFON",
+    "description": "Escalafón por antigüedad CCT 122/75 (Art. 10): 2% anual sobre el sueldo básico inicial",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "variable": "anios_antiguedad"
+        },
+        {
+          "parameter": "cct12275_tasa_escalafon_anual"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "documento: CCT 122/75; articulo: Art. 10; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20122-1975.pdf; sha256: debda11d0e473ab17c77566e921ca810f926cdb9bab1395d4787b630940729bd",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 5
+        },
+        "parameters": {
+          "cct12275_tasa_escalafon_anual": "0.02"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "850000.00"
+        },
+        "expected": "85000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_507_07_ANTIGUEDAD",
+    "description": "Bonificación por antigüedad CCT 507/07 (Art. 24): 1% por cada año de antigüedad sobre el sueldo básico",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "variable": "anios_antiguedad"
+        },
+        {
+          "parameter": "cct50707_porcentaje_antiguedad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "2007-07-01",
+    "valid_to": null,
+    "source": "documento: CCT 507/07; articulo: Art. 24; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/RESOLUCI%C3%93N%20732-2007%20CCT%20507-2007%20VIGILADORES.pdf; sha256: 96499621c5ea6ab613e0ce32c19b55fc984241bb32c2c4041e6509571e256cc8",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 3
+        },
+        "parameters": {
+          "cct50707_porcentaje_antiguedad": "0.01"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "940000.00"
+        },
+        "expected": "28200.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_264_95_FALLA_CAJA",
+    "description": "Adicional por fallas de caja CCT 264/95 (Cláusula 10°): 20% mensual del sueldo básico mínimo del Grupo I",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "parameter": "seguros_sueldo_minimo_grupo_i"
+        },
+        {
+          "parameter": "cct26495_alicuota_falla_caja"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "manejo_caja",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1995-04-01",
+    "valid_to": null,
+    "source": "documento: CCT 264/95; articulo: Cláusula 10°; url: https://www.trabajo.gba.gov.ar/documentos/convenios/c264-95.pdf; sha256: 546a5095ba62bc2b7780482a8c28600e6fead834fd916ad8cfa4a5b2e03a285c",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "manejo_caja": 1
+        },
+        "parameters": {
+          "seguros_sueldo_minimo_grupo_i": "1000000.00",
+          "cct26495_alicuota_falla_caja": "0.20"
+        },
+        "concepts": {},
+        "expected": "200000.00"
+      }
+    ]
+  }
+]
