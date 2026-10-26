@@ -3,12 +3,13 @@
 
 {% block title %}Propuestas de IA{% endblock %}
 
-{% block breadcrumb %}<li class="current" aria-current="page">Propuestas IA</li>{% endblock %}
+{% block breadcrumb %}<li class="current" aria-current="page">Propuestas de IA</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar el analizador de convenios">
+  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar el analizador de convenios">
     {{ icon("spark") }} Analizar convenio
   </button>
+  <small class="muted">Próximamente: analizador de convenios</small>
 {% endblock %}
 
 {% block content %}

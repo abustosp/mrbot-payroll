@@ -13,7 +13,19 @@
       <p>{{ message }}</p>
       <div class="page-actions">
         <a class="btn btn--outline" href="{{ url_for('dashboard') }}">{{ icon("arrow-left") }} Volver al dashboard</a>
-        <a class="btn btn--primary" href="{{ url_for('companies_list') }}">Ver empresas</a>
+        {% if active_nav == "receipts" %}
+          <a class="btn btn--primary" href="{{ url_for('receipts_list') }}">Ver recibos</a>
+        {% elif active_nav == "payrolls" %}
+          <a class="btn btn--primary" href="{{ url_for('payrolls_list') }}">Ver liquidaciones</a>
+        {% elif active_nav == "employees" %}
+          <a class="btn btn--primary" href="{{ url_for('employees_list') }}">Ver empleados</a>
+        {% elif active_nav == "agreements" %}
+          <a class="btn btn--primary" href="{{ url_for('agreements_list') }}">Ver convenios</a>
+        {% elif active_nav == "proposals" %}
+          <a class="btn btn--primary" href="{{ url_for('proposals_list') }}">Ver propuestas de IA</a>
+        {% else %}
+          <a class="btn btn--primary" href="{{ url_for('companies_list') }}">Ver empresas</a>
+        {% endif %}
       </div>
     </div>
   </div>

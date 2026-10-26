@@ -227,8 +227,8 @@ Tiene dos fuentes de datos:
   reflejan en SQLAlchemy.
 - `PAYROLL_WEB_DATA_SOURCE=sql` usa `SqlAlchemyDataSource`, una proyección de
   solo lectura sobre las tablas reales. Requiere migración y datos cargados. La
-  bandeja de propuestas de la UI sigue vacía porque el datasource SQL no las
-  proyecta, aunque la API ya las persiste en `ai_proposals`.
+  bandeja de propuestas de la UI lista las propuestas persistidas en
+  `ai_proposals`, que requieren revisión humana antes de aprobarse.
 
 La UI exige login en ambos modos y protege los POST con CSRF. El modo SQL sigue
 sin separación por organización en la capa web: cualquier usuario autenticado

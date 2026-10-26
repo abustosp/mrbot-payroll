@@ -157,13 +157,8 @@
         </div>
         <div class="card-body">
           <div class="progress-row" style="margin-top: 0;">
-            <div class="progress-row-header">
-              <span>Circuito de aprobación</span>
-              <strong>{% if payroll.status == "closed" %}100%{% elif payroll.status == "approved" %}90%{% elif payroll.status == "review" %}72%{% else %}35%{% endif %}</strong>
-            </div>
-            <div class="progress" role="progressbar" aria-label="Avance de la liquidación" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if payroll.status == 'closed' %}100{% elif payroll.status == 'approved' %}90{% elif payroll.status == 'review' %}72{% else %}35{% endif %}">
-              <span style="width: {% if payroll.status == 'closed' %}100%{% elif payroll.status == 'approved' %}90%{% elif payroll.status == 'review' %}72%{% else %}35%{% endif %};"></span>
-            </div>
+            <p class="muted" style="margin: 0;">Etapa del circuito: <strong>{{ payroll.status | status_label("payroll") }}</strong></p>
+            <p class="muted" style="margin: 4px 0 0;">Borrador → Revisión → Aprobada → Cerrada</p>
           </div>
           <div class="summary-list" style="margin-top: 18px;">
             <div class="summary-row">

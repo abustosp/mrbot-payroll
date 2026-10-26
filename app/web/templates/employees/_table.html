@@ -1,7 +1,7 @@
 <div id="employees-results">
   <div class="filter-summary">
     <span><strong>{{ employees | length }}</strong> legajos encontrados{% if query %} para “{{ query }}”{% endif %}</span>
-    <span class="muted">Remuneraciones de referencia del entorno demo.</span>
+    <span class="muted">{% if demo_mode %}Remuneraciones de referencia del entorno demo.{% else %}Remuneraciones de referencia.{% endif %}</span>
   </div>
 
   {% if employees %}

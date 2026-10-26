@@ -21,6 +21,9 @@
 
       <h1 id="login-title">Ingresar</h1>
       <p>Accedé con el usuario y la contraseña asignados por el administrador.</p>
+      {% if demo_mode %}
+        <p class="muted">Entorno de demostración: ejecutá el seed de datos y usá el usuario inicial descrito en el README.</p>
+      {% endif %}
 
       {% if error %}
         <div class="alert alert--danger" role="alert">{{ error }}</div>
@@ -36,7 +39,7 @@
 
         <label for="password">Contraseña</label>
         <input id="password" name="password" type="password"
-               autocomplete="current-password" required>
+               autocomplete="current-password" maxlength="128" required>
 
         <button class="btn btn--primary" type="submit">Ingresar</button>
       </form>

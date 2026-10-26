@@ -17,6 +17,7 @@ import re
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -160,6 +161,29 @@ EMPLOYEE_STATUS_OPTIONS = [
     ("inactive", "Inactivos"),
 ]
 
+# B-53: tope de filas por página en las listas HTML (la API usa limit ≤ 100).
+WEB_PAGE_SIZE = 50
+
+
+def _page_offset(page: int) -> tuple[int, int]:
+    safe_page = max(int(page or 1), 1)
+    return WEB_PAGE_SIZE, (safe_page - 1) * WEB_PAGE_SIZE
+
+
+def _receipts_error_redirect(
+    request: Request,
+    *,
+    company_id: str = "",
+    period: str = "",
+    error: str,
+) -> RedirectResponse:
+    params = {key: value for key, value in (("company_id", company_id), ("period", period)) if value}
+    params["error"] = error
+    return RedirectResponse(
+        url=f"{request.url_for('receipts_list')}?{urlencode(params)}",
+        status_code=303,
+    )
+
 
 def _render(
     request: Request,
@@ -213,6 +237,7 @@ def _render_login(
     error: str | None = None,
     next_url: str = "/",
     status_code: int = 200,
+    demo_mode: bool = False,
 ) -> HTMLResponse:
     csrf_token = csrf_token_for(request, settings, None)
     response = templates.TemplateResponse(
@@ -226,6 +251,7 @@ def _render_login(
             "email": email,
             "error": error,
             "next_url": next_url,
+            "demo_mode": demo_mode,
         },
         status_code=status_code,
     )
@@ -293,7 +319,9 @@ def login_page(
         return RedirectResponse(url=next_url, status_code=303)
     if resolve_web_user(request, db, settings, data) is not None:
         return RedirectResponse(url=next_url, status_code=303)
-    return _render_login(request, settings, next_url=next_url)
+    return _render_login(
+        request, settings, next_url=next_url, demo_mode=bool(getattr(data, "is_demo", False))
+    )
 
 
 @router.post("/login", name="login_submit")
@@ -490,9 +518,13 @@ def employees_list(
     q: Annotated[str, Query(max_length=120)] = "",
     company_id: Annotated[str, Query(max_length=80)] = "",
     status: Annotated[str, Query(max_length=30)] = "",
+    page: Annotated[int, Query(ge=1)] = 1,
 ) -> HTMLResponse:
     query = _clean_query(q)
-    employees = data.list_employees(query=query, company_id=company_id, status=status)
+    limit, offset = _page_offset(page)
+    employees = data.list_employees(
+        query=query, company_id=company_id, status=status, limit=limit, offset=offset
+    )
     context = {
         "employees": employees,
         "companies": data.list_companies(),
@@ -546,15 +578,16 @@ def agreements_list(
     q: Annotated[str, Query(max_length=120)] = "",
 ) -> HTMLResponse:
     query = _clean_query(q)
-    return _render(
-        request,
-        "agreements/list.html",
-        page_title="Convenios",
-        page_subtitle="Repositorio normativo, escalas y propuestas de reglas.",
-        active_nav="agreements",
-        agreements=data.list_agreements(query),
-        query=query,
-    )
+    context = {
+        "agreements": data.list_agreements(query),
+        "query": query,
+        "active_nav": "agreements",
+        "page_title": "Convenios",
+        "page_subtitle": "Repositorio normativo, escalas y propuestas de reglas.",
+    }
+    if _is_htmx(request):
+        return _render(request, "agreements/_table.html", **context)
+    return _render(request, "agreements/list.html", **context)
 
 
 @protected_router.get("/convenios/{agreement_id}", name="agreement_detail")
@@ -725,13 +758,18 @@ def receipts_list(
     company_id: Annotated[str, Query(max_length=80)] = "",
     period: Annotated[str, Query(max_length=20)] = "",
     status: Annotated[str, Query(max_length=30)] = "",
+    page: Annotated[int, Query(ge=1)] = 1,
+    error: Annotated[str, Query(max_length=200)] = "",
 ) -> HTMLResponse:
     query = _clean_query(q)
+    limit, offset = _page_offset(page)
     receipts = data.list_receipts(
         query=query,
         company_id=company_id,
         period=period,
         status=status,
+        limit=limit,
+        offset=offset,
     )
     context = {
         "receipts": receipts,
@@ -741,6 +779,7 @@ def receipts_list(
         "company_id": company_id,
         "period": period,
         "status": status,
+        "error": _clean_query(error),
         "status_options": RECEIPT_STATUS_OPTIONS,
         "active_nav": "receipts",
         "page_title": "Recibos de sueldo",
@@ -753,17 +792,25 @@ def receipts_list(
 
 @protected_router.get("/recibos/lote.zip", name="receipts_zip")
 def receipts_zip(
+    request: Request,
     data: DataSource,
     company_id: Annotated[str, Query(max_length=80)] = "",
     period: Annotated[str, Query(max_length=20)] = "",
 ) -> Response:
     receipts = data.list_receipts(company_id=company_id, period=period)
     if not receipts:
-        raise HTTPException(status_code=404, detail="No hay recibos para los filtros indicados.")
+        return _receipts_error_redirect(
+            request,
+            company_id=company_id,
+            period=period,
+            error="No hay recibos para los filtros indicados.",
+        )
     try:
         archive = render_receipts_zip(receipt.to_pdf_context() for receipt in receipts)
     except ReceiptContextError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _receipts_error_redirect(
+            request, company_id=company_id, period=period, error=str(exc)[:200]
+        )
     suffix = period or "todos"
     return Response(
         content=archive,
@@ -795,14 +842,24 @@ def receipt_detail(request: Request, receipt_id: str, data: DataSource) -> HTMLR
 
 
 @protected_router.get("/recibos/{receipt_id}/vista", name="receipt_preview")
-def receipt_preview(receipt_id: str, data: DataSource) -> HTMLResponse:
+def receipt_preview(request: Request, receipt_id: str, data: DataSource) -> HTMLResponse:
     receipt = data.get_receipt(receipt_id)
     if receipt is None:
-        raise HTTPException(status_code=404, detail="Recibo no encontrado.")
+        return _not_found(
+            request,
+            title="Recibo no encontrado",
+            message=f"No existe un recibo con identificador {receipt_id!r}.",
+            active_nav="receipts",
+        )
     try:
         html = render_receipt_html(receipt.to_pdf_context())
     except ReceiptContextError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _not_found(
+            request,
+            title="Recibo no disponible",
+            message=str(exc),
+            active_nav="receipts",
+        )
     return HTMLResponse(
         content=html,
         headers={
@@ -817,14 +874,14 @@ def receipt_preview(receipt_id: str, data: DataSource) -> HTMLResponse:
 
 
 @protected_router.get("/recibos/{receipt_id}/pdf", name="receipt_pdf")
-def receipt_pdf(receipt_id: str, data: DataSource) -> Response:
+def receipt_pdf(request: Request, receipt_id: str, data: DataSource) -> Response:
     receipt = data.get_receipt(receipt_id)
     if receipt is None:
-        raise HTTPException(status_code=404, detail="Recibo no encontrado.")
+        return _receipts_error_redirect(request, error="Recibo no encontrado.")
     try:
         pdf = render_receipt_pdf(receipt.to_pdf_context())
     except ReceiptContextError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _receipts_error_redirect(request, error=str(exc)[:200])
     return Response(
         content=pdf,
         media_type="application/pdf",

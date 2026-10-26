@@ -37,7 +37,7 @@
     <article class="stat-card">
       <div class="stat-icon stat-icon--violet">{{ icon("proposals") }}</div>
       <div class="stat-content">
-        <div class="stat-label">Propuestas IA pendientes</div>
+        <div class="stat-label">Propuestas de IA pendientes</div>
         <p class="stat-value">{{ metrics.pending_proposals }}</p>
         <p class="stat-meta">Borradores o en revisión</p>
       </div>
@@ -73,14 +73,8 @@
             </div>
 
             <div class="progress-row">
-              <div class="progress-row-header">
-                <span>Avance del circuito de aprobación</span>
-                <strong>{% if latest.status == "closed" %}100%{% elif latest.status == "approved" %}90%{% elif latest.status == "review" %}72%{% else %}35%{% endif %}</strong>
-              </div>
-              <div class="progress" role="progressbar" aria-label="Avance de la liquidación" aria-valuemin="0" aria-valuemax="100"
-                   aria-valuenow="{% if latest.status == 'closed' %}100{% elif latest.status == 'approved' %}90{% elif latest.status == 'review' %}72{% else %}35{% endif %}">
-                <span style="width: {% if latest.status == 'closed' %}100%{% elif latest.status == 'approved' %}90%{% elif latest.status == 'review' %}72%{% else %}35%{% endif %};"></span>
-              </div>
+              <p class="muted" style="margin: 0;">Etapa del circuito: <strong>{{ latest.status | status_label("payroll") }}</strong></p>
+              <p class="muted" style="margin: 4px 0 0;">Borrador → Revisión → Aprobada → Cerrada</p>
             </div>
 
             <div class="summary-list" style="margin-top: 18px;">
@@ -109,7 +103,7 @@
         <div class="card-header">
           <div>
             <h2 class="card-title">Liquidaciones recientes</h2>
-            <p class="card-subtitle">Últimos períodos procesados en el entorno demo.</p>
+            <p class="card-subtitle">{% if demo_mode %}Últimos períodos procesados en el entorno demo.{% else %}Últimos períodos procesados.{% endif %}</p>
           </div>
           <a class="btn btn--ghost btn--sm" href="{{ url_for('payrolls_list') }}">Ver todas</a>
         </div>
@@ -161,38 +155,44 @@
           <a class="btn btn--ghost btn--sm" href="{{ url_for('companies_list') }}">Gestionar</a>
         </div>
         <div class="card-body card-body--flush">
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Empresa</th>
-                  <th>Actividad</th>
-                  <th>Convenio</th>
-                  <th class="num">Empleados</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for company in companies %}
+          {% if companies %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
                   <tr>
-                    <td>
-                      <div class="entity-cell">
-                        <span class="avatar">{{ company.name | initials }}</span>
-                        <div class="entity-text">
-                          <a class="entity-name" href="{{ url_for('company_detail', company_id=company.id) }}">{{ company.name }}</a>
-                          <span class="entity-meta">CUIT {{ company.cuit }}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>{{ company.activity }}</td>
-                    <td><span class="badge badge--outline">{{ company.agreement }}</span></td>
-                    <td class="num">{{ company.employee_count }}</td>
-                    <td><span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span></td>
+                    <th>Empresa</th>
+                    <th>Actividad</th>
+                    <th>Convenio</th>
+                    <th class="num">Empleados</th>
+                    <th>Estado</th>
                   </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {% for company in companies %}
+                    <tr>
+                      <td>
+                        <div class="entity-cell">
+                          <span class="avatar">{{ company.name | initials }}</span>
+                          <div class="entity-text">
+                            <a class="entity-name" href="{{ url_for('company_detail', company_id=company.id) }}">{{ company.name }}</a>
+                            <span class="entity-meta">CUIT {{ company.cuit }}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{{ company.activity }}</td>
+                      <td><span class="badge badge--outline">{{ company.agreement }}</span></td>
+                      <td class="num">{{ company.employee_count }}</td>
+                      <td><span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin empresas", empty_message="Todavía no hay empresas cargadas.", empty_icon="companies" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
         </div>
       </section>
     </div>

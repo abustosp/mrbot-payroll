@@ -6,9 +6,10 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Empresas</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar los servicios de alta de empresas">
+  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar los servicios de alta de empresas">
     {{ icon("plus") }} Nueva empresa
   </button>
+  <small class="muted">Próximamente: alta de empresas</small>
 {% endblock %}
 
 {% block content %}

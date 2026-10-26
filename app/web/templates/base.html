@@ -59,7 +59,7 @@
 
       <p class="sidebar-heading">Inteligencia artificial</p>
       <a href="{{ url_for('proposals_list') }}" class="nav-link {% if active_nav == 'proposals' %}is-active{% endif %}" {% if active_nav == 'proposals' %}aria-current="page"{% endif %}>
-        {{ icon("proposals", "nav-icon") }}<span>Propuestas IA</span>
+        {{ icon("proposals", "nav-icon") }}<span>Propuestas de IA</span>
       </a>
     </nav>
 
@@ -99,7 +99,7 @@
       <div class="header-right">
         <a class="header-health" href="{{ url_for('health_page') }}">
           <span class="status-dot" aria-hidden="true"></span>
-          <span>Sistema operativo</span>
+          <span>Estado del sistema</span>
         </a>
         {% if current_user %}
           <div class="user-chip" title="Sesión de {{ current_user.email }}">

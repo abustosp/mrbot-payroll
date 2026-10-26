@@ -4,7 +4,7 @@
 {% block title %}{{ proposal.title }}{% endblock %}
 
 {% block breadcrumb %}
-  <li><a href="{{ url_for('proposals_list') }}">Propuestas IA</a></li>
+  <li><a href="{{ url_for('proposals_list') }}">Propuestas de IA</a></li>
   <li class="current" aria-current="page">{{ proposal.title }}</li>
 {% endblock %}
 
@@ -110,7 +110,7 @@
       <section class="card">
         <div class="card-body">
           <div class="callout callout--warning">
-            <strong>Control humano:</strong> la aprobación desde esta pantalla solo cambia el estado en el entorno demo. La publicación de reglas reales debe ejecutarse en el servicio de IA con permisos y auditoría.
+            <strong>Control humano:</strong> {% if demo_mode %}la aprobación desde esta pantalla solo cambia el estado en el entorno demo.{% else %}la aprobación desde esta pantalla solo cambia el estado de revisión.{% endif %} La publicación de reglas reales debe ejecutarse en el servicio de IA con permisos y auditoría.
           </div>
         </div>
       </section>

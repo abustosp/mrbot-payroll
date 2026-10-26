@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
@@ -121,6 +121,135 @@ def test_sql_data_source_maps_seed_and_calculated_payroll(tmp_path: Path) -> Non
         assert source.get_receipt(receipts[0].id) == receipts[0]
         assert source.receipt_periods() == [("2026-06", "Junio 2026")]
         assert receipts[0].to_pdf_context()["items"]
+    finally:
+        engine.dispose()
+
+
+def test_sql_lists_filter_in_sql_and_paginate(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-pagination.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        org = _seed_organization(
+            session,
+            slug="pagination",
+            name="Paginación",
+            cuit="30733333336",
+            employee_code="P-001",
+            cuil="20333333331",
+            agreement_code="CCT-P",
+            run_code="run-p",
+            net="100000.00",
+        )
+        category = session.scalar(
+            select(AgreementCategory).where(
+                AgreementCategory.agreement_id == org["agreement_id"]
+            )
+        )
+        assert category is not None
+        for index, code in enumerate(("P-002", "P-003"), start=2):
+            amount = Decimal(f"{index}00000.00")
+            employee = Employee(
+                organization_id=org["organization_id"],
+                employee_code=code,
+                first_name="Empleado",
+                last_name=f"Paginado {index}",
+                cuil=f"2033333333{index}",
+                hire_date=date(2024, 1, 1),
+                active=True,
+            )
+            session.add(employee)
+            session.flush()
+            session.add(
+                EmploymentContract(
+                    employee_id=employee.id,
+                    company_id=org["company_id"],
+                    agreement_id=org["agreement_id"],
+                    category_id=category.id,
+                    valid_from=date(2024, 1, 1),
+                    active=True,
+                    monthly_salary=amount,
+                )
+            )
+            result = PayrollResult(
+                payroll_run_id=org["run_id"],
+                employee_id=employee.id,
+                remunerative=amount,
+                non_remunerative=Decimal("0"),
+                deductions=Decimal("100.00"),
+                contributions=Decimal("0"),
+                gross=amount + Decimal("100.00"),
+                net=amount,
+                employer_cost=amount + Decimal("100.00"),
+            )
+            session.add(result)
+            session.flush()
+            session.add(
+                PayrollItem(
+                    payroll_result_id=result.id,
+                    code="BASICO",
+                    description="Sueldo básico",
+                    nature="REMUNERATIVE",
+                    quantity=Decimal("1"),
+                    unit_value=amount,
+                    amount=amount,
+                )
+            )
+
+    statements: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(conn, cursor, statement, parameters, context, executemany) -> None:
+        statements.append(statement)
+
+    source = SqlAlchemyDataSource(factory, org["organization_id"])
+    try:
+        employees = source.list_employees()
+        assert len(employees) == 3
+        assert source.list_employees(status="active") == employees
+        assert source.list_employees(status="inactive") == []
+        assert source.list_employees(status="bogus") == []
+        assert source.list_employees(company_id=str(org["company_id"])) == employees
+        assert source.list_employees(company_id="999999") == []
+        assert [employee.id for employee in source.list_employees(query="paginado 2")] == [
+            employee.id for employee in employees if employee.file_number == "P-002"
+        ]
+
+        first = source.list_employees(limit=2)
+        rest = source.list_employees(limit=2, offset=2)
+        assert len(first) == 2
+        assert len(rest) == 1
+        assert {employee.id for employee in first} | {employee.id for employee in rest} == {
+            employee.id for employee in employees
+        }
+        assert source.list_employees(limit=1, offset=9) == []
+
+        receipts = source.list_receipts()
+        assert len(receipts) == 3
+        assert source.list_receipts(status="issued") == receipts
+        assert source.list_receipts(status="pending") == []
+        assert source.list_receipts(status="bogus") == []
+        assert source.list_receipts(period="2026-09") == receipts
+        assert source.list_receipts(period="1999-01") == []
+        assert source.list_receipts(period="nope") == []
+        assert source.list_receipts(company_id=str(org["company_id"])) == receipts
+        assert source.list_receipts(query="paginado 3") != []
+
+        first_receipts = source.list_receipts(limit=2)
+        rest_receipts = source.list_receipts(limit=2, offset=2)
+        assert len(first_receipts) == 2
+        assert len(rest_receipts) == 1
+        assert {receipt.id for receipt in first_receipts} | {
+            receipt.id for receipt in rest_receipts
+        } == {receipt.id for receipt in receipts}
+
+        # Los filtros estructurados y la paginación se aplican en SQL.
+        statements.clear()
+        source.list_employees(company_id=str(org["company_id"]), limit=1)
+        assert any("LIMIT" in statement.upper() for statement in statements)
+        statements.clear()
+        source.list_receipts(period="2026-09", limit=1)
+        assert any("LIMIT" in statement.upper() for statement in statements)
     finally:
         engine.dispose()
 

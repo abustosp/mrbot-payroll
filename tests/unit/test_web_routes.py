@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import io
 import zipfile
+from collections.abc import Generator
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
+import app.main as main_module
 from app.config import Settings, get_settings
 from app.web.demo_data import DemoDataStore
 from app.web.routes import router
@@ -251,8 +254,16 @@ def test_receipts_zip(client: TestClient) -> None:
         assert len(reader.pages) >= 1
         assert "María Fernanda Gómez" in (reader.pages[0].extract_text() or "")
 
-    missing = client.get("/recibos/lote.zip", params={"period": "1999-01"})
-    assert missing.status_code == 404
+    missing = client.get(
+        "/recibos/lote.zip", params={"period": "1999-01"}, follow_redirects=False
+    )
+    assert missing.status_code == 303
+    assert "/recibos" in missing.headers["location"]
+    assert "error=" in missing.headers["location"]
+
+    followed = client.get("/recibos/lote.zip", params={"period": "1999-01"})
+    assert followed.status_code == 200
+    assert "No hay recibos para los filtros indicados." in followed.text
 
 
 def test_personal_data_is_escaped_in_web_and_receipt(client: TestClient, app: FastAPI) -> None:
@@ -310,7 +321,8 @@ def test_health_page_reports_components(client: TestClient) -> None:
     assert "WeasyPrint" in response.text
     assert "Datos demo en memoria" in response.text
     assert "app.state.payroll_data_source" in response.text
-    assert "Sistema operativo" in response.text
+    assert "Estado del sistema" in response.text
+    assert "header-health" in response.text
 
     alias = client.get("/health/visual")
     assert alias.status_code == 200
@@ -337,6 +349,7 @@ def test_list_pages_expose_htmx_filters(client: TestClient) -> None:
     for path, target in [
         ("/empresas", "#companies-results"),
         ("/empleados", "#employees-results"),
+        ("/convenios", "#agreements-results"),
         ("/liquidaciones", "#payrolls-results"),
         ("/propuestas-ia", "#proposals-results"),
         ("/recibos", "#receipts-results"),
@@ -345,3 +358,185 @@ def test_list_pages_expose_htmx_filters(client: TestClient) -> None:
         assert response.status_code == 200
         assert 'hx-get="' in response.text
         assert f'hx-target="{target}"' in response.text
+
+
+def test_agreements_htmx_partial(client: TestClient) -> None:
+    partial = client.get(
+        "/convenios",
+        params={"q": "comercio"},
+        headers={"HX-Request": "true"},
+    )
+    assert partial.status_code == 200
+    assert "<html" not in partial.text
+    assert partial.text.lstrip().startswith('<div id="agreements-results">')
+    assert "filter-summary" in partial.text
+
+
+def test_receipts_empty_disables_zip_download(client: TestClient) -> None:
+    empty = client.get("/recibos", params={"period": "1999-99"})
+    assert empty.status_code == 200
+    assert "Sin recibos" in empty.text
+    assert 'aria-disabled="true"' in empty.text
+    assert "/recibos/lote.zip" not in empty.text
+
+    full = client.get("/recibos")
+    assert full.status_code == 200
+    assert "/recibos/lote.zip" in full.text
+
+
+def test_missing_receipt_preview_renders_html_404(client: TestClient) -> None:
+    response = client.get("/recibos/inexistente/vista")
+
+    assert response.status_code == 404
+    assert "<html" in response.text
+    assert "Volver al dashboard" in response.text
+    assert "Ver recibos" in response.text
+
+
+def test_missing_receipt_pdf_redirects_to_list_with_error(client: TestClient) -> None:
+    response = client.get("/recibos/inexistente/pdf", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert "/recibos" in response.headers["location"]
+    assert "error=" in response.headers["location"]
+
+    followed = client.get("/recibos/inexistente/pdf")
+    assert followed.status_code == 200
+    assert "Recibo no encontrado." in followed.text
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/empresas/inexistente", "Ver empresas"),
+        ("/empleados/inexistente", "Ver empleados"),
+        ("/convenios/inexistente", "Ver convenios"),
+        ("/liquidaciones/inexistente", "Ver liquidaciones"),
+        ("/propuestas-ia/inexistente", "Ver propuestas de IA"),
+        ("/recibos/inexistente", "Ver recibos"),
+    ],
+)
+def test_404_suggests_contextual_section(
+    client: TestClient, path: str, expected: str
+) -> None:
+    response = client.get(path)
+
+    assert response.status_code == 404
+    assert expected in response.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/empresas", "/empleados", "/convenios", "/liquidaciones", "/propuestas-ia"],
+)
+def test_future_actions_are_focusable_with_visible_note(
+    client: TestClient, path: str
+) -> None:
+    response = client.get(path)
+
+    assert response.status_code == 200
+    assert 'aria-disabled="true"' in response.text
+    assert "disabled title=" not in response.text
+    assert "Próximamente" in response.text
+
+
+def test_demo_texts_show_in_demo_mode(client: TestClient) -> None:
+    dashboard = client.get("/")
+
+    assert dashboard.status_code == 200
+    assert "entorno demo" in dashboard.text
+
+
+@pytest.fixture()
+def auth_client() -> Generator[TestClient, None, None]:
+    application = FastAPI(title="Payroll web login test")
+    application.include_router(router)
+    application.state.payroll_data_source = DemoDataStore()
+    application.dependency_overrides[get_settings] = lambda: Settings(
+        web_auth_enabled=True,
+        admin_email="admin@example.com",
+        admin_password="admin",
+        secret_key="web-login-test-secret",
+    )
+    with TestClient(application) as test_client:
+        yield test_client
+
+
+def test_login_shows_demo_help_only_in_demo_mode(auth_client: TestClient) -> None:
+    application = auth_client.app
+    demo = auth_client.get("/login")
+
+    assert demo.status_code == 200
+    assert "Entorno de demostración" in demo.text
+
+    application.state.payroll_data_source = SimpleNamespace(is_demo=False)
+    try:
+        sql = auth_client.get("/login")
+        assert sql.status_code == 200
+        assert "Entorno de demostración" not in sql.text
+    finally:
+        application.state.payroll_data_source = DemoDataStore()
+
+
+def test_login_password_has_maxlength(auth_client: TestClient) -> None:
+    response = auth_client.get("/login")
+
+    assert response.status_code == 200
+    assert 'maxlength="128"' in response.text
+
+
+def test_proposal_status_forms_ask_for_confirmation(client: TestClient) -> None:
+    response = client.get("/propuestas-ia/prop-001")
+
+    assert response.status_code == 200
+    assert "onsubmit=\"return confirm(" in response.text
+
+
+def test_receipt_detail_has_iframe_fallback(client: TestClient) -> None:
+    response = client.get("/recibos/rec-2026-09-001")
+
+    assert response.status_code == 200
+    assert "abrilo en una pestaña nueva" in response.text
+
+
+def test_dashboard_shows_stages_without_invented_percent(client: TestClient) -> None:
+    dashboard = client.get("/")
+    detail = client.get("/liquidaciones/pay-2026-09")
+
+    assert dashboard.status_code == 200
+    assert detail.status_code == 200
+    for html in (dashboard.text, detail.text):
+        assert "Etapa del circuito" in html
+        assert 'aria-valuenow="72"' not in html
+        assert "Avance del circuito" not in html
+
+
+def test_navigation_uses_single_proposals_name(client: TestClient) -> None:
+    dashboard = client.get("/")
+
+    assert dashboard.status_code == 200
+    assert "Propuestas de IA" in dashboard.text
+    assert ">Propuestas IA<" not in dashboard.text
+
+
+def test_unhandled_error_renders_recovery_page() -> None:
+    application = main_module.create_app()
+    application.dependency_overrides[get_settings] = (
+        lambda: Settings(web_auth_enabled=False)
+    )
+
+    @application.get("/boom-test-only")
+    def boom() -> None:
+        raise RuntimeError("boom")
+
+    with TestClient(application, raise_server_exceptions=False) as test_client:
+        response = test_client.get("/boom-test-only")
+        assert response.status_code == 500
+        assert response.headers["content-type"].startswith("text/html")
+        assert "alembic upgrade head" in response.text
+        assert "/salud" in response.text
+
+        invalid = test_client.post(
+            "/propuestas-ia/prop-001/estado", data={"status": "invented"}
+        )
+        assert invalid.status_code == 400

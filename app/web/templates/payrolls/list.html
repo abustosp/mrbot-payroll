@@ -6,9 +6,10 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Liquidaciones</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar el motor de liquidación">
+  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar el motor de liquidación">
     {{ icon("plus") }} Nueva liquidación
   </button>
+  <small class="muted">Próximamente: motor de liquidación</small>
 {% endblock %}
 
 {% block content %}

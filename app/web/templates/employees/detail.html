@@ -93,7 +93,7 @@
         <div class="card-header">
           <div>
             <h2 class="card-title">Recibos del empleado</h2>
-            <p class="card-subtitle">Documentos emitidos en el entorno demo.</p>
+            <p class="card-subtitle">{% if demo_mode %}Documentos emitidos en el entorno demo.{% else %}Documentos emitidos.{% endif %}</p>
           </div>
           <span class="badge badge--outline">{{ receipts | length }}</span>
         </div>

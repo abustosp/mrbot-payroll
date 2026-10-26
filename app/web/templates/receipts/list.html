@@ -6,12 +6,21 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Recibos</li>{% endblock %}
 
 {% block page_actions %}
-  <a class="btn btn--primary" href="{{ url_for('receipts_zip') }}?company_id={{ company_id | urlencode }}&period={{ period | urlencode }}">
-    {{ icon("download") }} Descargar lote ZIP
-  </a>
+  {% if receipts %}
+    <a class="btn btn--primary" href="{{ url_for('receipts_zip') }}?company_id={{ company_id | urlencode }}&period={{ period | urlencode }}">
+      {{ icon("download") }} Descargar lote ZIP
+    </a>
+  {% else %}
+    <span class="btn btn--primary" aria-disabled="true" title="Sin resultados para los filtros aplicados">
+      {{ icon("download") }} Descargar lote ZIP
+    </span>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
+  {% if error %}
+    <div class="alert alert--danger" role="alert">{{ error }}</div>
+  {% endif %}
   <section class="card">
     <div class="card-header">
       <div>

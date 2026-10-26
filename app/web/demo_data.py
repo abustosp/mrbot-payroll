@@ -729,8 +729,10 @@ class DemoDataStore:
         query: str = "",
         company_id: str = "",
         status: str = "",
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Employee]:
-        return [
+        matched = [
             employee
             for employee in self.employees
             if (not company_id or employee.company_id == company_id)
@@ -744,6 +746,7 @@ class DemoDataStore:
                 employee.company_name,
             )
         ]
+        return matched if limit is None else matched[offset:offset + limit]
 
     def get_employee(self, employee_id: str) -> Employee | None:
         return next((employee for employee in self.employees if employee.id == employee_id), None)
@@ -799,8 +802,10 @@ class DemoDataStore:
         company_id: str = "",
         period: str = "",
         status: str = "",
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Receipt]:
-        return [
+        matched = [
             receipt
             for receipt in self.receipts
             if (not company_id or receipt.company_id == company_id)
@@ -808,6 +813,7 @@ class DemoDataStore:
             and (not status or receipt.status == status)
             and _matches(query, receipt.number, receipt.employee.get("name", ""), receipt.employee_id)
         ]
+        return matched if limit is None else matched[offset:offset + limit]
 
     def get_receipt(self, receipt_id: str) -> Receipt | None:
         return next((receipt for receipt in self.receipts if receipt.id == receipt_id), None)

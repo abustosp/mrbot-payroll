@@ -442,23 +442,55 @@ class SqlAlchemyDataSource:
         query: str = "",
         company_id: str = "",
         status: str = "",
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WebEmployee]:
         requested_company = _id(company_id) if company_id else None
         organization_id = self._scope()
         if (company_id and requested_company is None) or organization_id is None:
             return []
+        # B-53: filtros estructurados en SQL; el texto libre sigue en Python
+        # (cubre categoría/empresa por join) y entonces pagina en Python.
+        today = date.today()
+        wanted = status.casefold() if status else ""
+        if wanted and wanted not in {"active", "inactive"}:
+            return []
         with self._session_factory() as session:
-            rows = session.scalars(
+            statement = (
                 select(Employee)
                 .where(Employee.organization_id == organization_id)
                 .order_by(Employee.last_name, Employee.first_name)
-            ).all()
+            )
+            if requested_company is not None:
+                statement = statement.where(
+                    select(EmploymentContract.id)
+                    .join(Company, Company.id == EmploymentContract.company_id)
+                    .where(
+                        EmploymentContract.employee_id == Employee.id,
+                        EmploymentContract.company_id == requested_company,
+                        Company.organization_id == organization_id,
+                    )
+                    .exists()
+                )
+            if wanted == "active":
+                statement = statement.where(
+                    Employee.active.is_(True),
+                    or_(Employee.termination_date.is_(None), Employee.termination_date >= today),
+                )
+            elif wanted == "inactive":
+                statement = statement.where(
+                    or_(
+                        Employee.active.is_not(True),
+                        Employee.termination_date < today,
+                    )
+                )
+            if not query and limit is not None:
+                statement = statement.limit(limit).offset(offset)
+            rows = session.scalars(statement).all()
             employees = self._employees(session, rows, requested_company)
-            return [
+            matched = [
                 employee for employee in employees
-                if (not company_id or employee.company_id == company_id)
-                and (not status or employee.status == status.casefold())
-                and _matches(
+                if _matches(
                     query,
                     employee.name,
                     employee.cuil,
@@ -467,6 +499,9 @@ class SqlAlchemyDataSource:
                     employee.company_name,
                 )
             ]
+            if query and limit is not None:
+                matched = matched[offset:offset + limit]
+            return matched
 
     def get_employee(self, employee_id: str) -> WebEmployee | None:
         row_id = _id(employee_id)
@@ -856,11 +891,25 @@ class SqlAlchemyDataSource:
         company_id: str = "",
         period: str = "",
         status: str = "",
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WebReceipt]:
         requested_company = _id(company_id) if company_id else None
         organization_id = self._scope()
         if (company_id and requested_company is None) or organization_id is None:
             return []
+        # B-53: filtros estructurados en SQL (rango de mes por período, sin
+        # funciones de dialecto); el texto libre sigue en Python y pagina ahí.
+        wanted = status.casefold() if status else ""
+        if wanted and wanted not in {"issued", "pending"}:
+            return []
+        month_start: date | None = None
+        if period:
+            try:
+                year, month = (int(part) for part in period.split("-"))
+                month_start = date(year, month, 1)
+            except (TypeError, ValueError):
+                return []
         with self._session_factory() as session:
             statement = (
                 select(PayrollResult, PayrollRun)
@@ -870,14 +919,31 @@ class SqlAlchemyDataSource:
             )
             if requested_company is not None:
                 statement = statement.where(PayrollRun.company_id == requested_company)
+            if month_start is not None:
+                next_month = date(
+                    month_start.year + (month_start.month == 12),
+                    month_start.month % 12 + 1,
+                    1,
+                )
+                statement = statement.where(
+                    PayrollRun.period_start >= month_start,
+                    PayrollRun.period_start < next_month,
+                )
+            if wanted == "issued":
+                statement = statement.where(func.upper(PayrollRun.status).in_(("APPROVED", "CLOSED")))
+            elif wanted == "pending":
+                statement = statement.where(func.upper(PayrollRun.status).not_in(("APPROVED", "CLOSED")))
+            if not query and limit is not None:
+                statement = statement.limit(limit).offset(offset)
             rows = session.execute(statement).all()
             receipts = self._receipts(session, rows)
-            return [
+            matched = [
                 receipt for receipt in receipts
-                if (not period or receipt.period == period)
-                and (not status or receipt.status == status.casefold())
-                and _matches(query, receipt.number, receipt.employee.get("name"), receipt.employee_id)
+                if _matches(query, receipt.number, receipt.employee.get("name"), receipt.employee_id)
             ]
+            if query and limit is not None:
+                matched = matched[offset:offset + limit]
+            return matched
 
     def get_receipt(self, receipt_id: str) -> WebReceipt | None:
         result_id = _id(receipt_id)

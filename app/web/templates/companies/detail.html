@@ -112,7 +112,7 @@
         <div class="card-header">
           <div>
             <h2 class="card-title">Resumen operativo</h2>
-            <p class="card-subtitle">Volumen registrado en el entorno demo.</p>
+            <p class="card-subtitle">{% if demo_mode %}Volumen registrado en el entorno demo.{% else %}Volumen registrado.{% endif %}</p>
           </div>
         </div>
         <div class="card-body">

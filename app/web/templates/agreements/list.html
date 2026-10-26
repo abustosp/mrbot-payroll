@@ -6,14 +6,23 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Convenios</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar los servicios de convenios">
+  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar los servicios de convenios">
     {{ icon("plus") }} Nuevo convenio
   </button>
+  <small class="muted">Próximamente: alta de convenios</small>
 {% endblock %}
 
 {% block content %}
   <section class="card" style="margin-bottom: 18px;">
-    <form class="filters-bar" method="get" action="{{ url_for('agreements_list') }}" style="border-bottom: 0;">
+    <form class="filters-bar"
+          method="get"
+          action="{{ url_for('agreements_list') }}"
+          hx-get="{{ url_for('agreements_list') }}"
+          hx-target="#agreements-results"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="submit, change, keyup changed delay:350ms from:input[type='search']"
+          style="border-bottom: 0;">
       <div class="field field--grow">
         <label for="agreements-q">Buscar convenio</label>
         <div class="search-control">
@@ -28,40 +37,5 @@
     </form>
   </section>
 
-  {% if agreements %}
-    <div class="agreement-grid">
-      {% for agreement in agreements %}
-        <article class="agreement-card">
-          <div class="agreement-card-top">
-            <span class="agreement-code">{{ agreement.code }}</span>
-            <span class="badge badge--{{ agreement.status | status_class }}">{{ agreement.status | status_label("agreement") }}</span>
-          </div>
-          <h2>{{ agreement.name }}</h2>
-          <p class="agreement-scope">{{ agreement.scope }}</p>
-          <p class="agreement-summary">{{ agreement.summary | truncate(135) }}</p>
-          <ul class="chip-list" style="margin-bottom: 14px;">
-            {% for category in agreement.categories[:3] %}
-              <li class="chip">{{ category }}</li>
-            {% endfor %}
-            {% if agreement.categories | length > 3 %}
-              <li class="chip">+{{ agreement.categories | length - 3 }}</li>
-            {% endif %}
-          </ul>
-          <div class="agreement-footer">
-            <div class="agreement-stats">
-              <span><strong>{{ agreement.formula_count }}</strong><small>Fórmulas</small></span>
-              <span><strong>{{ agreement.document_count }}</strong><small>Documentos</small></span>
-            </div>
-            <a class="btn btn--ghost btn--sm" href="{{ url_for('agreement_detail', agreement_id=agreement.id) }}">Ver detalle {{ icon("arrow-right") }}</a>
-          </div>
-        </article>
-      {% endfor %}
-    </div>
-  {% else %}
-    <section class="card">
-      {% with empty_title="Sin convenios", empty_message="No hay convenios que coincidan con la búsqueda.", empty_icon="agreements", empty_action_url=url_for('agreements_list'), empty_action_label="Limpiar búsqueda" %}
-        {% include "partials/_empty_state.html" %}
-      {% endwith %}
-    </section>
-  {% endif %}
+  {% include "agreements/_table.html" %}
 {% endblock %}
