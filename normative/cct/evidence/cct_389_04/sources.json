@@ -381,6 +381,36 @@
       "content_type": "text/html",
       "http_status": 200,
       "retrieved_at": "2026-10-26T16:36:00-03:00"
+    },
+    {
+      "id": "src-38904-020",
+      "title": "Escalas CABA-GBA 2021 CCT 389/04 [pendiente de curaduría]",
+      "document_type": "otro",
+      "authority": "Sin verificar (pendiente de curaduría)",
+      "source_url": "https://example.invalid/pendiente-de-curaduria",
+      "final_url": "https://example.invalid/pendiente-de-curaduria",
+      "local_path": "pdfs/cct_389_04_2021_escalas_caba_gba.pdf",
+      "content_type": "application/pdf",
+      "retrieved_at": "2026-10-26T18:00:00-03:00",
+      "extraction": "manual",
+      "official": false,
+      "notes": "Archivo preexistente en el repositorio sin documento asociado. Se registra para trazabilidad total de bytes (B-39); no respalda ninguna escala. Pendiente: verificar emisor, vigencia y eventual extracción de escalas.",
+      "sha256": "31331946cf8b49cad2b3982b3e90403a0a516d3c5ae6dcd700ccaa905debda57"
+    },
+    {
+      "id": "src-38904-021",
+      "title": "Homologación 2021 CCT 389/04 [pendiente de curaduría]",
+      "document_type": "otro",
+      "authority": "Sin verificar (pendiente de curaduría)",
+      "source_url": "https://example.invalid/pendiente-de-curaduria",
+      "final_url": "https://example.invalid/pendiente-de-curaduria",
+      "local_path": "pdfs/cct_389_04_2021_homologacion.pdf",
+      "content_type": "application/pdf",
+      "retrieved_at": "2026-10-26T18:00:00-03:00",
+      "extraction": "manual",
+      "official": false,
+      "notes": "Archivo preexistente en el repositorio sin documento asociado. Se registra para trazabilidad total de bytes (B-39); no respalda ninguna escala. Pendiente: verificar emisor, vigencia y eventual extracción de escalas.",
+      "sha256": "6b97b48fb86701cd789c5e95880648e4e7a77635eaad61e98b2d0fcbc5a1bdd8"
     }
   ]
 }

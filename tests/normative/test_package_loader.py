@@ -327,6 +327,30 @@ def test_rejects_invalid_amounts(session: Session, amount: str) -> None:
     assert _count(session, SalaryScale) == 0
 
 
+def test_rejects_verified_scale_with_null_amount(session: Session) -> None:
+    """B-38: una escala `verified` con importe nulo se rechaza (grilla bitmap)."""
+    catalog = minimal_catalog()
+    catalog["ccts"][0]["salary_scales"][0]["amount"] = None
+    catalog["ccts"][0]["salary_scales"][0]["status"] = "verified"
+
+    with pytest.raises(PackageValidationError, match="importe"):
+        load_cct_catalog(session, catalog)
+    assert _count(session, SalaryScale) == 0
+
+
+def test_unverified_scale_with_null_amount_is_skipped_not_rejected(
+    session: Session,
+) -> None:
+    """B-38: `unverified` sin importe se omite con warning, sin frenar el paquete."""
+    catalog = minimal_catalog()
+    catalog["ccts"][0]["salary_scales"][0]["amount"] = None
+    catalog["ccts"][0]["salary_scales"][0]["status"] = "unverified"
+
+    result = load_cct_catalog(session, catalog)
+    assert result.scales.created == 1
+    assert result.warnings != ()
+
+
 def test_rejects_invalid_checksum(session: Session) -> None:
     catalog = minimal_catalog()
     catalog["ccts"][0]["pdf_sha256"] = "not-a-sha256"

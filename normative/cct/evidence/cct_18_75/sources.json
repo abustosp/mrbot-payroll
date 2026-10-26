@@ -621,6 +621,36 @@
       "extraction": "html",
       "official": true,
       "notes": "Página institucional de publicación de las grillas salariales vigentes con visor PDF integrado."
+    },
+    {
+      "id": "src-bancarios-032",
+      "title": "Actas por categoría bancarios (copia HTML) [pendiente de curaduría]",
+      "document_type": "otro",
+      "authority": "Sin verificar (pendiente de curaduría)",
+      "source_url": "https://example.invalid/pendiente-de-curaduria",
+      "final_url": "https://example.invalid/pendiente-de-curaduria",
+      "local_path": "html/bancarios_categoria_actas.html",
+      "content_type": "text/html",
+      "retrieved_at": "2026-10-26T18:00:00-03:00",
+      "extraction": "manual",
+      "official": false,
+      "notes": "Archivo preexistente en el repositorio sin documento asociado. Se registra para trazabilidad total de bytes (B-39); no respalda ninguna escala. Pendiente: verificar emisor, vigencia y eventual extracción de escalas.",
+      "sha256": "a5d324e5bcc903f993fbf5f90578ed704d69984daf7f5b09ec2228e2bdae16d7"
+    },
+    {
+      "id": "src-bancarios-033",
+      "title": "Acuerdos por categoría bancarios (copia HTML) [pendiente de curaduría]",
+      "document_type": "otro",
+      "authority": "Sin verificar (pendiente de curaduría)",
+      "source_url": "https://example.invalid/pendiente-de-curaduria",
+      "final_url": "https://example.invalid/pendiente-de-curaduria",
+      "local_path": "html/bancarios_categoria_acuerdos.html",
+      "content_type": "text/html",
+      "retrieved_at": "2026-10-26T18:00:00-03:00",
+      "extraction": "manual",
+      "official": false,
+      "notes": "Archivo preexistente en el repositorio sin documento asociado. Se registra para trazabilidad total de bytes (B-39); no respalda ninguna escala. Pendiente: verificar emisor, vigencia y eventual extracción de escalas.",
+      "sha256": "6ed8b56d2caaa23454b8ac6d110b2c973f44d7d51d5462b6e0457a0ac722385a"
     }
   ]
 }

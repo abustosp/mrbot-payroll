@@ -1081,5 +1081,141 @@
         "expected": "0.00"
       }
     ]
+  },
+  {
+    "code": "STD_HORAS_EXTRA_50",
+    "description": "Horas extra al 50% (dias habiles, LCT Art. 201): valor hora = base conformada SUELDO_BASICO / 200 x 1.5 por cada hora de la novedad",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "operator": "divide",
+          "arguments": [
+            {
+              "concept": "SUELDO_BASICO"
+            },
+            {
+              "constant": "200"
+            }
+          ]
+        },
+        {
+          "constant": "1.5"
+        },
+        {
+          "variable": "horas_extra_50_cantidad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "horas_extra_50_cantidad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": null,
+    "valid_to": null,
+    "source": "ley: Ley 20744 (LCT), Art. 201 (recargo 50% dias habiles / 100% sabado desde 13h, domingo y feriados); diseno: 07_conceptos_formulas_unificado.csv filas 17-18 (base conformada, novedades horas_extra / horas_extra_100)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "horas_extra_50_cantidad": 10
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "75000.00"
+      },
+      {
+        "variables": {
+          "horas_extra_50_cantidad": 0
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "STD_HORAS_EXTRA_100",
+    "description": "Horas extra al 100% (sabado desde 13h, domingo y feriados, LCT Art. 201): valor hora = base conformada SUELDO_BASICO / 200 x 2 por cada hora",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "operator": "divide",
+          "arguments": [
+            {
+              "concept": "SUELDO_BASICO"
+            },
+            {
+              "constant": "200"
+            }
+          ]
+        },
+        {
+          "constant": "2"
+        },
+        {
+          "variable": "horas_extra_100_cantidad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "horas_extra_100_cantidad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": null,
+    "valid_to": null,
+    "source": "ley: Ley 20744 (LCT), Art. 201 (recargo 50% dias habiles / 100% sabado desde 13h, domingo y feriados); diseno: 07_conceptos_formulas_unificado.csv filas 17-18 (base conformada, novedades horas_extra / horas_extra_100)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "horas_extra_100_cantidad": 10
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "100000.00"
+      },
+      {
+        "variables": {
+          "horas_extra_100_cantidad": 0
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
   }
 ]

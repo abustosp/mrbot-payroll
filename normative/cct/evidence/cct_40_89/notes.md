@@ -130,3 +130,26 @@ form-feeds; `pdfimages` confirma 12 páginas JPEG 200 dpi). Sin correlato 2026 e
 referencia (gap): AUX_OPERATIVO_1, ITEM_COMIDA_4_1_12, ITEM_PERNOCTADA_4_1_14,
 PLUS_VACACIONAL_3_3_2, CONDUCTOR_BITRENES y las ramas de grúas/correo/recolección
 (fuera del modelo de 11 categorías del repo).
+
+## 2026-10-26 — Re-tecleo bache 2025-03..2026-08 (parcial)
+
+Planillas firmadas FEDCAM sin capa de texto, re-tecleadas visualmente a 200 dpi
+con doble cotejo (columna POR DIA ×24 y uniformidad del salto paritario entre
+rebanadas: ×1.15463 feb→sep-2025, ×1.10937 sep-2025→ene-2026, ×1.03020 ene→mar-2026):
+
+- `cct_40_89_2025_planilla_septiembre.pdf` (PLANILLA 8/25, desde 1-9-2025) →
+  `src-4089-022`, 10 escalas 2025-09-01..30.
+- `cct_40_89_2026_salarios_enero.pdf` (PLANILLA 1/26, desde 1-1-2026) →
+  `src-4089-023`, 10 escalas 2026-01-01..31.
+- `cct_40_89_2026_planilla_marzo.pdf` (PLANILLA 3/26, desde 1-3-2026) →
+  `src-4089-024`, 10 escalas 2026-03-01..31.
+
+Categorías: CHOFER_1/2/3 ← CONDUCTOR DE PRIMERA/SEGUNDA/TERCERA CATEGORIA;
+PEON_GENERAL ← PEONES ($733.169,71 / $813.365,81 / $837.929,46);
+PEON_ESPECIALIZADO ← OPERARIOS ESPECIALIZADOS ($740.234,40 / $821.203,25 /
+$846.003,59); CHOFER_BLINDADO ← CHOFER DE CAMION BLINDADO; AUX_OPERATIVO_1 ←
+AUXILIAR OPERATIVO DE PRIMERA; ITEM_COMIDA_4_1_12 ← ITEM 4.1.12;
+ITEM_PERNOCTADA_4_1_14 ← ITEM 4.1.14; PLUS_VACACIONAL_3_3_2 ← ITEM 3.3.2.
+CONDUCTOR_BITRENES no se mapea a la línea "ADICIONAL BITRENES" de estas
+planillas (su escala vigente proviene del Acuerdo del 28-5-2021): gap.
+Bache restante: 2025-03..2025-08, 2025-10..2025-12, 2026-02, 2026-04..2026-08.

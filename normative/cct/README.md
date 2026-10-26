@@ -25,19 +25,19 @@ En la República Argentina **no existe un ranking oficial único ni un registro 
 
 | Código CCT | Documentos | Escalas verificadas | Último período verificado | Vacíos u observaciones |
 |---|---:|---:|---|---|
-| 130/75 | 9 | 17 | 2026-09-01 a 2026-11-30 | No hay escalas verificadas de 2020–2023 ni para diciembre de 2026 en adelante. ([fuentes](<evidence/cct_130_75/sources.json>)) |
-| 260/75 | 10 | 23 | 2026-12-01 a 2026-12-31 | La evidencia verificada disponible corresponde a la rama 17; no consolida todas las ramas del convenio. ([fuentes](<evidence/cct_260_75/sources.json>)) |
-| 76/75 | 29 | 24 | 2026-11-01 a 2026-11-30 | La cobertura por zona es parcial; las vigencias de noviembre de 2026 son futuras al relevamiento del 26/10/2026. ([fuentes](<evidence/cct_76_75/sources.json>)) |
-| 18/75 | 31 | 17 | 2026-09-01 a 2026-11-06 | Las grillas completas son escaneos sin OCR; los importes verificados son un subconjunto publicado oficialmente. ([fuentes](<evidence/cct_18_75/sources.json>)) |
-| 40/89 | 21 | 34 | 2026-09-01 a 2027-02-28 | 6 categorías 2026-09 transcriptas de la referencia (confidence medium, cotejo OCR pendiente); resto de categorías sin correlato 2026. ([fuentes](<evidence/cct_40_89/sources.json>)) |
-| 389/04 | 19 | 22 | 2026-06-01 a 2026-09-30 | COCINERO/MOZO del primer tramo 2026 transcriptos de la referencia (confidence medium, cotejo pendiente); resto de roles y segundo tramo pendientes. ([fuentes](<evidence/cct_389_04/sources.json>)) |
-| 122/75 | 23 | 29 | 2026-10-01 a 2026-10-31 | Sin escalas verificadas de 2020–2023; varios anexos históricos escaneados requieren OCR. ([fuentes](<evidence/cct_122_75/sources.json>)) |
-| 264/95 | 11 | 22 | 2024-02-01 a 2024-02-29 | No hay escalas verificadas posteriores a febrero de 2024; la grilla 2026 requiere OCR. ([fuentes](<evidence/cct_264_95/sources.json>)) |
-| 244/94 | 21 | 23 | 2026-12-01 a 2026-12-31 | No hay escalas verificadas de 2020–2023; hay tramos programados posteriores a la fecha de búsqueda. ([fuentes](<evidence/cct_244_94/sources.json>)) |
+| 130/75 | 25 | 290 | 2026-09-01 a 2026-11-30 | Serie 2020–2023 incorporada desde la referencia (13 ventanas, confidence medium). Sin escalas para diciembre de 2026 en adelante. ([fuentes](<evidence/cct_130_75/sources.json>)) |
+| 260/75 | 15 | 51 | 2026-12-01 a 2026-12-31 | Solo rama 17 (D-5: carga total de ramas pendiente); serie 2020–2023 parcial (4 ventanas, 14 categorías/ventana sin contraparte). ([fuentes](<evidence/cct_260_75/sources.json>)) |
+| 76/75 | 44 | 89 | 2026-11-01 a 2026-11-30 | Serie 2020–2023 parcial (13 ventanas; ventana 2022-02/04 excluida por contradecir planilla homologada). Zona parcial; noviembre 2026 futuro al relevamiento. ([fuentes](<evidence/cct_76_75/sources.json>)) |
+| 18/75 | 33 | 17 | 2026-09-01 a 2026-11-06 | Las grillas completas son escaneos sin OCR; los importes verificados son un subconjunto publicado oficialmente. ([fuentes](<evidence/cct_18_75/sources.json>)) |
+| 40/89 | 31 | 64 | 2026-09-01 a 2027-02-28 | Re-tecleadas planillas firmadas Sep-2025, Ene-2026 y Mar-2026 (30 escalas). Bache restante: 2025-03..08, 2025-10..12, 2026-02, 2026-04..08. ([fuentes](<evidence/cct_40_89/sources.json>)) |
+| 389/04 | 21 | 22 | 2026-06-01 a 2026-09-30 | COCINERO/MOZO del primer tramo 2026 transcriptos de la referencia (confidence medium, cotejo pendiente); resto de roles y segundo tramo pendientes. ([fuentes](<evidence/cct_389_04/sources.json>)) |
+| 122/75 | 29 | 95 | 2026-10-01 a 2026-10-31 | Serie 2020–2023 parcial (6 ventanas; 4 categorías/ventana sin contraparte). Anexos históricos escaneados requieren OCR. ([fuentes](<evidence/cct_122_75/sources.json>)) |
+| 264/95 | 11 | 30 | 2026-10-01 a 2026-10-31 | Adicionales 2026 re-tecleados (8 escalas); básicos y falla 2026 sin cargar; sin escalas 2024-03..2026-04. ([fuentes](<evidence/cct_264_95/sources.json>)) |
+| 244/94 | 26 | 48 | 2026-12-01 a 2026-12-31 | Serie 2020–2022 (5 ventanas; 2023 ausente también en la referencia). 14 categorías/ventana sin contraparte. ([fuentes](<evidence/cct_244_94/sources.json>)) |
 | 507/07 | 17 | 32 | 2026-12-01 a 2026-12-31 | Las ocho escalas históricas de 2007 se conservan solo con historical: true. ([fuentes](<evidence/cct_507_07/sources.json>)) |
 | 589/10 | 2 | 48 | 2026-07-01 a 2026-09-30 | Alta B-19 desde la referencia (48 escalas 2020–2026, confidence medium, cotejo directo pendiente). ([fuentes](<evidence/cct_589_10/sources.json>)) |
 
-Los once expedientes reúnen **193 documentos** y **291 escalas verificadas**. El último período es el de mayor `vigencia_desde` entre las escalas verificadas de cada CCT; puede ser futuro y no representa una vigencia universal para todas las categorías.
+Los once expedientes reúnen **254 documentos** y **786 escalas verificadas**. El último período es el de mayor `vigencia_desde` entre las escalas verificadas de cada CCT; puede ser futuro y no representa una vigencia universal para todas las categorías.
 
 ## 4. Catálogo y limitaciones de cobertura
 

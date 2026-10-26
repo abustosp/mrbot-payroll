@@ -35,6 +35,9 @@ def _catalog_scale(scale: dict, source: dict) -> dict:
         "source_id": scale["source_id"],
         "verification_source": source["source_url"],
     }
+    if scale.get("additional"):
+        # B-02/B-37: suma no remunerativa desglosada (básico en `importe`).
+        item["adicional"] = scale["additional"]
     if scale["valid_from"] < "2020-01-01":
         item["historical"] = True
     return item
