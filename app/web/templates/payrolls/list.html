@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Liquidaciones{% endblock %}
+
+{% block breadcrumb %}<li class="current" aria-current="page">Liquidaciones</li>{% endblock %}
+
+{% block page_actions %}
+  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar el motor de liquidación">
+    {{ icon("plus") }} Nueva liquidación
+  </button>
+{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Historial de liquidaciones</h2>
+        <p class="card-subtitle">Consulte el estado del circuito y los importes consolidados.</p>
+      </div>
+      <span class="badge badge--outline">{{ payrolls | length }} resultados</span>
+    </div>
+
+    <form class="filters-bar"
+          method="get"
+          action="{{ url_for('payrolls_list') }}"
+          hx-get="{{ url_for('payrolls_list') }}"
+          hx-target="#payrolls-results"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="submit, change">
+      <div class="field">
+        <label for="payrolls-status">Estado</label>
+        <select class="select" id="payrolls-status" name="status">
+          {% for value, label in status_options %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field field--grow">
+        <label for="payrolls-company">Empresa</label>
+        <select class="select" id="payrolls-company" name="company_id">
+          <option value="">Todas las empresas</option>
+          {% for company in companies %}
+            <option value="{{ company.id }}" {% if company_id == company.id %}selected{% endif %}>{{ company.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn--outline" type="submit">{{ icon("search") }} Filtrar</button>
+        <a class="btn btn--ghost" href="{{ url_for('payrolls_list') }}">Limpiar</a>
+      </div>
+    </form>
+
+    {% include "payrolls/_table.html" %}
+  </section>
+{% endblock %}

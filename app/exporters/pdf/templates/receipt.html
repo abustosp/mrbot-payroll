@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recibo de sueldo {{ receipt.receipt_number }}</title>
+  <style>
+    {% include "receipt.css" %}
+  </style>
+</head>
+<body>
+  <main class="receipt-sheet">
+    <header class="receipt-header">
+      <div class="employer-block">
+        <h1 class="employer-name">{{ receipt.employer.name }}</h1>
+        {% if receipt.employer.cuit %}<p class="employer-line">CUIT: {{ receipt.employer.cuit }}</p>{% endif %}
+        {% if receipt.employer.address %}<p class="employer-line">{{ receipt.employer.address }}</p>{% endif %}
+        {% if receipt.employer.activity %}<p class="employer-line">Actividad: {{ receipt.employer.activity }}</p>{% endif %}
+        {% if receipt.employer.establishment %}<p class="employer-line">Establecimiento: {{ receipt.employer.establishment }}</p>{% endif %}
+      </div>
+      <div class="receipt-meta">
+        <p class="receipt-kicker">Documento laboral</p>
+        <h2 class="receipt-title">Recibo de Sueldo</h2>
+        <div class="receipt-number">N.º {{ receipt.receipt_number }}</div>
+        <div class="receipt-original">ORIGINAL</div>
+      </div>
+    </header>
+
+    <section>
+      <h3 class="section-title">Datos del trabajador y del periodo</h3>
+      <div class="data-grid">
+        <div class="data-row">
+          <span class="data-label">Trabajador</span>
+          <span class="data-value">{{ receipt.employee.name }}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">CUIL</span>
+          <span class="data-value">{{ receipt.employee.cuil or "—" }}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Legajo</span>
+          <span class="data-value">{{ receipt.employee.file_number or "—" }}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Categoría</span>
+          <span class="data-value">{{ receipt.employee.category or "—" }}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Convenio</span>
+          <span class="data-value">{{ receipt.employee.agreement or "—" }}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Ingreso</span>
+          <span class="data-value">{{ receipt.employee.hire_date or "—" }}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Período</span>
+          <span class="data-value">{{ receipt.period }}{% if receipt.period_start %} · {{ receipt.period_start }}{% if receipt.period_end %} al {{ receipt.period_end }}{% endif %}{% endif %}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Emisión</span>
+          <span class="data-value">{{ receipt.issue_date or "—" }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3 class="section-title">Haberes</h3>
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width: 16mm;">Código</th>
+            <th>Concepto</th>
+            <th class="num" style="width: 17mm;">Cantidad</th>
+            <th style="width: 15mm;">Unidad</th>
+            <th class="num" style="width: 28mm;">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in receipt.groups %}
+            <tr class="group-head">
+              <td colspan="5">{{ group.label }}</td>
+            </tr>
+            {% if group["items"] %}
+              {% for item in group["items"] %}
+                <tr>
+                  <td class="code">{{ item.code or "—" }}</td>
+                  <td>{{ item.name }}</td>
+                  <td class="num qty">{{ item.quantity | quantity or "—" }}</td>
+                  <td>{{ item.unit or "—" }}</td>
+                  <td class="num">{{ item.amount | money }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="5" class="empty-items">Sin conceptos en este grupo.</td>
+              </tr>
+            {% endif %}
+            <tr class="subtotal">
+              <td colspan="4">Subtotal {{ group.label | lower }}</td>
+              <td class="num">{{ group.subtotal | money }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <div class="two-columns">
+      <section>
+        <h3 class="section-title">Descuentos</h3>
+        <table class="items">
+          <thead>
+            <tr>
+              <th>Concepto</th>
+              <th class="num" style="width: 29mm;">Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if receipt.deductions %}
+              {% for item in receipt.deductions %}
+                <tr>
+                  <td>
+                    {{ item.name }}
+                    {% if item.code %}<span class="code">· {{ item.code }}</span>{% endif %}
+                  </td>
+                  <td class="num">{{ item.amount | money }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="2" class="empty-items">Sin descuentos registrados.</td>
+              </tr>
+            {% endif %}
+            <tr class="subtotal">
+              <td>Total descuentos</td>
+              <td class="num">{{ receipt.deductions_total | money }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h3 class="section-title">Contribuciones del empleador</h3>
+        <table class="items">
+          <thead>
+            <tr>
+              <th>Concepto</th>
+              <th class="num" style="width: 29mm;">Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if receipt.contributions %}
+              {% for item in receipt.contributions %}
+                <tr>
+                  <td>
+                    {{ item.name }}
+                    {% if item.code %}<span class="code">· {{ item.code }}</span>{% endif %}
+                  </td>
+                  <td class="num">{{ item.amount | money }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="2" class="empty-items">Sin contribuciones informadas.</td>
+              </tr>
+            {% endif %}
+            <tr class="subtotal">
+              <td>Total contribuciones</td>
+              <td class="num">{{ receipt.contributions_total | money }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <div class="summary">
+      <div class="summary-box">
+        <div class="summary-row">
+          <span>Total haberes remunerativos</span>
+          <strong>{{ receipt.remunerative_total | money }}</strong>
+        </div>
+        <div class="summary-row">
+          <span>Total haberes no remunerativos</span>
+          <strong>{{ receipt.non_remunerative_total | money }}</strong>
+        </div>
+        <div class="summary-row">
+          <span>Total bruto</span>
+          <strong>{{ receipt.gross_total | money }}</strong>
+        </div>
+        <div class="summary-row">
+          <span>Total descuentos</span>
+          <strong>{{ receipt.deductions_total | money }}</strong>
+        </div>
+        <div class="summary-row net">
+          <span>Neto a cobrar</span>
+          <strong>{{ receipt.net | money }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="note-box">
+      <strong>Contribuciones y aportes:</strong> {{ receipt.employer_note }}
+    </div>
+
+    <p class="legend">{{ receipt.legend }}</p>
+
+    <div class="signatures">
+      <div class="signature-line">
+        <strong>Firma del trabajador</strong>
+        Aclaración y DNI
+      </div>
+      <div class="signature-line">
+        <strong>Firma del empleador</strong>
+        Aclaración y CUIT
+      </div>
+    </div>
+
+    <footer class="receipt-footer">
+      <span>{{ receipt.employer.name }} · Recibo {{ receipt.receipt_number }}</span>
+      <span>Período {{ receipt.period }}</span>
+    </footer>
+  </main>
+</body>
+</html>

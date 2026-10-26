@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}{{ company.name }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('companies_list') }}">Empresas</a></li>
+  <li class="current" aria-current="page">{{ company.name }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('companies_list') }}">{{ icon("arrow-left") }} Volver</a>
+  <a class="btn btn--primary" href="{{ url_for('employees_list') }}?company_id={{ company.id }}">{{ icon("employees") }} Ver empleados</a>
+{% endblock %}
+
+{% block content %}
+  <div class="detail-grid">
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Datos del empleador</h2>
+            <p class="card-subtitle">Información registral de demostración.</p>
+          </div>
+          <span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span>
+        </div>
+        <div class="card-body">
+          <dl class="grid-2" style="gap: 18px 28px;">
+            <div class="detail-item">
+              <dt>Razón social</dt>
+              <dd class="strong">{{ company.name }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>CUIT</dt>
+              <dd class="mono">{{ company.cuit }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Actividad</dt>
+              <dd>{{ company.activity }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Convenio aplicable</dt>
+              <dd><span class="badge badge--outline">{{ company.agreement }}</span></dd>
+            </div>
+            <div class="detail-item">
+              <dt>Ciudad</dt>
+              <dd>{{ company.city }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Provincia</dt>
+              <dd>{{ company.province }}</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Empleados</h2>
+            <p class="card-subtitle">Dotación registrada para esta empresa.</p>
+          </div>
+          <span class="badge badge--outline">{{ employees | length }} legajos</span>
+        </div>
+        <div class="card-body card-body--flush">
+          {% if employees %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Empleado</th>
+                    <th>Categoría</th>
+                    <th>Ingreso</th>
+                    <th class="num">Remuneración</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for employee in employees %}
+                    <tr>
+                      <td>
+                        <div class="entity-cell">
+                          <span class="avatar avatar--accent">{{ employee.name | initials }}</span>
+                          <div class="entity-text">
+                            <a class="entity-name" href="{{ url_for('employee_detail', employee_id=employee.id) }}">{{ employee.name }}</a>
+                            <span class="entity-meta">Legajo {{ employee.file_number }} · {{ employee.cuil }}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{{ employee.category }}</td>
+                      <td>{{ employee.hire_date | date_ar }}</td>
+                      <td class="num">{{ employee.salary | money }}</td>
+                      <td><span class="badge badge--{{ employee.status | status_class }}">{{ employee.status | status_label("employee") }}</span></td>
+                      <td class="text-end"><a class="btn btn--ghost btn--sm" href="{{ url_for('employee_detail', employee_id=employee.id) }}">Ficha</a></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin empleados", empty_message="La empresa todavía no tiene legajos asociados.", empty_icon="employees" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Resumen operativo</h2>
+            <p class="card-subtitle">Volumen registrado en el entorno demo.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-3" style="gap: 12px;">
+            <div>
+              <div class="stat-label">Empleados</div>
+              <p class="stat-value" style="font-size: 22px;">{{ employees | length }}</p>
+            </div>
+            <div>
+              <div class="stat-label">Liquidaciones</div>
+              <p class="stat-value" style="font-size: 22px;">{{ payrolls | length }}</p>
+            </div>
+            <div>
+              <div class="stat-label">Recibos</div>
+              <p class="stat-value" style="font-size: 22px;">{{ receipts | length }}</p>
+            </div>
+          </div>
+          <div class="summary-list" style="margin-top: 18px;">
+            <div class="summary-row">
+              <span class="summary-label">Convenio</span>
+              <span class="summary-value">{{ company.agreement }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Provincia</span>
+              <span class="summary-value">{{ company.province }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">ID interno</span>
+              <span class="summary-value mono">{{ company.id }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Liquidaciones</h2>
+            <p class="card-subtitle">Períodos procesados.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if payrolls %}
+            <ul class="list-plain">
+              {% for payroll in payrolls %}
+                <li class="list-row">
+                  <div class="list-row-main">
+                    <a href="{{ url_for('payroll_detail', payroll_id=payroll.id) }}"><strong>{{ payroll.period_label }}</strong></a>
+                    <small>{{ payroll.type }} · {{ payroll.employee_count }} empleados</small>
+                  </div>
+                  <div class="list-row-side">
+                    <strong>{{ payroll.net | money }}</strong>
+                    <span class="badge badge--{{ payroll.status | status_class }}">{{ payroll.status | status_label("payroll") }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted" style="margin: 0;">Sin liquidaciones registradas.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Recibos</h2>
+            <p class="card-subtitle">Últimos documentos emitidos.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if receipts %}
+            <ul class="list-plain">
+              {% for receipt in receipts %}
+                <li class="list-row">
+                  <div class="list-row-main">
+                    <a href="{{ url_for('receipt_detail', receipt_id=receipt.id) }}"><strong>{{ receipt.number }}</strong></a>
+                    <small>{{ receipt.employee.get("name", "") }} · {{ receipt.period_label }}</small>
+                  </div>
+                  <div class="list-row-side">
+                    <strong>{{ receipt.net | money }}</strong>
+                    <span class="badge badge--{{ receipt.status | status_class }}">{{ receipt.status | status_label("receipt") }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted" style="margin: 0;">Sin recibos emitidos.</p>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

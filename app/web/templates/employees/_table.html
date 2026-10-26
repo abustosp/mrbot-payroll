@@ -1,0 +1,53 @@
+<div id="employees-results">
+  <div class="filter-summary">
+    <span><strong>{{ employees | length }}</strong> legajos encontrados{% if query %} para “{{ query }}”{% endif %}</span>
+    <span class="muted">Remuneraciones de referencia del entorno demo.</span>
+  </div>
+
+  {% if employees %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Empleado</th>
+            <th>Empresa</th>
+            <th>Categoría</th>
+            <th>Convenio</th>
+            <th>Ingreso</th>
+            <th class="num">Remuneración</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for employee in employees %}
+            <tr>
+              <td>
+                <div class="entity-cell">
+                  <span class="avatar avatar--accent">{{ employee.name | initials }}</span>
+                  <div class="entity-text">
+                    <a class="entity-name" href="{{ url_for('employee_detail', employee_id=employee.id) }}">{{ employee.name }}</a>
+                    <span class="entity-meta">Legajo {{ employee.file_number }} · CUIL {{ employee.cuil }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <a class="entity-name" style="font-size: 12.5px;" href="{{ url_for('company_detail', company_id=employee.company_id) }}">{{ employee.company_name }}</a>
+              </td>
+              <td>{{ employee.category }}</td>
+              <td><span class="badge badge--outline">{{ employee.agreement }}</span></td>
+              <td class="nowrap">{{ employee.hire_date | date_ar }}</td>
+              <td class="num">{{ employee.salary | money }}</td>
+              <td><span class="badge badge--{{ employee.status | status_class }}">{{ employee.status | status_label("employee") }}</span></td>
+              <td class="text-end"><a class="btn btn--ghost btn--sm" href="{{ url_for('employee_detail', employee_id=employee.id) }}">Ficha</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {% with empty_title="Sin empleados", empty_message="No se encontraron legajos con los filtros seleccionados.", empty_icon="employees", empty_action_url=url_for('employees_list'), empty_action_label="Limpiar filtros" %}
+      {% include "partials/_empty_state.html" %}
+    {% endwith %}
+  {% endif %}
+</div>

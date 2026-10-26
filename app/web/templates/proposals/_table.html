@@ -1,0 +1,59 @@
+{% from "partials/icons.html" import icon %}
+<div id="proposals-results">
+  <div class="filter-summary">
+    <span><strong>{{ proposals | length }}</strong> propuestas encontradas</span>
+    <span class="muted">Toda aprobación requiere revisión profesional.</span>
+  </div>
+
+  {% if proposals %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Propuesta</th>
+            <th>Convenio</th>
+            <th>Fuente</th>
+            <th class="num">Confianza</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for proposal in proposals %}
+            <tr>
+              <td>
+                <div class="entity-cell">
+                  <span class="avatar avatar--warm">{{ icon("spark") }}</span>
+                  <div class="entity-text">
+                    <a class="entity-name" href="{{ url_for('proposal_detail', proposal_id=proposal.id) }}">{{ proposal.title }}</a>
+                    <span class="entity-meta">{{ proposal.document }}</span>
+                  </div>
+                </div>
+              </td>
+              <td><span class="badge badge--outline">{{ proposal.agreement }}</span></td>
+              <td>{{ proposal.source_page }}</td>
+              <td class="num">
+                <div class="confidence" style="justify-content: flex-end;">
+                  <strong style="font-size: 14px;">{{ proposal.confidence | percent }}</strong>
+                </div>
+                <div class="progress" style="margin-top: 4px; width: 74px; margin-left: auto;" role="progressbar" aria-label="Confianza" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ proposal.confidence }}">
+                  <span style="width: {{ proposal.confidence | progress_width }};"></span>
+                </div>
+              </td>
+              <td class="nowrap">{{ proposal.created_at | date_ar }}</td>
+              <td><span class="badge badge--{{ proposal.status | status_class }}">{{ proposal.status | status_label("proposal") }}</span></td>
+              <td class="text-end">
+                <a class="btn btn--ghost btn--sm" href="{{ url_for('proposal_detail', proposal_id=proposal.id) }}">Revisar</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {% with empty_title="Sin propuestas", empty_message="No hay propuestas de IA que coincidan con el estado seleccionado.", empty_icon="proposals", empty_action_url=url_for('proposals_list'), empty_action_label="Ver todas" %}
+      {% include "partials/_empty_state.html" %}
+    {% endwith %}
+  {% endif %}
+</div>

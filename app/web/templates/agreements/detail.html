@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}{{ agreement.code }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('agreements_list') }}">Convenios</a></li>
+  <li class="current" aria-current="page">{{ agreement.code }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('agreements_list') }}">{{ icon("arrow-left") }} Volver</a>
+  <a class="btn btn--primary" href="{{ url_for('proposals_list') }}">{{ icon("proposals") }} Propuestas IA</a>
+{% endblock %}
+
+{% block content %}
+  <div class="detail-grid">
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">{{ agreement.name }}</h2>
+            <p class="card-subtitle">{{ agreement.scope }}</p>
+          </div>
+          <span class="badge badge--{{ agreement.status | status_class }}">{{ agreement.status | status_label("agreement") }}</span>
+        </div>
+        <div class="card-body">
+          <p class="muted" style="margin-bottom: 18px;">{{ agreement.summary }}</p>
+          <dl class="grid-2" style="gap: 18px 28px;">
+            <div class="detail-item">
+              <dt>Código</dt>
+              <dd class="strong">{{ agreement.code }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Vigencia desde</dt>
+              <dd>{{ agreement.valid_from | date_ar }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Ámbito</dt>
+              <dd>{{ agreement.scope }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Estado</dt>
+              <dd><span class="badge badge--{{ agreement.status | status_class }}">{{ agreement.status | status_label("agreement") }}</span></dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Categorías profesionales</h2>
+            <p class="card-subtitle">Categorías alcanzadas por el convenio.</p>
+          </div>
+          <span class="badge badge--outline">{{ agreement.categories | length }}</span>
+        </div>
+        <div class="card-body">
+          <ul class="chip-list">
+            {% for category in agreement.categories %}
+              <li class="chip">{{ category }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Propuestas de IA asociadas</h2>
+            <p class="card-subtitle">Reglas sugeridas para este convenio.</p>
+          </div>
+          <a class="btn btn--ghost btn--sm" href="{{ url_for('proposals_list') }}">Ver todas</a>
+        </div>
+        <div class="card-body card-body--flush">
+          {% if proposals %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Propuesta</th>
+                    <th>Fuente</th>
+                    <th class="num">Confianza</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for proposal in proposals %}
+                    <tr>
+                      <td class="strong">{{ proposal.title }}</td>
+                      <td>{{ proposal.document }}</td>
+                      <td class="num">{{ proposal.confidence | percent }}</td>
+                      <td><span class="badge badge--{{ proposal.status | status_class }}">{{ proposal.status | status_label("proposal") }}</span></td>
+                      <td class="text-end">
+                        <a class="btn btn--ghost btn--sm" href="{{ url_for('proposal_detail', proposal_id=proposal.id) }}">Revisar</a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin propuestas", empty_message="No hay propuestas de IA asociadas a este convenio.", empty_icon="proposals" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Repositorio normativo</h2>
+            <p class="card-subtitle">Volumen de reglas y fuentes.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-2" style="gap: 12px;">
+            <div>
+              <div class="stat-label">Fórmulas</div>
+              <p class="stat-value" style="font-size: 24px;">{{ agreement.formula_count }}</p>
+            </div>
+            <div>
+              <div class="stat-label">Documentos</div>
+              <p class="stat-value" style="font-size: 24px;">{{ agreement.document_count }}</p>
+            </div>
+          </div>
+          <div class="summary-list" style="margin-top: 18px;">
+            <div class="summary-row">
+              <span class="summary-label">Categorías</span>
+              <span class="summary-value">{{ agreement.categories | length }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Propuestas asociadas</span>
+              <span class="summary-value">{{ proposals | length }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Vigencia</span>
+              <span class="summary-value">{{ agreement.valid_from | date_ar }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">ID interno</span>
+              <span class="summary-value mono">{{ agreement.id }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <div class="callout callout--warning">
+            <strong>Revisión profesional:</strong> las propuestas de IA no modifican reglas de producción por sí solas. Toda publicación requiere validación humana y trazabilidad de la fuente normativa.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

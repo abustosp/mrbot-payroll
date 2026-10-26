@@ -1,0 +1,9 @@
+{% from "partials/icons.html" import icon %}
+<div class="empty-state">
+  <div class="empty-icon">{{ icon(empty_icon|default("search")) }}</div>
+  <h2>{{ empty_title|default("Sin resultados") }}</h2>
+  <p>{{ empty_message|default("No hay registros que coincidan con los filtros aplicados.") }}</p>
+  {% if empty_action_url %}
+    <a class="btn btn--primary" href="{{ empty_action_url }}">{{ empty_action_label|default("Ver todos") }}</a>
+  {% endif %}
+</div>

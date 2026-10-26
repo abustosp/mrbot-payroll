@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Recibos{% endblock %}
+
+{% block breadcrumb %}<li class="current" aria-current="page">Recibos</li>{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--primary" href="{{ url_for('receipts_zip') }}?company_id={{ company_id | urlencode }}&period={{ period | urlencode }}">
+    {{ icon("download") }} Descargar lote ZIP
+  </a>
+{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Recibos de sueldo</h2>
+        <p class="card-subtitle">Consulte, previsualice y descargue documentos en PDF.</p>
+      </div>
+      <span class="badge badge--outline">{{ receipts | length }} resultados</span>
+    </div>
+
+    <form class="filters-bar"
+          method="get"
+          action="{{ url_for('receipts_list') }}"
+          hx-get="{{ url_for('receipts_list') }}"
+          hx-target="#receipts-results"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="submit, change, keyup changed delay:350ms from:input[type='search']">
+      <div class="field field--grow">
+        <label for="receipts-q">Buscar recibo</label>
+        <div class="search-control">
+          {{ icon("search") }}
+          <input class="input" id="receipts-q" type="search" name="q" value="{{ query }}" placeholder="Número de recibo o empleado" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="receipts-company">Empresa</label>
+        <select class="select" id="receipts-company" name="company_id">
+          <option value="">Todas las empresas</option>
+          {% for company in companies %}
+            <option value="{{ company.id }}" {% if company_id == company.id %}selected{% endif %}>{{ company.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="receipts-period">Período</label>
+        <select class="select" id="receipts-period" name="period">
+          <option value="">Todos los períodos</option>
+          {% for value, label in periods %}
+            <option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="receipts-status">Estado</label>
+        <select class="select" id="receipts-status" name="status">
+          {% for value, label in status_options %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn--outline" type="submit">{{ icon("search") }} Filtrar</button>
+        <a class="btn btn--ghost" href="{{ url_for('receipts_list') }}">Limpiar</a>
+      </div>
+    </form>
+
+    {% include "receipts/_table.html" %}
+  </section>
+{% endblock %}

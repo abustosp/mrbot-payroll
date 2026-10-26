@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}{{ proposal.title }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('proposals_list') }}">Propuestas IA</a></li>
+  <li class="current" aria-current="page">{{ proposal.title }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('proposals_list') }}">{{ icon("arrow-left") }} Volver</a>
+  <a class="btn btn--primary" href="{{ url_for('agreements_list') }}">{{ icon("agreements") }} Ver convenios</a>
+{% endblock %}
+
+{% block content %}
+  {% if updated %}
+    <div class="alert alert--success">
+      {{ icon("check") }}
+      <div>El estado de la propuesta se actualizó correctamente.</div>
+    </div>
+  {% endif %}
+
+  <div class="detail-grid">
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Resumen de la propuesta</h2>
+            <p class="card-subtitle">{{ proposal.agreement }} · {{ proposal.document }}</p>
+          </div>
+          <span class="badge badge--{{ proposal.status | status_class }}">{{ proposal.status | status_label("proposal") }}</span>
+        </div>
+        <div class="card-body">
+          <p class="muted" style="margin-bottom: 0; font-size: 13px;">{{ proposal.summary }}</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Reglas propuestas</h2>
+            <p class="card-subtitle">Borrador generado por IA, sujeto a validación.</p>
+          </div>
+          <span class="badge badge--violet">{{ proposal.rules | length }} reglas</span>
+        </div>
+        <div class="card-body">
+          {% if proposal.rules %}
+            <ol class="rule-list">
+              {% for rule in proposal.rules %}
+                <li class="rule-item">
+                  <span class="rule-index">{{ loop.index }}</span>
+                  <span>{{ rule }}</span>
+                </li>
+              {% endfor %}
+            </ol>
+          {% else %}
+            <p class="muted" style="margin: 0;">La propuesta no contiene reglas detalladas.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Advertencias y fuente</h2>
+            <p class="card-subtitle">Controles previos a la aprobación.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if proposal.warnings %}
+            <div class="alert alert--warning" style="margin-bottom: 14px;">
+              {{ icon("alert") }}
+              <div>
+                <strong>Requiere atención:</strong>
+                <ul style="margin: 6px 0 0; padding-left: 18px;">
+                  {% for warning in proposal.warnings %}
+                    <li>{{ warning }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          {% else %}
+            <div class="alert alert--success" style="margin-bottom: 14px;">
+              {{ icon("check") }}
+              <div>No se detectaron advertencias automáticas para esta propuesta.</div>
+            </div>
+          {% endif %}
+
+          <div class="callout">
+            <strong>Fuente normativa:</strong> {{ proposal.document }} · {{ proposal.source_page }}. La aprobación de la regla debe conservar esta referencia para auditoría.
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Revisión</h2>
+            <p class="card-subtitle">Acciones sobre el estado de la propuesta.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          {% include "proposals/_status.html" %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <div class="callout callout--warning">
+            <strong>Control humano:</strong> la aprobación desde esta pantalla solo cambia el estado en el entorno demo. La publicación de reglas reales debe ejecutarse en el servicio de IA con permisos y auditoría.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

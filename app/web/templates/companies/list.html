@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Empresas{% endblock %}
+
+{% block breadcrumb %}<li class="current" aria-current="page">Empresas</li>{% endblock %}
+
+{% block page_actions %}
+  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar los servicios de alta de empresas">
+    {{ icon("plus") }} Nueva empresa
+  </button>
+{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Cartera de empresas</h2>
+        <p class="card-subtitle">Consulte empleadores, convenios y dotación.</p>
+      </div>
+      <span class="badge badge--outline">{{ companies | length }} resultados</span>
+    </div>
+
+    <form class="filters-bar"
+          method="get"
+          action="{{ url_for('companies_list') }}"
+          hx-get="{{ url_for('companies_list') }}"
+          hx-target="#companies-results"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="submit, change, keyup changed delay:350ms from:input[type='search']">
+      <div class="field field--grow">
+        <label for="companies-q">Buscar empresa</label>
+        <div class="search-control">
+          {{ icon("search") }}
+          <input class="input" id="companies-q" type="search" name="q" value="{{ query }}" placeholder="Razón social, CUIT, ciudad o actividad" autocomplete="off">
+        </div>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn--outline" type="submit">{{ icon("search") }} Filtrar</button>
+        <a class="btn btn--ghost" href="{{ url_for('companies_list') }}">Limpiar</a>
+      </div>
+    </form>
+
+    {% include "companies/_table.html" %}
+  </section>
+{% endblock %}

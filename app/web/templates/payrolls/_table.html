@@ -1,0 +1,50 @@
+<div id="payrolls-results">
+  <div class="filter-summary">
+    <span><strong>{{ payrolls | length }}</strong> liquidaciones{% if status %} en estado seleccionado{% endif %}</span>
+    <span>Neto consolidado: <strong>{{ payrolls | sum(attribute="net") | money }}</strong></span>
+  </div>
+
+  {% if payrolls %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Período</th>
+            <th>Empresa</th>
+            <th>Tipo</th>
+            <th class="num">Empleados</th>
+            <th class="num">Bruto</th>
+            <th class="num">Descuentos</th>
+            <th class="num">Neto</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for payroll in payrolls %}
+            <tr>
+              <td class="strong nowrap">{{ payroll.period_label }}</td>
+              <td>
+                <a class="entity-name" style="font-size: 12.5px;" href="{{ url_for('company_detail', company_id=payroll.company_id) }}">{{ payroll.company_name }}</a>
+                <div class="entity-meta">{{ payroll.created_at | date_ar }}</div>
+              </td>
+              <td>{{ payroll.type }}</td>
+              <td class="num">{{ payroll.employee_count }}</td>
+              <td class="num">{{ payroll.gross | money }}</td>
+              <td class="num">{{ payroll.deductions | money }}</td>
+              <td class="num strong">{{ payroll.net | money }}</td>
+              <td><span class="badge badge--{{ payroll.status | status_class }}">{{ payroll.status | status_label("payroll") }}</span></td>
+              <td class="text-end">
+                <a class="btn btn--ghost btn--sm" href="{{ url_for('payroll_detail', payroll_id=payroll.id) }}">Ver</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {% with empty_title="Sin liquidaciones", empty_message="No hay liquidaciones que coincidan con los filtros seleccionados.", empty_icon="payrolls", empty_action_url=url_for('payrolls_list'), empty_action_label="Limpiar filtros" %}
+      {% include "partials/_empty_state.html" %}
+    {% endwith %}
+  {% endif %}
+</div>

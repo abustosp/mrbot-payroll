@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Propuestas de IA{% endblock %}
+
+{% block breadcrumb %}<li class="current" aria-current="page">Propuestas IA</li>{% endblock %}
+
+{% block page_actions %}
+  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar el analizador de convenios">
+    {{ icon("spark") }} Analizar convenio
+  </button>
+{% endblock %}
+
+{% block content %}
+  <div class="alert alert--info">
+    {{ icon("shield") }}
+    <div><strong>IA supervisada.</strong> Las propuestas no modifican reglas de producción hasta que un usuario autorizado las revise y apruebe.</div>
+  </div>
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Bandeja de revisión</h2>
+        <p class="card-subtitle">Reglas sugeridas por el analizador de convenios.</p>
+      </div>
+      <span class="badge badge--outline">{{ proposals | length }} resultados</span>
+    </div>
+
+    <form class="filters-bar"
+          method="get"
+          action="{{ url_for('proposals_list') }}"
+          hx-get="{{ url_for('proposals_list') }}"
+          hx-target="#proposals-results"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="submit, change">
+      <div class="field field--grow">
+        <label for="proposals-status">Estado</label>
+        <select class="select" id="proposals-status" name="status">
+          {% for value, label in status_options %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn--outline" type="submit">{{ icon("search") }} Filtrar</button>
+        <a class="btn btn--ghost" href="{{ url_for('proposals_list') }}">Limpiar</a>
+      </div>
+    </form>
+
+    {% include "proposals/_table.html" %}
+  </section>
+{% endblock %}

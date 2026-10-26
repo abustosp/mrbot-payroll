@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Empleados{% endblock %}
+
+{% block breadcrumb %}<li class="current" aria-current="page">Empleados</li>{% endblock %}
+
+{% block page_actions %}
+  <button class="btn btn--primary" type="button" disabled title="Se habilitará al conectar los servicios de alta de legajos">
+    {{ icon("plus") }} Nuevo empleado
+  </button>
+{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Legajos</h2>
+        <p class="card-subtitle">Dotación, categorías y convenios asignados.</p>
+      </div>
+      <span class="badge badge--outline">{{ employees | length }} resultados</span>
+    </div>
+
+    <form class="filters-bar"
+          method="get"
+          action="{{ url_for('employees_list') }}"
+          hx-get="{{ url_for('employees_list') }}"
+          hx-target="#employees-results"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="submit, change, keyup changed delay:350ms from:input[type='search']">
+      <div class="field field--grow">
+        <label for="employees-q">Buscar empleado</label>
+        <div class="search-control">
+          {{ icon("search") }}
+          <input class="input" id="employees-q" type="search" name="q" value="{{ query }}" placeholder="Nombre, CUIL, legajo o categoría" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="employees-company">Empresa</label>
+        <select class="select" id="employees-company" name="company_id">
+          <option value="">Todas las empresas</option>
+          {% for company in companies %}
+            <option value="{{ company.id }}" {% if company_id == company.id %}selected{% endif %}>{{ company.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="employees-status">Estado</label>
+        <select class="select" id="employees-status" name="status">
+          {% for value, label in status_options %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn--outline" type="submit">{{ icon("search") }} Filtrar</button>
+        <a class="btn btn--ghost" href="{{ url_for('employees_list') }}">Limpiar</a>
+      </div>
+    </form>
+
+    {% include "employees/_table.html" %}
+  </section>
+{% endblock %}

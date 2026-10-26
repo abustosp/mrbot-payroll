@@ -1,0 +1,53 @@
+<div id="companies-results">
+  <div class="filter-summary">
+    <span><strong>{{ companies | length }}</strong> empresas encontradas{% if query %} para “{{ query }}”{% endif %}</span>
+    <span class="muted">Los datos son de demostración.</span>
+  </div>
+
+  {% if companies %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Empresa</th>
+            <th>CUIT</th>
+            <th>Ubicación</th>
+            <th>Actividad</th>
+            <th>Convenio</th>
+            <th class="num">Empleados</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for company in companies %}
+            <tr>
+              <td>
+                <div class="entity-cell">
+                  <span class="avatar">{{ company.name | initials }}</span>
+                  <div class="entity-text">
+                    <a class="entity-name" href="{{ url_for('company_detail', company_id=company.id) }}">{{ company.name }}</a>
+                    <span class="entity-meta">ID {{ company.id }}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="mono">{{ company.cuit }}</td>
+              <td>{{ company.city }}, {{ company.province }}</td>
+              <td>{{ company.activity }}</td>
+              <td><span class="badge badge--outline">{{ company.agreement }}</span></td>
+              <td class="num">{{ company.employee_count }}</td>
+              <td><span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span></td>
+              <td class="text-end">
+                <a class="btn btn--ghost btn--sm" href="{{ url_for('company_detail', company_id=company.id) }}">Ver ficha</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {% with empty_title="Sin empresas", empty_message="No hay empresas que coincidan con el criterio de búsqueda.", empty_icon="companies", empty_action_url=url_for('companies_list'), empty_action_label="Limpiar búsqueda" %}
+      {% include "partials/_empty_state.html" %}
+    {% endwith %}
+  {% endif %}
+</div>

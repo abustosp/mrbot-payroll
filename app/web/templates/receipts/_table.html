@@ -1,0 +1,57 @@
+{% from "partials/icons.html" import icon %}
+<div id="receipts-results">
+  <div class="filter-summary">
+    <span><strong>{{ receipts | length }}</strong> recibos encontrados{% if query %} para “{{ query }}”{% endif %}</span>
+    <span>Neto consolidado: <strong>{{ receipts | sum(attribute="net") | money }}</strong></span>
+  </div>
+
+  {% if receipts %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Recibo</th>
+            <th>Empleado</th>
+            <th>Empresa</th>
+            <th>Período</th>
+            <th>Emisión</th>
+            <th class="num">Neto</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for receipt in receipts %}
+            <tr>
+              <td class="strong mono">{{ receipt.number }}</td>
+              <td>
+                <div class="entity-cell">
+                  <span class="avatar avatar--accent">{{ receipt.employee.get("name", "") | initials }}</span>
+                  <div class="entity-text">
+                    <a class="entity-name" href="{{ url_for('receipt_detail', receipt_id=receipt.id) }}">{{ receipt.employee.get("name", "") }}</a>
+                    <span class="entity-meta">{{ receipt.employee.get("file_number", "") }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>{{ receipt.employer.get("name", "") }}</td>
+              <td class="nowrap">{{ receipt.period_label }}</td>
+              <td class="nowrap">{{ receipt.issued_on | date_ar }}</td>
+              <td class="num strong">{{ receipt.net | money }}</td>
+              <td><span class="badge badge--{{ receipt.status | status_class }}">{{ receipt.status | status_label("receipt") }}</span></td>
+              <td class="text-end">
+                <div class="row-actions">
+                  <a class="btn btn--ghost btn--sm" href="{{ url_for('receipt_detail', receipt_id=receipt.id) }}">Ver</a>
+                  <a class="btn btn--outline btn--sm" href="{{ url_for('receipt_pdf', receipt_id=receipt.id) }}">{{ icon("download") }} PDF</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {% with empty_title="Sin recibos", empty_message="No hay recibos que coincidan con los filtros seleccionados.", empty_icon="receipts", empty_action_url=url_for('receipts_list'), empty_action_label="Limpiar filtros" %}
+      {% include "partials/_empty_state.html" %}
+    {% endwith %}
+  {% endif %}
+</div>

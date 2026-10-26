@@ -1,0 +1,72 @@
+{% from "partials/icons.html" import icon %}
+<div id="proposal-status-panel">
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px;">
+    <span class="stat-label" style="margin: 0;">Estado de la propuesta</span>
+    <span id="proposal-status" class="badge badge--{{ proposal.status | status_class }}">{{ proposal.status | status_label("proposal") }}</span>
+  </div>
+
+  <div class="summary-list">
+    <div class="summary-row">
+      <span class="summary-label">Convenio</span>
+      <span class="summary-value">{{ proposal.agreement }}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Documento fuente</span>
+      <span class="summary-value">{{ proposal.document }}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Referencia</span>
+      <span class="summary-value">{{ proposal.source_page }}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Confianza del modelo</span>
+      <span class="summary-value">{{ proposal.confidence | percent }}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Fecha de propuesta</span>
+      <span class="summary-value">{{ proposal.created_at | date_ar }}</span>
+    </div>
+  </div>
+
+  <div class="progress-row">
+    <div class="progress-row-header">
+      <span>Confianza</span>
+      <strong>{{ proposal.confidence | percent }}</strong>
+    </div>
+    <div class="progress" role="progressbar" aria-label="Confianza de la propuesta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ proposal.confidence }}">
+      <span style="width: {{ proposal.confidence | progress_width }};"></span>
+    </div>
+  </div>
+
+  <div style="display: grid; gap: 8px; margin-top: 18px;">
+    {% if proposal.status in ["draft", "in_review"] %}
+      <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+            hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+            hx-target="#proposal-status-panel" hx-swap="outerHTML">
+        <input type="hidden" name="status" value="approved">
+        <button class="btn btn--success" type="submit" style="width: 100%;">{{ icon("check") }} Aprobar propuesta</button>
+      </form>
+      {% if proposal.status == "draft" %}
+        <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+              hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+              hx-target="#proposal-status-panel" hx-swap="outerHTML">
+          <input type="hidden" name="status" value="in_review">
+          <button class="btn btn--outline" type="submit" style="width: 100%;">{{ icon("clock") }} Enviar a revisión</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+            hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+            hx-target="#proposal-status-panel" hx-swap="outerHTML">
+        <input type="hidden" name="status" value="rejected">
+        <button class="btn btn--danger" type="submit" style="width: 100%;">{{ icon("x") }} Rechazar propuesta</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+            hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
+            hx-target="#proposal-status-panel" hx-swap="outerHTML">
+        <input type="hidden" name="status" value="in_review">
+        <button class="btn btn--outline" type="submit" style="width: 100%;">{{ icon("refresh") }} Devolver a revisión</button>
+      </form>
+    {% endif %}
+  </div>
+</div>

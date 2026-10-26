@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}{{ employee.name }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('employees_list') }}">Empleados</a></li>
+  <li class="current" aria-current="page">{{ employee.name }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('employees_list') }}">{{ icon("arrow-left") }} Volver</a>
+  {% if company %}
+    <a class="btn btn--primary" href="{{ url_for('company_detail', company_id=company.id) }}">{{ icon("companies") }} Ver empresa</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="detail-grid">
+    <div class="stack">
+      <section class="card">
+        <div class="card-body">
+          <div class="entity-cell" style="min-width: 0;">
+            <span class="avatar" style="width: 54px; height: 54px; flex-basis: 54px; font-size: 16px;">{{ employee.name | initials }}</span>
+            <div class="entity-text" style="gap: 2px;">
+              <h2 class="entity-name" style="font-size: 19px; white-space: normal;">{{ employee.name }}</h2>
+              <span class="entity-meta">{{ employee.category }} · {{ employee.agreement }}</span>
+              <span class="entity-meta">{{ employee.company_name }}</span>
+            </div>
+            <span class="badge badge--{{ employee.status | status_class }}" style="margin-left: auto;">{{ employee.status | status_label("employee") }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Datos del legajo</h2>
+            <p class="card-subtitle">Información laboral de demostración.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="grid-2" style="gap: 18px 28px;">
+            <div class="detail-item">
+              <dt>CUIL</dt>
+              <dd class="mono">{{ employee.cuil }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Legajo</dt>
+              <dd class="mono">{{ employee.file_number }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Empresa</dt>
+              <dd class="strong">{{ employee.company_name }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Convenio</dt>
+              <dd><span class="badge badge--outline">{{ employee.agreement }}</span></dd>
+            </div>
+            <div class="detail-item">
+              <dt>Categoría</dt>
+              <dd>{{ employee.category }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Fecha de ingreso</dt>
+              <dd>{{ employee.hire_date | date_ar }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Remuneración de referencia</dt>
+              <dd class="strong">{{ employee.salary | money }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Estado</dt>
+              <dd><span class="badge badge--{{ employee.status | status_class }}">{{ employee.status | status_label("employee") }}</span></dd>
+            </div>
+            {% if employee.email %}
+              <div class="detail-item">
+                <dt>Correo</dt>
+                <dd>{{ employee.email }}</dd>
+              </div>
+            {% endif %}
+            {% if employee.phone %}
+              <div class="detail-item">
+                <dt>Teléfono</dt>
+                <dd>{{ employee.phone }}</dd>
+              </div>
+            {% endif %}
+          </dl>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Recibos del empleado</h2>
+            <p class="card-subtitle">Documentos emitidos en el entorno demo.</p>
+          </div>
+          <span class="badge badge--outline">{{ receipts | length }}</span>
+        </div>
+        <div class="card-body card-body--flush">
+          {% if receipts %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Recibo</th>
+                    <th>Período</th>
+                    <th>Emisión</th>
+                    <th class="num">Neto</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for receipt in receipts %}
+                    <tr>
+                      <td class="strong mono">{{ receipt.number }}</td>
+                      <td>{{ receipt.period_label }}</td>
+                      <td>{{ receipt.issued_on | date_ar }}</td>
+                      <td class="num">{{ receipt.net | money }}</td>
+                      <td><span class="badge badge--{{ receipt.status | status_class }}">{{ receipt.status | status_label("receipt") }}</span></td>
+                      <td class="text-end">
+                        <a class="btn btn--ghost btn--sm" href="{{ url_for('receipt_detail', receipt_id=receipt.id) }}">Abrir</a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin recibos", empty_message="Este legajo todavía no tiene recibos emitidos.", empty_icon="receipts" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Resumen</h2>
+            <p class="card-subtitle">Datos clave del legajo.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="summary-list">
+            <div class="summary-row">
+              <span class="summary-label">Antigüedad</span>
+              <span class="summary-value">{{ employee.hire_date | date_ar }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Convenio</span>
+              <span class="summary-value">{{ employee.agreement }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Categoría</span>
+              <span class="summary-value">{{ employee.category }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Recibos</span>
+              <span class="summary-value">{{ receipts | length }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">ID interno</span>
+              <span class="summary-value mono">{{ employee.id }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <div class="callout">
+            <strong>Privacidad:</strong> los datos personales se muestran escapados y este entorno usa registros ficticios. No se incluyen claves ni secretos.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

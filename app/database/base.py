@@ -1,6 +1,7 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -14,3 +15,6 @@ NAMING_CONVENTION = {
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)

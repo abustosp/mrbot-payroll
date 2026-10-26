@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Recibo {{ receipt.number }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('receipts_list') }}">Recibos</a></li>
+  <li class="current" aria-current="page">{{ receipt.number }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('receipts_list') }}">{{ icon("arrow-left") }} Volver</a>
+  <a class="btn btn--outline" href="{{ preview_url }}" target="_blank" rel="noopener">{{ icon("eye") }} Abrir vista</a>
+  <a class="btn btn--primary" href="{{ pdf_url }}">{{ icon("download") }} Descargar PDF</a>
+{% endblock %}
+
+{% block content %}
+  <section class="stats-grid">
+    <article class="stat-card">
+      <div class="stat-icon">{{ icon("receipts") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Neto a cobrar</div>
+        <p class="stat-value" style="font-size: 22px; color: var(--primary);">{{ receipt.net | money }}</p>
+        <p class="stat-meta">{{ receipt.period_label }}</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--accent">{{ icon("money") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Haberes remunerativos</div>
+        <p class="stat-value" style="font-size: 22px;">{{ receipt.remunerative_total | money }}</p>
+        <p class="stat-meta">Base de aportes y contribuciones</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--warm">{{ icon("arrow-left") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Descuentos</div>
+        <p class="stat-value" style="font-size: 22px;">{{ receipt.deductions_total | money }}</p>
+        <p class="stat-meta">Aportes y retenciones</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--violet">{{ icon("companies") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Contribuciones</div>
+        <p class="stat-value" style="font-size: 22px;">{{ receipt.contributions_total | money }}</p>
+        <p class="stat-meta">A cargo del empleador</p>
+      </div>
+    </article>
+  </section>
+
+  <div class="receipt-layout">
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Vista previa del recibo</h2>
+            <p class="card-subtitle">Render HTML con los mismos datos que el PDF.</p>
+          </div>
+          <span class="badge badge--{{ receipt.status | status_class }}">{{ receipt.status | status_label("receipt") }}</span>
+        </div>
+        <div class="card-body">
+          <div class="receipt-frame-wrap">
+            <iframe class="receipt-frame" src="{{ preview_url }}" title="Vista previa del recibo {{ receipt.number }}" loading="lazy"></iframe>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Detalle de conceptos</h2>
+            <p class="card-subtitle">Importes incluidos en el documento.</p>
+          </div>
+          <span class="badge badge--outline">{{ receipt.items | length }} conceptos</span>
+        </div>
+        <div class="card-body card-body--flush">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Concepto</th>
+                  <th>Naturaleza</th>
+                  <th class="num">Cantidad</th>
+                  <th class="num">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in receipt.items %}
+                  <tr>
+                    <td class="mono">{{ item.code }}</td>
+                    <td class="strong">{{ item.name }}</td>
+                    <td>
+                      <span class="badge {% if item.kind == 'remunerative' %}badge--success{% elif item.kind == 'non_remunerative' %}badge--info{% elif item.kind == 'deduction' %}badge--warning{% else %}badge--neutral{% endif %}">
+                        {{ item.kind | kind_label }}
+                      </span>
+                    </td>
+                    <td class="num">{{ item.quantity | quantity }} {{ item.unit }}</td>
+                    <td class="num">{{ item.amount | money }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Resumen del recibo</h2>
+            <p class="card-subtitle">{{ receipt.number }} · {{ receipt.period_label }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="summary-list">
+            <div class="summary-row">
+              <span class="summary-label">Emisión</span>
+              <span class="summary-value">{{ receipt.issued_on | date_ar }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Total remunerativo</span>
+              <span class="summary-value num">{{ receipt.remunerative_total | money }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Total no remunerativo</span>
+              <span class="summary-value num">{{ receipt.non_remunerative_total | money }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Descuentos</span>
+              <span class="summary-value num">{{ receipt.deductions_total | money }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Contribuciones</span>
+              <span class="summary-value num">{{ receipt.contributions_total | money }}</span>
+            </div>
+            <div class="summary-row summary-row--total">
+              <span>Neto a cobrar</span>
+              <span class="num">{{ receipt.net | money }}</span>
+            </div>
+          </div>
+          <div style="display: grid; gap: 8px; margin-top: 18px;">
+            <a class="btn btn--primary" href="{{ pdf_url }}">{{ icon("download") }} Descargar PDF</a>
+            <a class="btn btn--outline" href="{{ preview_url }}" target="_blank" rel="noopener">{{ icon("external") }} Abrir en nueva pestaña</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Datos del trabajador</h2>
+            <p class="card-subtitle">Snapshot al momento de la emisión.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="detail-list">
+            <div class="detail-item">
+              <dt>Nombre</dt>
+              <dd class="strong">{{ receipt.employee.get("name", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>CUIL</dt>
+              <dd class="mono">{{ receipt.employee.get("cuil", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Legajo</dt>
+              <dd>{{ receipt.employee.get("file_number", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Categoría</dt>
+              <dd>{{ receipt.employee.get("category", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Convenio</dt>
+              <dd>{{ receipt.employee.get("agreement", "") }}</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Empleador</h2>
+            <p class="card-subtitle">Datos incluidos en el documento.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="detail-list">
+            <div class="detail-item">
+              <dt>Razón social</dt>
+              <dd class="strong">{{ receipt.employer.get("name", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>CUIT</dt>
+              <dd class="mono">{{ receipt.employer.get("cuit", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Domicilio</dt>
+              <dd>{{ receipt.employer.get("address", "") }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Actividad</dt>
+              <dd>{{ receipt.employer.get("activity", "") }}</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <div class="callout">
+            <strong>Validez:</strong> la emisión del PDF no acredita por sí sola la firma ni la entrega del recibo. Conserve la constancia correspondiente.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

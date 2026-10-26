@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('receipts_list') }}">{{ icon("download") }} Recibos</a>
+  <a class="btn btn--primary" href="{{ url_for('payrolls_list') }}">{{ icon("payrolls") }} Ver liquidaciones</a>
+{% endblock %}
+
+{% block content %}
+  <section class="stats-grid" aria-label="Indicadores principales">
+    <article class="stat-card">
+      <div class="stat-icon">{{ icon("companies") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Empresas</div>
+        <p class="stat-value">{{ metrics.companies }}</p>
+        <p class="stat-meta">Empleadores en cartera</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--accent">{{ icon("users") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Empleados activos</div>
+        <p class="stat-value">{{ metrics.active_employees }}</p>
+        <p class="stat-meta">Legajos vigentes</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--warm">{{ icon("alert") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Liquidaciones en revisión</div>
+        <p class="stat-value">{{ metrics.in_review }}</p>
+        <p class="stat-meta">Requieren aprobación</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--violet">{{ icon("proposals") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Propuestas IA pendientes</div>
+        <p class="stat-value">{{ metrics.pending_proposals }}</p>
+        <p class="stat-meta">Borradores o en revisión</p>
+      </div>
+    </article>
+  </section>
+
+  <div class="dashboard-grid">
+    <div class="stack">
+      {% set latest = metrics.latest_payroll %}
+      {% if latest %}
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Última liquidación</h2>
+              <p class="card-subtitle">{{ latest.period_label }} · {{ latest.company_name }}</p>
+            </div>
+            <span class="badge badge--{{ latest.status | status_class }}">{{ latest.status | status_label("payroll") }}</span>
+          </div>
+          <div class="card-body">
+            <div class="grid-3">
+              <div>
+                <div class="stat-label">Total bruto</div>
+                <p class="stat-value">{{ latest.gross | money }}</p>
+              </div>
+              <div>
+                <div class="stat-label">Descuentos</div>
+                <p class="stat-value">{{ latest.deductions | money }}</p>
+              </div>
+              <div>
+                <div class="stat-label">Neto a pagar</div>
+                <p class="stat-value" style="color: var(--primary);">{{ latest.net | money }}</p>
+              </div>
+            </div>
+
+            <div class="progress-row">
+              <div class="progress-row-header">
+                <span>Avance del circuito de aprobación</span>
+                <strong>{% if latest.status == "closed" %}100%{% elif latest.status == "approved" %}90%{% elif latest.status == "review" %}72%{% else %}35%{% endif %}</strong>
+              </div>
+              <div class="progress" role="progressbar" aria-label="Avance de la liquidación" aria-valuemin="0" aria-valuemax="100"
+                   aria-valuenow="{% if latest.status == 'closed' %}100{% elif latest.status == 'approved' %}90{% elif latest.status == 'review' %}72{% else %}35{% endif %}">
+                <span style="width: {% if latest.status == 'closed' %}100%{% elif latest.status == 'approved' %}90%{% elif latest.status == 'review' %}72%{% else %}35%{% endif %};"></span>
+              </div>
+            </div>
+
+            <div class="summary-list" style="margin-top: 18px;">
+              <div class="summary-row">
+                <span class="summary-label">Empleados incluidos</span>
+                <span class="summary-value">{{ latest.employee_count }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Costo empleador estimado</span>
+                <span class="summary-value num">{{ latest.employer_cost | money }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Fecha de proceso</span>
+                <span class="summary-value">{{ latest.created_at | date_ar }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="muted">Los importes provienen del motor de liquidación.</span>
+            <a class="btn btn--outline btn--sm" href="{{ url_for('payroll_detail', payroll_id=latest.id) }}">Ver detalle {{ icon("arrow-right") }}</a>
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Liquidaciones recientes</h2>
+            <p class="card-subtitle">Últimos períodos procesados en el entorno demo.</p>
+          </div>
+          <a class="btn btn--ghost btn--sm" href="{{ url_for('payrolls_list') }}">Ver todas</a>
+        </div>
+        <div class="card-body card-body--flush">
+          {% if payrolls %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Período</th>
+                    <th>Empresa</th>
+                    <th>Estado</th>
+                    <th class="num">Neto</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for payroll in payrolls %}
+                    <tr>
+                      <td class="strong nowrap">{{ payroll.period_label }}</td>
+                      <td>
+                        <div class="entity-name">{{ payroll.company_name }}</div>
+                        <div class="entity-meta">{{ payroll.employee_count }} empleados · {{ payroll.type }}</div>
+                      </td>
+                      <td><span class="badge badge--{{ payroll.status | status_class }}">{{ payroll.status | status_label("payroll") }}</span></td>
+                      <td class="num strong">{{ payroll.net | money }}</td>
+                      <td class="text-end">
+                        <a class="btn btn--ghost btn--sm" href="{{ url_for('payroll_detail', payroll_id=payroll.id) }}">Abrir</a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin liquidaciones", empty_message="Todavía no se registraron liquidaciones.", empty_icon="payrolls" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Empresas</h2>
+            <p class="card-subtitle">Cartera activa de empleadores.</p>
+          </div>
+          <a class="btn btn--ghost btn--sm" href="{{ url_for('companies_list') }}">Gestionar</a>
+        </div>
+        <div class="card-body card-body--flush">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Empresa</th>
+                  <th>Actividad</th>
+                  <th>Convenio</th>
+                  <th class="num">Empleados</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for company in companies %}
+                  <tr>
+                    <td>
+                      <div class="entity-cell">
+                        <span class="avatar">{{ company.name | initials }}</span>
+                        <div class="entity-text">
+                          <a class="entity-name" href="{{ url_for('company_detail', company_id=company.id) }}">{{ company.name }}</a>
+                          <span class="entity-meta">CUIT {{ company.cuit }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{{ company.activity }}</td>
+                    <td><span class="badge badge--outline">{{ company.agreement }}</span></td>
+                    <td class="num">{{ company.employee_count }}</td>
+                    <td><span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header card-header--plain">
+          <div>
+            <h2 class="card-title">Acciones rápidas</h2>
+            <p class="card-subtitle">Atajos a las tareas frecuentes.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="quick-actions">
+            <a class="quick-action" href="{{ url_for('employees_list') }}">
+              <span class="quick-icon">{{ icon("employees") }}</span>
+              <span class="quick-action-text"><strong>Consultar empleados</strong><small>Legajos, categorías y convenios</small></span>
+            </a>
+            <a class="quick-action" href="{{ url_for('payrolls_list') }}">
+              <span class="quick-icon quick-icon--accent">{{ icon("payrolls") }}</span>
+              <span class="quick-action-text"><strong>Revisar liquidaciones</strong><small>Borradores y cálculos del período</small></span>
+            </a>
+            <a class="quick-action" href="{{ url_for('proposals_list') }}">
+              <span class="quick-icon quick-icon--violet">{{ icon("proposals") }}</span>
+              <span class="quick-action-text"><strong>Validar propuestas IA</strong><small>Reglas sugeridas pendientes</small></span>
+            </a>
+            <a class="quick-action" href="{{ url_for('receipts_list') }}">
+              <span class="quick-icon quick-icon--warm">{{ icon("receipts") }}</span>
+              <span class="quick-action-text"><strong>Emitir recibos</strong><small>Vista previa y descarga PDF</small></span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Propuestas de IA</h2>
+            <p class="card-subtitle">Sugerencias que requieren revisión humana.</p>
+          </div>
+          <a class="btn btn--ghost btn--sm" href="{{ url_for('proposals_list') }}">Ver todas</a>
+        </div>
+        <div class="card-body">
+          {% if proposals %}
+            <ul class="list-plain">
+              {% for proposal in proposals %}
+                <li class="list-row">
+                  <div class="list-row-main">
+                    <a href="{{ url_for('proposal_detail', proposal_id=proposal.id) }}"><strong>{{ proposal.title }}</strong></a>
+                    <small>{{ proposal.agreement }} · {{ proposal.confidence | percent }} de confianza</small>
+                    <div class="progress" style="margin-top: 6px;" role="progressbar" aria-label="Confianza de la propuesta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ proposal.confidence }}">
+                      <span style="width: {{ proposal.confidence | progress_width }};"></span>
+                    </div>
+                  </div>
+                  <div class="list-row-side">
+                    <span class="badge badge--{{ proposal.status | status_class }}">{{ proposal.status | status_label("proposal") }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            {% with empty_title="Sin propuestas", empty_message="El analizador de IA no generó propuestas nuevas.", empty_icon="proposals" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Recibos recientes</h2>
+            <p class="card-subtitle">Documentos listos para descargar.</p>
+          </div>
+          <a class="btn btn--ghost btn--sm" href="{{ url_for('receipts_list') }}">Ver todos</a>
+        </div>
+        <div class="card-body">
+          {% if receipts %}
+            <ul class="list-plain">
+              {% for receipt in receipts %}
+                <li class="list-row">
+                  <div class="list-row-main">
+                    <a href="{{ url_for('receipt_detail', receipt_id=receipt.id) }}"><strong>{{ receipt.number }}</strong></a>
+                    <small>{{ receipt.employee.get("name", "") }} · {{ receipt.period_label }}</small>
+                  </div>
+                  <div class="list-row-side">
+                    <strong>{{ receipt.net | money }}</strong>
+                    <span class="badge badge--{{ receipt.status | status_class }}">{{ receipt.status | status_label("receipt") }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            {% with empty_title="Sin recibos emitidos", empty_message="Genere una liquidación para emitir recibos.", empty_icon="receipts" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

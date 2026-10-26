@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Liquidación {{ payroll.period_label }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('payrolls_list') }}">Liquidaciones</a></li>
+  <li class="current" aria-current="page">{{ payroll.period_label }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('payrolls_list') }}">{{ icon("arrow-left") }} Volver</a>
+  <a class="btn btn--primary" href="{{ url_for('receipts_list') }}?company_id={{ payroll.company_id }}&period={{ payroll.period }}">{{ icon("receipts") }} Ver recibos</a>
+{% endblock %}
+
+{% block content %}
+  <section class="stats-grid">
+    <article class="stat-card">
+      <div class="stat-icon">{{ icon("money") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Total bruto</div>
+        <p class="stat-value" style="font-size: 22px;">{{ payroll.gross | money }}</p>
+        <p class="stat-meta">Haberes remunerativos y no remunerativos</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--warm">{{ icon("arrow-left") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Descuentos</div>
+        <p class="stat-value" style="font-size: 22px;">{{ payroll.deductions | money }}</p>
+        <p class="stat-meta">Aportes, sindicato y retenciones</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--accent">{{ icon("check") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Neto a pagar</div>
+        <p class="stat-value" style="font-size: 22px; color: var(--primary);">{{ payroll.net | money }}</p>
+        <p class="stat-meta">{{ payroll.employee_count }} empleados</p>
+      </div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-icon stat-icon--violet">{{ icon("companies") }}</div>
+      <div class="stat-content">
+        <div class="stat-label">Costo empleador</div>
+        <p class="stat-value" style="font-size: 22px;">{{ payroll.employer_cost | money }}</p>
+        <p class="stat-meta">Incluye contribuciones informadas</p>
+      </div>
+    </article>
+  </section>
+
+  <div class="detail-grid">
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Resultados por empleado</h2>
+            <p class="card-subtitle">Importes consolidados del período.</p>
+          </div>
+          <span class="badge badge--outline">{{ payroll.employee_results | length }} empleados</span>
+        </div>
+        <div class="card-body card-body--flush">
+          {% if payroll.employee_results %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Empleado</th>
+                    <th>CUIL</th>
+                    <th class="num">Bruto</th>
+                    <th class="num">Descuentos</th>
+                    <th class="num">Neto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for result in payroll.employee_results %}
+                    <tr>
+                      <td>
+                        <div class="entity-cell">
+                          <span class="avatar avatar--accent">{{ result.employee_name | initials }}</span>
+                          <div class="entity-text">
+                            <a class="entity-name" href="{{ url_for('employee_detail', employee_id=result.employee_id) }}">{{ result.employee_name }}</a>
+                            <span class="entity-meta">Legajo en {{ payroll.company_name }}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="mono">{{ result.cuil }}</td>
+                      <td class="num">{{ result.gross | money }}</td>
+                      <td class="num">{{ result.deductions | money }}</td>
+                      <td class="num strong">{{ result.net | money }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin resultados", empty_message="La liquidación todavía no tiene empleados calculados.", empty_icon="payrolls" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Conceptos liquidados</h2>
+            <p class="card-subtitle">Detalle agregado por concepto.</p>
+          </div>
+          <span class="badge badge--outline">{{ payroll.concepts | length }}</span>
+        </div>
+        <div class="card-body card-body--flush">
+          {% if payroll.concepts %}
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Concepto</th>
+                    <th>Naturaleza</th>
+                    <th class="num">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for concept in payroll.concepts %}
+                    <tr>
+                      <td class="mono">{{ concept.code }}</td>
+                      <td class="strong">{{ concept.name }}</td>
+                      <td>
+                        <span class="badge {% if concept.kind == 'remunerative' %}badge--success{% elif concept.kind == 'non_remunerative' %}badge--info{% elif concept.kind == 'deduction' %}badge--warning{% else %}badge--neutral{% endif %}">
+                          {{ concept.kind | kind_label }}
+                        </span>
+                      </td>
+                      <td class="num">{{ concept.amount | money }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            {% with empty_title="Sin conceptos", empty_message="No hay conceptos agregados para esta liquidación.", empty_icon="payrolls" %}
+              {% include "partials/_empty_state.html" %}
+            {% endwith %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Estado del proceso</h2>
+            <p class="card-subtitle">{{ payroll.company_name }}</p>
+          </div>
+          <span class="badge badge--{{ payroll.status | status_class }}">{{ payroll.status | status_label("payroll") }}</span>
+        </div>
+        <div class="card-body">
+          <div class="progress-row" style="margin-top: 0;">
+            <div class="progress-row-header">
+              <span>Circuito de aprobación</span>
+              <strong>{% if payroll.status == "closed" %}100%{% elif payroll.status == "approved" %}90%{% elif payroll.status == "review" %}72%{% else %}35%{% endif %}</strong>
+            </div>
+            <div class="progress" role="progressbar" aria-label="Avance de la liquidación" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if payroll.status == 'closed' %}100{% elif payroll.status == 'approved' %}90{% elif payroll.status == 'review' %}72{% else %}35{% endif %}">
+              <span style="width: {% if payroll.status == 'closed' %}100%{% elif payroll.status == 'approved' %}90%{% elif payroll.status == 'review' %}72%{% else %}35%{% endif %};"></span>
+            </div>
+          </div>
+          <div class="summary-list" style="margin-top: 18px;">
+            <div class="summary-row">
+              <span class="summary-label">Período</span>
+              <span class="summary-value">{{ payroll.period_label }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Tipo</span>
+              <span class="summary-value">{{ payroll.type }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Fecha de proceso</span>
+              <span class="summary-value">{{ payroll.created_at | date_ar }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Empleados</span>
+              <span class="summary-value">{{ payroll.employee_count }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">ID interno</span>
+              <span class="summary-value mono">{{ payroll.id }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Recibos del período</h2>
+            <p class="card-subtitle">Documentos emitidos para esta liquidación.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if receipts %}
+            <ul class="list-plain">
+              {% for receipt in receipts %}
+                <li class="list-row">
+                  <div class="list-row-main">
+                    <a href="{{ url_for('receipt_detail', receipt_id=receipt.id) }}"><strong>{{ receipt.number }}</strong></a>
+                    <small>{{ receipt.employee.get("name", "") }}</small>
+                  </div>
+                  <div class="list-row-side">
+                    <strong>{{ receipt.net | money }}</strong>
+                    <span class="badge badge--{{ receipt.status | status_class }}">{{ receipt.status | status_label("receipt") }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted" style="margin: 0;">Todavía no hay recibos emitidos para este período.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <div class="callout">
+            <strong>Trazabilidad:</strong> esta vista presenta importes consolidados. La aprobación y el cierre se realizan en el servicio de liquidaciones, no en la capa web.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

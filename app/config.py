@@ -1,6 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +17,10 @@ class Settings(BaseSettings):
     session_cookie: str = "payroll_session"
     admin_email: str = "admin@example.com"
     admin_password: str = "admin"
+    cors_origins: list[str] = Field(default_factory=list)
+    cookie_secure: bool = False
+    session_max_age: int = 28800
+    web_data_source: Literal["demo", "sql"] = "demo"
 
 
 @lru_cache
