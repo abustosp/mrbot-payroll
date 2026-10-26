@@ -33,10 +33,27 @@ def formulas_data() -> list[dict]:
     return data
 
 
-def test_catalog_contains_exactly_10_ccts(catalog_data: list[dict]):
-    assert len(catalog_data) == 10, f"Expected 10 CCTs, got {len(catalog_data)}"
+def test_catalog_contains_exactly_11_ccts(catalog_data: list[dict]):
+    assert len(catalog_data) == 11, f"Expected 11 CCTs, got {len(catalog_data)}"
     codes = [item.get("code") for item in catalog_data]
-    assert len(set(codes)) == 10, f"Duplicate CCT codes found: {codes}"
+    assert len(set(codes)) == 11, f"Duplicate CCT codes found: {codes}"
+
+
+def test_catalog_has_coverage_status_per_cct(catalog_data: list[dict]):
+    """Contrato B-20 (worker motor): cada CCT expone vigencia_hasta y status."""
+    for cct in catalog_data:
+        code = cct.get("code", "UNKNOWN")
+        assert cct.get("vigencia_hasta"), f"CCT {code} missing vigencia_hasta"
+        assert cct.get("status") in {"current", "stale"}, (
+            f"CCT {code} has invalid status: {cct.get('status')!r}"
+        )
+        assert cct["vigencia_hasta"] == cct["latest_verified_to"], (
+            f"CCT {code} vigencia_hasta must equal latest_verified_to"
+        )
+        expected = "current" if (cct["latest_verified_to"] or "") >= "2026-07-01" else "stale"
+        assert cct["status"] == expected, (
+            f"CCT {code} status must be {expected!r} for vigencia {cct['latest_verified_to']}"
+        )
 
 
 def test_catalog_has_required_fields_and_sources(catalog_data: list[dict]):

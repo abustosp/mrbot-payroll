@@ -19,8 +19,8 @@ def test_real_catalog_loads_verified_data_and_skips_unverified_scales(tmp_path: 
     with factory() as session:
         result = load_cct_catalog(session, catalog, dry_run=True)
 
-    assert len(result.catalog_codes) == 10
-    assert result.agreements.created == 10
+    assert len(result.catalog_codes) == 11
+    assert result.agreements.created == 11
     assert result.scales.created == sum(cct["evidence_scales_verified"] for cct in catalog)
     assert result.warnings == ()
 

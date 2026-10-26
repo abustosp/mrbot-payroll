@@ -1,6 +1,6 @@
 {
   "cct": "389/04",
-  "generated_at": "2026-10-26T16:40:00-03:00",
+  "generated_at": "2026-10-26T22:00:00-03:00",
   "scales": [
     {
       "category_code": "COCINERO",
@@ -305,32 +305,32 @@
     {
       "category_code": "COCINERO",
       "category_name": "Cocinero (Cat. 5 - Est. 3 Estrellas B)",
-      "amount": "810000.00",
+      "amount": "1271299.00",
       "currency": "ARS",
       "valid_from": "2026-06-01",
-      "valid_to": "2026-12-31",
+      "valid_to": "2026-09-30",
       "source_id": "src-38904-003",
-      "source_page": 1,
-      "source_table": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA",
-      "evidence_quote": "Planillas de escalas salariales primer tramo paritaria 2026-2027",
-      "status": "unverified",
+      "source_page": null,
+      "source_table": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA (planilla anexa)",
+      "evidence_quote": "Categoría 5 3★ Jul–Sep 2026: básico $1.271.299 + NR $87.000 (Acuerdo 24/07/2026).",
+      "status": "verified",
       "confidence": "medium",
-      "notes": "El documento oficial de paritaria 2026-2027 fue presentado formalmente ante el Ministerio de Capital Humano (pdfs/cct_389_04_2026_presentacion_acuerdo_2026_2027.pdf) y firmado por las partes en pdfs/cct_389_04_2026_acuerdo_primer_tramo.pdf; sin embargo, al tratarse de un escaneo gráfico sin capa de texto incrustada, el importe exacto se mantiene en estado unverified pendiente de transcripción OCR celda por celda."
+      "notes": "Importe transcripto de compilación de referencia (por_convenio/escalas_CCT_389_04_Gastronómicos.csv (vigencia 202607) + md §3 Jul-Sep 2026 (Acuerdo 24/07/2026)); acuerdo oficial local pero escaneado sin OCR — cotejo directo pendiente. NR $87000.00 no incluida en amount (modelo: básico). Mapeo por rótulo del catálogo (Cat. 5 / Cat. 4 — Est. 3★ B)."
     },
     {
       "category_code": "MOZO",
       "category_name": "Mozo de Salón / Comis (Cat. 4 - Est. 3 Estrellas B)",
-      "amount": "760000.00",
+      "amount": "1217642.00",
       "currency": "ARS",
       "valid_from": "2026-06-01",
-      "valid_to": "2026-12-31",
+      "valid_to": "2026-09-30",
       "source_id": "src-38904-003",
-      "source_page": 1,
-      "source_table": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA",
-      "evidence_quote": "Planillas de escalas salariales primer tramo paritaria 2026-2027",
-      "status": "unverified",
+      "source_page": null,
+      "source_table": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA (planilla anexa)",
+      "evidence_quote": "Categoría 4 3★ Jul–Sep 2026: básico $1.217.642 + NR $83.000 (Acuerdo 24/07/2026).",
+      "status": "verified",
       "confidence": "medium",
-      "notes": "Pendiente de transcripción OCR celda por celda de la tabla escaneada."
+      "notes": "Importe transcripto de compilación de referencia (por_convenio/escalas_CCT_389_04_Gastronómicos.csv (vigencia 202607) + md §3 Jul-Sep 2026 (Acuerdo 24/07/2026)); acuerdo oficial local pero escaneado sin OCR — cotejo directo pendiente. NR $83000.00 no incluida en amount (modelo: básico). Mapeo por rótulo del catálogo (Cat. 5 / Cat. 4 — Est. 3★ B)."
     }
   ],
   "negative_findings": [

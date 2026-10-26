@@ -1,0 +1,46 @@
+{
+  "cct": "589/10",
+  "searched_at": "2026-10-26T21:30:00-03:00",
+  "documents": [
+    {
+      "id": "src-589-001",
+      "title": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+      "document_type": "CCT",
+      "authority": "SUTERH / FATERYH",
+      "source_url": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/",
+      "final_url": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/",
+      "local_path": "html/suterh_cct_589_10.html",
+      "published_at": "2026-10-26",
+      "valid_from": "2020-01-01",
+      "valid_to": "2026-10-26",
+      "extraction": "html",
+      "official": true,
+      "notes": "Texto ordenado vigente (Art. 11: antigüedad 2% jornada completa / 1% media jornada-suplente-jornalizado post-2009; Art. 15 remite a acuerdo salarial vigente). Las escalas 2020-2026 se transcriben de la compilación de referencia (src-589-002 y notes.md); cotejo directo contra planilla homologada pendiente.",
+      "sha256": "dcdfc983efbd26bd7c284737951dbe407e8c7018f6e1b8bb0cf4144a429978e0",
+      "pages": 1,
+      "content_type": "text/html",
+      "http_status": 200,
+      "retrieved_at": "2026-10-26T21:30:00-03:00"
+    },
+    {
+      "id": "src-589-002",
+      "title": "Repositorio de referencia — CCT 589/10 Histórico 2020-2026 (compilación secundaria)",
+      "document_type": "otro",
+      "authority": "Compilación de referencia mrbot (fuente secundaria, solo lectura)",
+      "source_url": "https://suterh.org.ar/",
+      "final_url": "https://suterh.org.ar/",
+      "local_path": "pdfs/CCT_589_10_Historico_2020_2026.pdf",
+      "published_at": "2026-10-19",
+      "valid_from": "2020-01-01",
+      "valid_to": "2026-10-26",
+      "extraction": "manual",
+      "official": false,
+      "notes": "Fuente secundaria de la que se transcriben TODOS los importes (tablas §2/§3 y CSV 03_escalas_historicas_2020_2026 + por_convenio/escalas_CCT_589_10). NO respalda verificación directa; ver notes.md para trazabilidad fila por fila.",
+      "sha256": "3803a17ee7b4671a5c83f61e5fbb8f6652f0165c6cb9e479838aa0330f8c7a46",
+      "pages": 1,
+      "content_type": "application/pdf",
+      "http_status": 200,
+      "retrieved_at": "2026-10-26T21:30:00-03:00"
+    }
+  ]
+}

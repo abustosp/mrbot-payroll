@@ -121,3 +121,18 @@ El CCT 389/04 posee un régimen estricto y particular en materia de propinas y a
    - Resultado: El Boletín Oficial publica las resoluciones homologatorias pero no contiene las matrices completas de todas las zonas y tipos de establecimientos hoteleros y gastronómicos.
 3. **Planillas escaneadas del último tramo 2026**:
    - Las planillas del acuerdo paritario 2026-2027 (`pdfs/cct_389_04_2026_acuerdo_primer_tramo.pdf` y `pdfs/cct_389_04_2026_presentacion_acuerdo_2026_2027.pdf`) se encuentran incorporadas al repositorio, pero al tratarse de imágenes escaneadas de origen sin texto incrustado, las cifras de dicho tramo se mantienen en estado `unverified` en `scales.json` conforme al contrato de evidencia hasta que se realice la transcripción manual celda por celda.
+
+## 6. Actualización B-20 (2026-10-26): primer tramo 2026-2027 desde la referencia
+Por disposición de la tarea B-20 se promovieron a `verified` 2 valores del primer tramo
+2026-2027 (2026-06-01→2026-09-30, ventana de `src-38904-003`) transcriptos de la compilación
+de referencia (`por_convenio/escalas_CCT_389_04_Gastronómicos.csv`, vigencia 202607 +
+tabla §3 "Julio – Septiembre 2026", Acuerdo UTHGRA-FEHGRA 24/07/2026): COCINERO
+(Cat. 5 — Est. 3★ B) básico $1.271.299 + NR $87.000, y MOZO (Cat. 4 — Est. 3★ B) básico
+$1.217.642 + NR $83.000. El mapeo usa los rótulos "(Cat. N — Est. 3 Estrellas B)" ya
+declarados en las categorías del repo. Se eliminaron los 2 placeholders `unverified`
+previos (COCINERO $810.000 / MOZO $760.000) por importes provisorios. `confidence: medium`,
+`source_page: null`: cotejo directo contra el acuerdo escaneado pendiente (sin motor OCR
+en el entorno; `pdftotext` devuelve solo form-feeds). `amount` = básico (modelo vigente;
+NR en `notes`). Gaps: resto de roles del modelo (AYUDANTE_COCINA, MUCAMA, RECEPCIONISTA,
+PEON_GENERAL, complementos), niveles Cat. 1-3/6-7, establecimientos 4★/5★ y segundo tramo
+2026 (acuerdo complementario II local pero sin transcripción).

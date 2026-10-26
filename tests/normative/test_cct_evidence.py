@@ -43,9 +43,9 @@ def _catalog_scale(scale: dict, source: dict) -> dict:
 def test_all_evidence_matches_verified_catalog_scales() -> None:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     evidence_dirs = sorted((CCT_DIR / "evidence").glob("cct_*"))
-    assert len(catalog) == len(evidence_dirs) == 10
+    assert len(catalog) == len(evidence_dirs) == 11
     ccts = {cct["code"]: cct for cct in catalog}
-    assert len(ccts) == 10
+    assert len(ccts) == 11
     evidence_codes = {
         json.loads((evidence_dir / "sources.json").read_text(encoding="utf-8"))["cct"]
         for evidence_dir in evidence_dirs
@@ -142,6 +142,6 @@ def test_real_loader_accepts_catalog_with_verified_scales_only(tmp_path: Path) -
     with factory() as session:
         result = load_cct_catalog(session, catalog, dry_run=True)
 
-    assert len(result.catalog_codes) == 10
+    assert len(result.catalog_codes) == 11
     assert result.scales.created == sum(cct["evidence_scales_verified"] for cct in catalog)
     assert result.warnings == ()

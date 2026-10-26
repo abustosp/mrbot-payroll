@@ -112,3 +112,21 @@ Se extrajeron computacionalmente y verificaron fila por fila las siguientes cate
    - Resultado: El Boletín Oficial publica los textos de disposiciones y resoluciones homologatorias pero no reproduce en el cuerpo del diario las planillas tabulares completas de todas las ramas del CCT.
 3. **Planillas escaneadas del último tramo 2026**:
    - Los anexos salariales de la Disposición DI-2026-1277-APN-DNRYRT#MCH (`cct_40_89_2026_planillas_sep2026_feb2027.pdf`) fueron emitidos como escaneos gráficos sin capa de texto incrustada. Se registraron como `unverified` en `scales.json` de acuerdo con el contrato de evidencia, especificando que requieren OCR o transcripción manual celda por celda.
+
+## 6. Actualización B-20 (2026-10-26): tramo 2026-09 a 2026 desde la referencia
+Por disposición de la tarea B-20 se transcribieron 6 valores del tramo 2026-09→2027-02-28
+desde la compilación de referencia (`por_convenio/escalas_CCT_40_89_Camioneros.csv`,
+vigencia 202608 + tabla §3 "Agosto – Septiembre 2026"; fuente declarada FEDCAM/FADEEAC):
+CHOFER_1 $1.075.910,44 · CHOFER_2 $1.056.737,31 · CHOFER_3 $1.037.544,76 ·
+PEON_GENERAL $982.641,94 · PEON_ESPECIALIZADO $992.110,50 (la referencia lo nombra
+"Operario Especializado / Administrativo de 3ª") · CHOFER_BLINDADO básico $1.156.740,23
+(+ adicional rama $231.348,05 documentado en `notes` de la escala, no incluido en `amount`).
+Se eliminaron los 2 placeholders `unverified` previos (CHOFER_1 $980.000 / PEON_GENERAL
+$860.000) por importes provisorios incorrectos. Las 6 escalas nuevas citan `src-4089-004`
+(documento oficial homologado, local pero escaneado) con `confidence: medium` y
+`source_page: null`: el cotejo directo celda por celda contra la planilla oficial sigue
+pendiente (sin motor OCR instalado en el entorno; verificado con `pdftotext`: solo
+form-feeds; `pdfimages` confirma 12 páginas JPEG 200 dpi). Sin correlato 2026 en la
+referencia (gap): AUX_OPERATIVO_1, ITEM_COMIDA_4_1_12, ITEM_PERNOCTADA_4_1_14,
+PLUS_VACACIONAL_3_3_2, CONDUCTOR_BITRENES y las ramas de grúas/correo/recolección
+(fuera del modelo de 11 categorías del repo).

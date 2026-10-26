@@ -12,6 +12,7 @@ un worker de integracion.
 - `cct_40_89`, `cct_389_04`
 - `cct_122_75`, `cct_264_95`
 - `cct_244_94`, `cct_507_07`
+- `cct_589_10` (alta B-19 del 2026-10-26)
 
 Cada directorio contiene:
 

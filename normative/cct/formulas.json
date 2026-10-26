@@ -663,5 +663,423 @@
         "expected": "200000.00"
       }
     ]
+  },
+  {
+    "code": "CCT_244_94_ANTIGUEDAD",
+    "description": "Adicional por antigüedad CCT 244/94 (Art. 55): 1% anual años 1-10, 1,25% años 11-20 y 1,50% desde año 21, con tope 52,5% del básico",
+    "formula": {
+      "operator": "divide",
+      "arguments": [
+        {
+          "operator": "multiply",
+          "arguments": [
+            {
+              "concept": "SUELDO_BASICO"
+            },
+            {
+              "operator": "min",
+              "arguments": [
+                {
+                  "constant": "52.5"
+                },
+                {
+                  "operator": "if",
+                  "arguments": [
+                    {
+                      "operator": "lte",
+                      "arguments": [
+                        {
+                          "variable": "anios_antiguedad"
+                        },
+                        {
+                          "constant": "10"
+                        }
+                      ]
+                    },
+                    {
+                      "operator": "multiply",
+                      "arguments": [
+                        {
+                          "variable": "anios_antiguedad"
+                        },
+                        {
+                          "parameter": "cct24494_tasa_antiguedad_1_10"
+                        }
+                      ]
+                    },
+                    {
+                      "operator": "if",
+                      "arguments": [
+                        {
+                          "operator": "lte",
+                          "arguments": [
+                            {
+                              "variable": "anios_antiguedad"
+                            },
+                            {
+                              "constant": "20"
+                            }
+                          ]
+                        },
+                        {
+                          "operator": "add",
+                          "arguments": [
+                            {
+                              "operator": "multiply",
+                              "arguments": [
+                                {
+                                  "constant": "10"
+                                },
+                                {
+                                  "parameter": "cct24494_tasa_antiguedad_1_10"
+                                }
+                              ]
+                            },
+                            {
+                              "operator": "multiply",
+                              "arguments": [
+                                {
+                                  "operator": "subtract",
+                                  "arguments": [
+                                    {
+                                      "variable": "anios_antiguedad"
+                                    },
+                                    {
+                                      "constant": "10"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "parameter": "cct24494_tasa_antiguedad_11_20"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "operator": "add",
+                          "arguments": [
+                            {
+                              "operator": "multiply",
+                              "arguments": [
+                                {
+                                  "constant": "10"
+                                },
+                                {
+                                  "parameter": "cct24494_tasa_antiguedad_1_10"
+                                }
+                              ]
+                            },
+                            {
+                              "operator": "multiply",
+                              "arguments": [
+                                {
+                                  "constant": "10"
+                                },
+                                {
+                                  "parameter": "cct24494_tasa_antiguedad_11_20"
+                                }
+                              ]
+                            },
+                            {
+                              "operator": "multiply",
+                              "arguments": [
+                                {
+                                  "operator": "subtract",
+                                  "arguments": [
+                                    {
+                                      "variable": "anios_antiguedad"
+                                    },
+                                    {
+                                      "constant": "20"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "parameter": "cct24494_tasa_antiguedad_21_mas"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "constant": "100"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1994-10-31",
+    "valid_to": null,
+    "source": "documento: CCT 244/94; articulo: Art. 55 escalafón progresivo por antigüedad; url: https://www.ftia.org.ar/wp-content/uploads/2021/02/CCT-N%C2%B0-244-94.pdf; sha256: 089ed72b1dc6fd1867232aa0378847c4686b637a6efbda5cd3a2b014d35f0c42",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 5
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "50000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 10
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "100000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 15
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "162500.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 20
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "225000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 25
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "300000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 40
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "525000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 45
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "525000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 0
+        },
+        "parameters": {
+          "cct24494_tasa_antiguedad_1_10": "1.0",
+          "cct24494_tasa_antiguedad_11_20": "1.25",
+          "cct24494_tasa_antiguedad_21_mas": "1.50"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_589_10_ANTIGUEDAD",
+    "description": "Bonificación por antigüedad CCT 589/10 (Art. 11): 2% por año de servicio sobre el básico del ayudante permanente sin vivienda de 4ª categoría (jornada completa; variante 1% para media jornada/suplente/jornalizado post-2009 no modelada)",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "parameter": "cct58910_base_antiguedad"
+        },
+        {
+          "variable": "anios_antiguedad"
+        },
+        {
+          "parameter": "cct58910_tasa_antiguedad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "anios_antiguedad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "REMUNERATIVE",
+    "valid_from": "2010-01-01",
+    "valid_to": null,
+    "source": "documento: CCT 589/10; articulo: Art. 11 bonificación por antigüedad; url: https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/ (texto verificado en portal el 2026-10-26; la referencia resume 1% pero el texto oficial fija 2% jornada completa / 1% variante parcial)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "anios_antiguedad": 5
+        },
+        "parameters": {
+          "cct58910_base_antiguedad": "780000.00",
+          "cct58910_tasa_antiguedad": "0.02"
+        },
+        "concepts": {},
+        "expected": "78000.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 1
+        },
+        "parameters": {
+          "cct58910_base_antiguedad": "780000.00",
+          "cct58910_tasa_antiguedad": "0.02"
+        },
+        "concepts": {},
+        "expected": "15600.00"
+      },
+      {
+        "variables": {
+          "anios_antiguedad": 0
+        },
+        "parameters": {
+          "cct58910_base_antiguedad": "780000.00",
+          "cct58910_tasa_antiguedad": "0.02"
+        },
+        "concepts": {},
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_589_10_TITULO_SERACARH",
+    "description": "Adicional por título de Encargado Integral de Edificio CCT 589/10 (10% sobre el básico, con novedad titulo_seracarh)",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "parameter": "cct58910_tasa_titulo"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "titulo_seracarh",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "2010-01-01",
+    "valid_to": null,
+    "source": "referencia: por_convenio/conceptos_CCT_589_10_Edificios_SUTERH.csv (SUTERH_TITULO_SERACARH, P_SUTERH_TITULO_PCT=10.0)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "titulo_seracarh": 1
+        },
+        "parameters": {
+          "cct58910_tasa_titulo": "0.10"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "100000.00"
+      },
+      {
+        "variables": {
+          "titulo_seracarh": 0
+        },
+        "parameters": {
+          "cct58910_tasa_titulo": "0.10"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
   }
 ]

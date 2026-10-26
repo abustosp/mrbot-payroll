@@ -29,14 +29,15 @@ En la República Argentina **no existe un ranking oficial único ni un registro 
 | 260/75 | 10 | 23 | 2026-12-01 a 2026-12-31 | La evidencia verificada disponible corresponde a la rama 17; no consolida todas las ramas del convenio. ([fuentes](<evidence/cct_260_75/sources.json>)) |
 | 76/75 | 29 | 24 | 2026-11-01 a 2026-11-30 | La cobertura por zona es parcial; las vigencias de noviembre de 2026 son futuras al relevamiento del 26/10/2026. ([fuentes](<evidence/cct_76_75/sources.json>)) |
 | 18/75 | 31 | 17 | 2026-09-01 a 2026-11-06 | Las grillas completas son escaneos sin OCR; los importes verificados son un subconjunto publicado oficialmente. ([fuentes](<evidence/cct_18_75/sources.json>)) |
-| 40/89 | 21 | 28 | 2025-02-01 a 2025-02-28 | No hay escalas verificadas posteriores a febrero de 2025; las proyecciones 2026 quedan fuera del catálogo. ([fuentes](<evidence/cct_40_89/sources.json>)) |
-| 389/04 | 19 | 20 | 2024-05-01 a 2024-05-31 | No hay escalas verificadas posteriores a mayo de 2024; los acuerdos 2026 no aportan importes verificados en esta evidencia. ([fuentes](<evidence/cct_389_04/sources.json>)) |
+| 40/89 | 21 | 34 | 2026-09-01 a 2027-02-28 | 6 categorías 2026-09 transcriptas de la referencia (confidence medium, cotejo OCR pendiente); resto de categorías sin correlato 2026. ([fuentes](<evidence/cct_40_89/sources.json>)) |
+| 389/04 | 19 | 22 | 2026-06-01 a 2026-09-30 | COCINERO/MOZO del primer tramo 2026 transcriptos de la referencia (confidence medium, cotejo pendiente); resto de roles y segundo tramo pendientes. ([fuentes](<evidence/cct_389_04/sources.json>)) |
 | 122/75 | 23 | 29 | 2026-10-01 a 2026-10-31 | Sin escalas verificadas de 2020–2023; varios anexos históricos escaneados requieren OCR. ([fuentes](<evidence/cct_122_75/sources.json>)) |
 | 264/95 | 11 | 22 | 2024-02-01 a 2024-02-29 | No hay escalas verificadas posteriores a febrero de 2024; la grilla 2026 requiere OCR. ([fuentes](<evidence/cct_264_95/sources.json>)) |
 | 244/94 | 21 | 23 | 2026-12-01 a 2026-12-31 | No hay escalas verificadas de 2020–2023; hay tramos programados posteriores a la fecha de búsqueda. ([fuentes](<evidence/cct_244_94/sources.json>)) |
 | 507/07 | 17 | 32 | 2026-12-01 a 2026-12-31 | Las ocho escalas históricas de 2007 se conservan solo con historical: true. ([fuentes](<evidence/cct_507_07/sources.json>)) |
+| 589/10 | 2 | 48 | 2026-07-01 a 2026-09-30 | Alta B-19 desde la referencia (48 escalas 2020–2026, confidence medium, cotejo directo pendiente). ([fuentes](<evidence/cct_589_10/sources.json>)) |
 
-Los diez expedientes reúnen **191 documentos** y **235 escalas verificadas**. El último período es el de mayor `vigencia_desde` entre las escalas verificadas de cada CCT; puede ser futuro y no representa una vigencia universal para todas las categorías.
+Los once expedientes reúnen **193 documentos** y **291 escalas verificadas**. El último período es el de mayor `vigencia_desde` entre las escalas verificadas de cada CCT; puede ser futuro y no representa una vigencia universal para todas las categorías.
 
 ## 4. Catálogo y limitaciones de cobertura
 
@@ -44,7 +45,7 @@ El catálogo conserva los textos base, categorías y fórmulas normativas existe
 
 ## 5. Fórmulas DSL Validadas (`normative/cct/formulas.json`)
 
-Se elaboraron y validaron **12 fórmulas declarativas DSL** para el motor de nómina (`payroll_engine`), cubriendo los 10 convenios colectivos. Cada fórmula cumple con las siguientes garantías de verificación:
+Se elaboraron y validaron **15 fórmulas declarativas DSL** para el motor de nómina (`payroll_engine`), cubriendo los 11 convenios colectivos. Cada fórmula cumple con las siguientes garantías de verificación:
 1. **Validación formal:** Valida formalmente contra el modelo Pydantic `FormulaDefinition` y contra el validador estructural de árbol sintáctico `validate_formula()`.
 2. **Determinismo y seguridad:** Ninguna fórmula contiene código ejecutable Python arbitrario; todas las operaciones utilizan operadores DSL seguros (`multiply`, `add`, `divide`, `if`, etc.).
 3. **Parametrización estricta:** Si una fórmula requiere importes o porcentajes que varían con acuerdos paritarios, se definen como parámetros obligatorios de entrada (`parameters`), impidiendo la inclusión de valores no verificados como constantes numéricas.
@@ -64,6 +65,9 @@ Se elaboraron y validaron **12 fórmulas declarativas DSL** para el motor de nó
 | `CCT_122_75_ESCALAFON` | 122/75 | Escalafón antigüedad 2% anual (Art. 10) | `REMUNERATIVE` | `cct12275_tasa_escalafon_anual` |
 | `CCT_507_07_ANTIGUEDAD` | 507/07 | Bonificación antigüedad 1% (Art. 24) | `REMUNERATIVE` | `cct50707_porcentaje_antiguedad` |
 | `CCT_264_95_FALLA_CAJA` | 264/95 | Falla de caja 20% Grupo I (Cláusula 10°) | `REMUNERATIVE` | `seguros_sueldo_minimo_grupo_i`, `cct26495_alicuota_falla_caja` |
+| `CCT_244_94_ANTIGUEDAD` | 244/94 | Escalafón antigüedad 1%/1,25%/1,5% tope 52,5% (Art. 55) | `REMUNERATIVE` | `cct24494_tasa_antiguedad_1_10`, `cct24494_tasa_antiguedad_11_20`, `cct24494_tasa_antiguedad_21_mas` |
+| `CCT_589_10_ANTIGUEDAD` | 589/10 | Bonificación antigüedad 2% (Art. 11) | `REMUNERATIVE` | `cct58910_base_antiguedad`, `cct58910_tasa_antiguedad` |
+| `CCT_589_10_TITULO_SERACARH` | 589/10 | Adicional título Encargado Integral 10% | `REMUNERATIVE` | `cct58910_tasa_titulo` |
 
 ---
 

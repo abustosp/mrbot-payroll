@@ -192,6 +192,65 @@ def test_valid_catalog_dry_run_then_commit(session: Session) -> None:
     assert parameter.source_document_id == document.id
 
 
+def test_conformado_scale_splits_base_from_non_remunerative(session: Session) -> None:
+    # B-02: el total conformado no debe volcarse como básico; la parte NR va
+    # por separado para que los aportes no caigan sobre ella.
+    catalog = minimal_catalog()
+    scales = catalog["ccts"][0]["salary_scales"]
+    scales[0].update({
+        "amount": "1294298.00",
+        "additional": "145000.00",
+        "amount_type": "conformado",
+    })
+    result = load_cct_catalog(session, catalog, dry_run=False)
+    session.commit()
+
+    assert result.scales.created == 2
+    scale = session.scalars(
+        select(SalaryScale).order_by(SalaryScale.category_id)
+    ).all()[0]
+    assert scale.base_salary == Decimal("1149298.00")
+    assert scale.additional == Decimal("145000.00")
+    assert scale.amount_type == "conformado"
+
+
+def test_conformado_without_breakdown_warns_and_rejects_unknown_type(
+    session: Session,
+) -> None:
+    catalog = minimal_catalog()
+    catalog["ccts"][0]["salary_scales"][0].update({"amount_type": "conformado"})
+    result = load_cct_catalog(session, catalog)
+    assert any("conformado" in warning for warning in result.warnings)
+
+    catalog = minimal_catalog()
+    catalog["ccts"][0]["salary_scales"][0].update({"amount_type": "inventado"})
+    with pytest.raises(PackageValidationError, match="amount_type"):
+        load_cct_catalog(session, catalog)
+
+
+def test_cct_coverage_map_reads_vigencia_and_status_tolerantly() -> None:
+    from app.core.normative.package_loader import cct_coverage_map
+
+    catalog = {
+        "ccts": [
+            {"code": "130/75", "vigencia_hasta": "2026-11-30", "status": "current"},
+            {"code": "264/95", "latest_verified_to": "2024-02-29", "pdf_status": "stale"},
+            {"code": "X", "name": "Sin cobertura declarada"},
+            {"code": "  ", "vigencia_hasta": "2026-01-01"},
+            "basura",
+        ]
+    }
+
+    coverage = cct_coverage_map(catalog)
+
+    assert coverage["130/75"] == {"vigencia_hasta": "2026-11-30", "status": "current"}
+    assert coverage["264/95"] == {"vigencia_hasta": "2024-02-29", "status": "stale"}
+    assert coverage["X"] == {"vigencia_hasta": None, "status": None}
+    assert cct_coverage_map(None) == {}
+    assert cct_coverage_map({"ccts": []}) == {}
+    assert cct_coverage_map("basura") == {}
+
+
 def test_reimport_is_idempotent_and_preserves_history(session: Session) -> None:
     catalog = minimal_catalog()
     load_cct_catalog(session, catalog, dry_run=False)

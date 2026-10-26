@@ -317,7 +317,9 @@
     "latest_verified_from": "2026-09-01",
     "latest_verified_to": "2026-11-30",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "No hay escalas verificadas de 2020–2023 ni para diciembre de 2026 en adelante."
+    "evidence_note": "No hay escalas verificadas de 2020–2023 ni para diciembre de 2026 en adelante.",
+    "vigencia_hasta": "2026-11-30",
+    "status": "current"
   },
   {
     "code": "260/75",
@@ -655,7 +657,9 @@
     "latest_verified_from": "2026-12-01",
     "latest_verified_to": "2026-12-31",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "La evidencia verificada disponible corresponde a la rama 17; no consolida todas las ramas del convenio."
+    "evidence_note": "La evidencia verificada disponible corresponde a la rama 17; no consolida todas las ramas del convenio.",
+    "vigencia_hasta": "2026-12-31",
+    "status": "current"
   },
   {
     "code": "76/75",
@@ -1006,7 +1010,9 @@
     "latest_verified_from": "2026-11-01",
     "latest_verified_to": "2026-11-30",
     "evidence_updated_at": "2026-10-26T16:40:00-03:00",
-    "evidence_note": "La cobertura por zona es parcial; las vigencias de noviembre de 2026 son futuras al relevamiento del 26/10/2026."
+    "evidence_note": "La cobertura por zona es parcial; las vigencias de noviembre de 2026 son futuras al relevamiento del 26/10/2026.",
+    "vigencia_hasta": "2026-11-30",
+    "status": "current"
   },
   {
     "code": "18/75",
@@ -1291,7 +1297,9 @@
     "latest_verified_from": "2026-09-01",
     "latest_verified_to": "2026-11-06",
     "evidence_updated_at": "2026-10-26T16:40:00-03:00",
-    "evidence_note": "Las grillas completas son escaneos sin OCR; los importes verificados son un subconjunto publicado oficialmente."
+    "evidence_note": "Las grillas completas son escaneos sin OCR; los importes verificados son un subconjunto publicado oficialmente.",
+    "vigencia_hasta": "2026-11-06",
+    "status": "current"
   },
   {
     "code": "40/89",
@@ -1687,6 +1695,78 @@
         "estado": "verified",
         "source_id": "src-4089-019",
         "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
+      },
+      {
+        "categoria": "CHOFER_1",
+        "importe": "1075910.44",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-09-01",
+        "vigencia_hasta": "2027-02-28",
+        "fuente": "Planillas Salariales CCT 40/89 Acuerdo Septiembre 2026 a Febrero 2027",
+        "pagina_articulo": "Planillas Salariales Septiembre 2026 - Febrero 2027 CCT 40/89",
+        "estado": "verified",
+        "source_id": "src-4089-004",
+        "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
+      },
+      {
+        "categoria": "CHOFER_2",
+        "importe": "1056737.31",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-09-01",
+        "vigencia_hasta": "2027-02-28",
+        "fuente": "Planillas Salariales CCT 40/89 Acuerdo Septiembre 2026 a Febrero 2027",
+        "pagina_articulo": "Planillas Salariales Septiembre 2026 - Febrero 2027 CCT 40/89",
+        "estado": "verified",
+        "source_id": "src-4089-004",
+        "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
+      },
+      {
+        "categoria": "CHOFER_3",
+        "importe": "1037544.76",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-09-01",
+        "vigencia_hasta": "2027-02-28",
+        "fuente": "Planillas Salariales CCT 40/89 Acuerdo Septiembre 2026 a Febrero 2027",
+        "pagina_articulo": "Planillas Salariales Septiembre 2026 - Febrero 2027 CCT 40/89",
+        "estado": "verified",
+        "source_id": "src-4089-004",
+        "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
+      },
+      {
+        "categoria": "PEON_GENERAL",
+        "importe": "982641.94",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-09-01",
+        "vigencia_hasta": "2027-02-28",
+        "fuente": "Planillas Salariales CCT 40/89 Acuerdo Septiembre 2026 a Febrero 2027",
+        "pagina_articulo": "Planillas Salariales Septiembre 2026 - Febrero 2027 CCT 40/89",
+        "estado": "verified",
+        "source_id": "src-4089-004",
+        "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
+      },
+      {
+        "categoria": "PEON_ESPECIALIZADO",
+        "importe": "992110.50",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-09-01",
+        "vigencia_hasta": "2027-02-28",
+        "fuente": "Planillas Salariales CCT 40/89 Acuerdo Septiembre 2026 a Febrero 2027",
+        "pagina_articulo": "Planillas Salariales Septiembre 2026 - Febrero 2027 CCT 40/89",
+        "estado": "verified",
+        "source_id": "src-4089-004",
+        "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
+      },
+      {
+        "categoria": "CHOFER_BLINDADO",
+        "importe": "1156740.23",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-09-01",
+        "vigencia_hasta": "2027-02-28",
+        "fuente": "Planillas Salariales CCT 40/89 Acuerdo Septiembre 2026 a Febrero 2027",
+        "pagina_articulo": "Planillas Salariales Septiembre 2026 - Febrero 2027 CCT 40/89",
+        "estado": "verified",
+        "source_id": "src-4089-004",
+        "verification_source": "https://www.fadeeac.org.ar/departamento-legislacion-legales-y-seguros/"
       }
     ],
     "formula_codes": [
@@ -1697,11 +1777,13 @@
     "notes": "Convenio de choferes y operarios del transporte automotor de cargas y logística; cobertura estimada por FEDCAM/FADEEAC en 150.000–200.000 trabajadores, sin registro estatal desagregado por CCT.",
     "evidence_dir": "normative/cct/evidence/cct_40_89",
     "evidence_documents": 21,
-    "evidence_scales_verified": 28,
-    "latest_verified_from": "2025-02-01",
-    "latest_verified_to": "2025-02-28",
+    "evidence_scales_verified": 34,
+    "latest_verified_from": "2026-09-01",
+    "latest_verified_to": "2027-02-28",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "No hay escalas verificadas posteriores a febrero de 2025; las proyecciones 2026 quedan fuera del catálogo."
+    "evidence_note": "Cobertura verificada hasta febrero 2027 (acuerdo sep-2026/feb-2027, DI-2026-1277); 6 categorías 2026-09 transcriptas de compilación de referencia (confidence medium, cotejo OCR directo pendiente); AUX_OPERATIVO_1, ítems de viáticos, plus vacacional y bitrenes sin correlato 2026.",
+    "vigencia_hasta": "2027-02-28",
+    "status": "current"
   },
   {
     "code": "389/04",
@@ -1990,6 +2072,30 @@
         "estado": "verified",
         "source_id": "src-38904-016",
         "verification_source": "http://www.uthgra.org.ar/institucional/accion-gremial/escalas/"
+      },
+      {
+        "categoria": "COCINERO",
+        "importe": "1271299.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-06-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA",
+        "pagina_articulo": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA (planilla anexa)",
+        "estado": "verified",
+        "source_id": "src-38904-003",
+        "verification_source": "https://www.uthgra.org.ar/institucional/accion-gremial/escalas/"
+      },
+      {
+        "categoria": "MOZO",
+        "importe": "1217642.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-06-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA",
+        "pagina_articulo": "Acuerdo Salarial Primer Tramo 2026-2027 UTHGRA - FEHGRA (planilla anexa)",
+        "estado": "verified",
+        "source_id": "src-38904-003",
+        "verification_source": "https://www.uthgra.org.ar/institucional/accion-gremial/escalas/"
       }
     ],
     "formula_codes": [
@@ -1999,11 +2105,13 @@
     "notes": "Convenio marco nacional del sector gastronómico y hotelero; cobertura estimada por UTHGRA/FEHGRA en 200.000–250.000 trabajadores, sin padrón oficial único.",
     "evidence_dir": "normative/cct/evidence/cct_389_04",
     "evidence_documents": 19,
-    "evidence_scales_verified": 20,
-    "latest_verified_from": "2024-05-01",
-    "latest_verified_to": "2024-05-31",
+    "evidence_scales_verified": 22,
+    "latest_verified_from": "2026-06-01",
+    "latest_verified_to": "2026-09-30",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "No hay escalas verificadas posteriores a mayo de 2024; los acuerdos 2026 no aportan importes verificados en esta evidencia."
+    "evidence_note": "Cobertura verificada hasta septiembre 2026 (primer tramo 2026-2027, presentado 28/07/2026); solo COCINERO/MOZO (Cat. 5/4 3★ B) con correlato en la referencia (confidence medium, cotejo directo pendiente); resto de roles y segundo tramo 2026 pendientes.",
+    "vigencia_hasta": "2026-09-30",
+    "status": "current"
   },
   {
     "code": "122/75",
@@ -2440,7 +2548,9 @@
     "latest_verified_from": "2026-10-01",
     "latest_verified_to": "2026-10-31",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "Sin escalas verificadas de 2020–2023; varios anexos históricos escaneados requieren OCR."
+    "evidence_note": "Sin escalas verificadas de 2020–2023; varios anexos históricos escaneados requieren OCR.",
+    "vigencia_hasta": "2026-10-31",
+    "status": "current"
   },
   {
     "code": "264/95",
@@ -2781,7 +2891,9 @@
     "latest_verified_from": "2024-02-01",
     "latest_verified_to": "2024-02-29",
     "evidence_updated_at": "2026-10-26T16:35:00-03:00",
-    "evidence_note": "No hay escalas verificadas posteriores a febrero de 2024; la grilla 2026 requiere OCR."
+    "evidence_note": "No hay escalas verificadas posteriores a febrero de 2024; la grilla 2026 requiere OCR.",
+    "vigencia_hasta": "2024-02-29",
+    "status": "stale"
   },
   {
     "code": "244/94",
@@ -3104,7 +3216,9 @@
     "latest_verified_from": "2026-12-01",
     "latest_verified_to": "2026-12-31",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "No hay escalas verificadas de 2020–2023; hay tramos programados posteriores a la fecha de búsqueda."
+    "evidence_note": "No hay escalas verificadas de 2020–2023; hay tramos programados posteriores a la fecha de búsqueda.",
+    "vigencia_hasta": "2026-12-31",
+    "status": "current"
   },
   {
     "code": "507/07",
@@ -3554,6 +3668,640 @@
     "latest_verified_from": "2026-12-01",
     "latest_verified_to": "2026-12-31",
     "evidence_updated_at": "2026-10-26T16:30:00-03:00",
-    "evidence_note": "Las ocho escalas históricas de 2007 se conservan solo con historical: true."
+    "evidence_note": "Las ocho escalas históricas de 2007 se conservan solo con historical: true.",
+    "vigencia_hasta": "2026-12-31",
+    "status": "current"
+  },
+  {
+    "code": "589/10",
+    "name": "Convenio Colectivo de Trabajo para Encargados y Ayudantes de Edificios de Renta y Propiedad Horizontal",
+    "activity": "Encargados, ayudantes, personal jornalizado y suplentes de edificios de propiedad horizontal",
+    "scope": "Nacional",
+    "source_urls": [
+      "http://www.admcontrolada.com.ar/imagenes/ConCol.pdf",
+      "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+    ],
+    "pdf_path": "normative/cct/pdfs/cct_589_10.pdf",
+    "pdf_sha256": "3803a17ee7b4671a5c83f61e5fbb8f6652f0165c6cb9e479838aa0330f8c7a46",
+    "pdf_status": "verified",
+    "categories": [
+      {
+        "code": "ENC_CON_VIV",
+        "name": "Encargado Permanente con Vivienda"
+      },
+      {
+        "code": "ENC_SIN_VIV",
+        "name": "Encargado Permanente sin Vivienda"
+      },
+      {
+        "code": "AYUDANTE_PERM",
+        "name": "Ayudante Permanente"
+      },
+      {
+        "code": "GUARDACOCHES_TEMP",
+        "name": "Guardacoches / Ayudante Temporario"
+      },
+      {
+        "code": "PERSONAL_JORNALIZADO",
+        "name": "Personal Jornalizado / Limpieza"
+      },
+      {
+        "code": "SUPLENTE_HORARIO",
+        "name": "Suplente con Horario"
+      }
+    ],
+    "salary_scales": [
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "38200.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-06-01",
+        "vigencia_hasta": "2020-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "35293.48",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-06-01",
+        "vigencia_hasta": "2020-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "32386.96",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-06-01",
+        "vigencia_hasta": "2020-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "29065.22",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-06-01",
+        "vigencia_hasta": "2020-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "26989.13",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-06-01",
+        "vigencia_hasta": "2020-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "22836.96",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-06-01",
+        "vigencia_hasta": "2020-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "48500.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-12-01",
+        "vigencia_hasta": "2021-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "44809.78",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-12-01",
+        "vigencia_hasta": "2021-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "41119.57",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-12-01",
+        "vigencia_hasta": "2021-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "36902.17",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-12-01",
+        "vigencia_hasta": "2021-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "34266.30",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-12-01",
+        "vigencia_hasta": "2021-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "28994.57",
+        "moneda": "ARS",
+        "vigencia_desde": "2020-12-01",
+        "vigencia_hasta": "2021-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "78000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2021-12-01",
+        "vigencia_hasta": "2022-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "72065.22",
+        "moneda": "ARS",
+        "vigencia_desde": "2021-12-01",
+        "vigencia_hasta": "2022-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "66130.43",
+        "moneda": "ARS",
+        "vigencia_desde": "2021-12-01",
+        "vigencia_hasta": "2022-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "59347.83",
+        "moneda": "ARS",
+        "vigencia_desde": "2021-12-01",
+        "vigencia_hasta": "2022-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "55108.70",
+        "moneda": "ARS",
+        "vigencia_desde": "2021-12-01",
+        "vigencia_hasta": "2022-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "46630.43",
+        "moneda": "ARS",
+        "vigencia_desde": "2021-12-01",
+        "vigencia_hasta": "2022-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "138000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2022-12-01",
+        "vigencia_hasta": "2023-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "127500.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2022-12-01",
+        "vigencia_hasta": "2023-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "117000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2022-12-01",
+        "vigencia_hasta": "2023-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "105000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2022-12-01",
+        "vigencia_hasta": "2023-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "97500.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2022-12-01",
+        "vigencia_hasta": "2023-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "82500.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2022-12-01",
+        "vigencia_hasta": "2023-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "320000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2023-12-01",
+        "vigencia_hasta": "2024-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "295652.17",
+        "moneda": "ARS",
+        "vigencia_desde": "2023-12-01",
+        "vigencia_hasta": "2024-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "271304.35",
+        "moneda": "ARS",
+        "vigencia_desde": "2023-12-01",
+        "vigencia_hasta": "2024-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "243478.26",
+        "moneda": "ARS",
+        "vigencia_desde": "2023-12-01",
+        "vigencia_hasta": "2024-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "226086.96",
+        "moneda": "ARS",
+        "vigencia_desde": "2023-12-01",
+        "vigencia_hasta": "2024-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "191304.35",
+        "moneda": "ARS",
+        "vigencia_desde": "2023-12-01",
+        "vigencia_hasta": "2024-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "580000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2024-12-01",
+        "vigencia_hasta": "2025-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "535869.57",
+        "moneda": "ARS",
+        "vigencia_desde": "2024-12-01",
+        "vigencia_hasta": "2025-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "491739.13",
+        "moneda": "ARS",
+        "vigencia_desde": "2024-12-01",
+        "vigencia_hasta": "2025-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "441304.35",
+        "moneda": "ARS",
+        "vigencia_desde": "2024-12-01",
+        "vigencia_hasta": "2025-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "409782.61",
+        "moneda": "ARS",
+        "vigencia_desde": "2024-12-01",
+        "vigencia_hasta": "2025-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "346739.13",
+        "moneda": "ARS",
+        "vigencia_desde": "2024-12-01",
+        "vigencia_hasta": "2025-11-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "780000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2025-12-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "720652.17",
+        "moneda": "ARS",
+        "vigencia_desde": "2025-12-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "661304.35",
+        "moneda": "ARS",
+        "vigencia_desde": "2025-12-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "593478.26",
+        "moneda": "ARS",
+        "vigencia_desde": "2025-12-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "551086.96",
+        "moneda": "ARS",
+        "vigencia_desde": "2025-12-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "466304.35",
+        "moneda": "ARS",
+        "vigencia_desde": "2025-12-01",
+        "vigencia_hasta": "2026-06-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_CON_VIV",
+        "importe": "920000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-07-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "ENC_SIN_VIV",
+        "importe": "850000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-07-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "AYUDANTE_PERM",
+        "importe": "780000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-07-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "GUARDACOCHES_TEMP",
+        "importe": "700000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-07-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "PERSONAL_JORNALIZADO",
+        "importe": "650000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-07-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      },
+      {
+        "categoria": "SUPLENTE_HORARIO",
+        "importe": "550000.00",
+        "moneda": "ARS",
+        "vigencia_desde": "2026-07-01",
+        "vigencia_hasta": "2026-09-30",
+        "fuente": "SUTERH — Convenio Colectivo de Trabajo 589/10 (texto ordenado y portal paritario)",
+        "pagina_articulo": "Serie histórica 2020-2026 por categoría (texto §2 + tabla §3 / CSV por_convenio 202606)",
+        "estado": "verified",
+        "source_id": "src-589-001",
+        "verification_source": "https://suterh.org.ar/convenio-colectivo-de-trabajo-589-10-2/"
+      }
+    ],
+    "formula_codes": [
+      "CCT_589_10_ANTIGUEDAD",
+      "CCT_589_10_TITULO_SERACARH"
+    ],
+    "confidence": "medium",
+    "notes": "Edificios de renta y propiedad horizontal (SUTERH/FATERYH); alta B-19 desde compilación de referencia con 48 escalas 2020-2026 (valores 4ª categoría). Transcripción mediada, cotejo directo pendiente; ver evidence/cct_589_10/notes.md.",
+    "evidence_dir": "normative/cct/evidence/cct_589_10",
+    "evidence_documents": 2,
+    "evidence_scales_verified": 48,
+    "latest_verified_from": "2026-07-01",
+    "latest_verified_to": "2026-09-30",
+    "evidence_updated_at": "2026-10-26T21:30:00-03:00",
+    "evidence_note": "48 escalas 2020-2026 transcriptas de compilación de referencia (confidence medium); cotejo directo contra planilla homologada pendiente. Art. 11: 2% general / 1% variante.",
+    "vigencia_hasta": "2026-09-30",
+    "status": "current"
   }
 ]
