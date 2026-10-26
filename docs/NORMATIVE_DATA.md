@@ -11,6 +11,12 @@ escalas del CCT 130/75 y las tablas de Ganancias que se usan en tests y en la
 demo son ilustrativos. No deben usarse para liquidaciones reales, presentaciones
 ante ARCA ni decisiones laborales.
 
+Además, el catálogo de investigación `normative/cct/` reúne 10 convenios con
+sus PDFs originales, pero solo 8 escalas del CCT 507/07 tienen respaldo
+documental directo. Las otras 21 escalas están marcadas `unverified`, tienen
+`importe: null` y el cargador las omite. No se deben convertir esos valores
+estimados en datos de producción.
+
 Tampoco deben interpretarse como asesoramiento legal. La fuente aplicable, la
 vigencia y el tratamiento de cada concepto deben verificarse con la normativa
 oficial y con un profesional responsable antes de operar.
@@ -32,7 +38,12 @@ La implementación actual se concentra en
 | Selección por fecha | `select_parameter`, `select_parameters` | Implementado, con vigencias inclusivas |
 | Detección de superposiciones | `find_overlaps`, `validate_no_overlaps` | Implementado |
 | Persistencia de documentos y parámetros | `NormativeDocument`, `NormativeParameter`, `SalaryScale` | Modelos y migración inicial |
-| Carga de un paquete aprobado | No existe | Pendiente |
+| Carga de un paquete validado | `package_loader.py` + API `/normative-packages/import` | Implementado con dry-run; faltan actas 2026 aprobadas |
+
+El catálogo de investigación está en `normative/cct/catalog.json`. El cargador
+`app/core/normative/package_loader.py` valida ese archivo y omite toda escala
+`unverified`; solo persiste escalas con importe y fuente verificables. La API
+`POST /api/v1/normative-packages/import` hace dry-run por defecto.
 
 La vigencia técnica de la demo es del 1 de enero al 31 de diciembre de 2026.
 Es una decisión del código de ejemplo, no una afirmación sobre la vigencia
@@ -92,8 +103,9 @@ aplicado a cada corrida.
 
 ## Cómo reemplazar la demo por datos aprobados
 
-El repositorio no tiene todavía un importador de paquetes normativos ni un
-comando de actualización. El procedimiento recomendado es:
+El repositorio incluye un cargador validado de catálogos, pero no un paquete
+2026 aprobado ni un comando de actualización automática de paritarias. El
+procedimiento recomendado es:
 
 1. Obtener el documento oficial y registrar título, tipo, origen, fecha de
    publicación, ruta o URL y checksum.

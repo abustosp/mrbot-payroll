@@ -41,6 +41,7 @@ COPY --from=builder /install /usr/local
 COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 COPY scripts /app/scripts
+COPY normative /app/normative
 COPY deployment/entrypoint.sh /app/entrypoint.sh
 
 USER app

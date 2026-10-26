@@ -19,24 +19,28 @@ demo y no constituye una implementación lista para producción.
 | Área | Estado | Alcance real |
 |---|---|---|
 | FastAPI y `/health` | Implementado | Responde JSON; no comprueba la base de datos |
-| Autenticación API | Implementado | Cookie firmada, PBKDF2 y roles `admin`, `editor`, `viewer` |
+| Autenticación API y UI | Implementado | Cookie firmada, PBKDF2, roles y CSRF en la UI web |
 | Persistencia | Implementado | SQLAlchemy 2.x, Alembic, SQLite local y PostgreSQL por URL |
-| API de negocio | Implementado | Empresas, empleados, convenios, conceptos, fórmulas y liquidaciones |
+| API de negocio | Implementado | Empresas, empleados, convenios, conceptos, fórmulas, liquidaciones, importación y reportes |
 | Motor de cálculo | Implementado | DSL declarativo, dependencias, `Decimal`, novedades y bases |
 | Cálculo persistente | Implementado | Servicio que calcula una corrida y guarda resultados y trazas |
 | Proveedor Argentina | Implementado como demo | CCT 130/75 acotado y parámetros ilustrativos |
-| IA supervisada | Implementado como pipeline | Extracción, análisis, validación y propuestas en estado `draft` |
+| IA supervisada | Implementado | Extracción, análisis, validación, persistencia y publicación manual como fórmula borrador |
 | API de IA | Implementado con `MockProvider` | Para un proveedor real hay que inyectar la dependencia en código |
-| UI web | Implementado | Demo por defecto o lectura SQL opcional; sin autenticación |
+| UI web | Implementado | Demo por defecto o lectura SQL opcional; login y CSRF |
 | Recibos PDF | Implementado | HTML, PDF individual y ZIP; sin validación legal |
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
-| Importadores CSV/XLSX | Implementado como biblioteca | Vista previa y validación; no persiste ni tiene API/UI |
+| Importadores CSV/XLSX | Implementado | Biblioteca y API con dry-run; alta idempotente de empleados, novedades solo dry-run |
+| Paquetes normativos CCT | Implementado | Catálogo de 10 CCT, 10 PDF y 12 fórmulas; 8 escalas verificadas y 21 pendientes |
+| Liquidaciones especiales | Implementado como módulo puro | SAC, vacaciones y liquidación final con parámetros, aún sin integrar al flujo web |
+| Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
 
-La autenticación, la API, el motor de fórmulas y el cálculo existen. Lo que
-sigue pendiente es la publicación automática de propuestas de IA, la carga de
-paquetes normativos aprobados, la validación contra ARCA y el endurecimiento
-para producción.
+La autenticación, la API, el motor de fórmulas, el cálculo, el flujo de IA, la
+importación y los reportes internos existen. Lo que sigue pendiente es cargar
+actas paritarias vigentes verificadas, integrar SAC/vacaciones/final al flujo
+web, validar los formatos contra ARCA y completar el endurecimiento para
+producción.
 
 ## Requisitos
 
@@ -92,7 +96,14 @@ usuarios para producción.
 
 La interfaz arranca en modo demo por defecto. Para que muestre los datos
 cargados en SQLite, agregar `PAYROLL_WEB_DATA_SOURCE=sql` a `.env` y reiniciar la
-aplicación. Ese modo es de solo lectura y tampoco tiene autenticación.
+aplicación. Ese modo es de solo lectura.
+
+La UI exige login en ambos modos (`PAYROLL_WEB_AUTH_ENABLED=true` por defecto).
+En modo demo valida `PAYROLL_ADMIN_EMAIL` y `PAYROLL_ADMIN_PASSWORD`; en modo SQL
+consulta la tabla `users` con el mismo hash PBKDF2 y la misma cookie firmada que
+la API. Los formularios POST de la UI usan un token CSRF firmado con doble
+submit. Para operar el modo SQL hay que sembrar primero un usuario con
+`.venv/bin/python -m scripts.seed_demo`.
 
 ## Tests y estilo
 
@@ -136,6 +147,18 @@ Roles:
   aprobación de propuestas de IA.
 - `admin`: además, eliminaciones y aprobaciones de fórmulas y liquidaciones.
 
+### UI web
+
+La interfaz usa las mismas credenciales y la misma cookie que la API, pero con
+formularios HTML en `/login` y `/logout`. Las rutas de negocio redirigen a
+`/login?next=...` cuando no hay sesión; las peticiones HTMX reciben `401` con
+`HX-Redirect`. `/login`, `/salud` y `/static/*` son públicos.
+
+Todos los POST de la UI validan un token CSRF firmado y ligado a la sesión,
+enviado como cookie `payroll_csrf` y campo oculto `csrf_token`. Los roles
+`admin` y `editor` pueden cambiar el estado de una propuesta; `viewer` sólo
+puede leer.
+
 ### Endpoints principales
 
 | Método y ruta | Uso |
@@ -152,6 +175,7 @@ Roles:
 | `GET, POST /api/v1/concepts` | Listar y crear conceptos |
 | `GET, PUT, DELETE /api/v1/concepts/{id}` | Consultar, editar o eliminar |
 | `GET, POST /api/v1/formulas` | Listar y crear fórmulas en borrador |
+| `POST /api/v1/formulas/{id}/versions` | Crear una nueva versión en borrador |
 | `POST /api/v1/formulas/{id}/validate` | Validar el DSL |
 | `POST /api/v1/formulas/{id}/approve` | Aprobar una fórmula validada |
 | `GET, POST /api/v1/payroll-runs` | Listar y crear liquidaciones |
@@ -164,6 +188,14 @@ Roles:
 | `POST /api/v1/ai/analyze-agreement` | Analizar un texto y devolver propuestas |
 | `POST /api/v1/ai/proposals/validate` | Validar una propuesta |
 | `POST /api/v1/ai/proposals/approve` | Registrar una aprobación humana |
+| `POST /api/v1/ai/proposals` | Persistir un análisis como propuesta borrador |
+| `POST /api/v1/ai/proposals/{id}/approve` | Aprobar una propuesta persistida |
+| `POST /api/v1/ai/proposals/{id}/publish` | Crear una fórmula borrador desde una propuesta aprobada |
+| `POST /api/v1/imports/employees` | Importar empleados desde CSV/XLSX, con dry-run |
+| `POST /api/v1/imports/novelties` | Validar novedades CSV/XLSX, solo dry-run |
+| `GET /api/v1/normative-packages/ccts` | Listar convenios cargados desde paquetes |
+| `POST /api/v1/normative-packages/import` | Validar o importar `catalog.json` |
+| `GET /api/v1/reports/f931/{run_id}.xlsx` | Generar la planilla interna F.931 |
 
 Los endpoints de exportación LSD reciben los datos en el cuerpo JSON y no
 consultan una liquidación persistida. El de recibos sí parte de un
@@ -175,9 +207,10 @@ vigentes, escala y contrato del empleado, y deja la corrida en `CALCULATED` o
 `ERROR`. La aprobación posterior exige estado calculado o en revisión y rol
 `admin`.
 
-La API de IA usa `MockProvider` por defecto y no persiste propuestas. Para un
-proveedor real hay que sobrescribir la dependencia `get_ai_provider` en código.
-La aprobación de una propuesta no la publica como fórmula. Ver
+La API de IA usa `MockProvider` por defecto. Las propuestas se pueden persistir,
+aprobar y publicar manualmente como una `FormulaVersion` en estado `DRAFT`;
+nunca se aprueban ni se publican solas. Para un proveedor real hay que
+sobrescribir la dependencia `get_ai_provider` en código. Ver
 `docs/ARCHITECTURE.md`.
 
 ## Interfaz web
@@ -191,14 +224,12 @@ Tiene dos fuentes de datos:
   reflejan en SQLAlchemy.
 - `PAYROLL_WEB_DATA_SOURCE=sql` usa `SqlAlchemyDataSource`, una proyección de
   solo lectura sobre las tablas reales. Requiere migración y datos cargados. La
-  bandeja de propuestas queda vacía porque no hay tabla de propuestas IA.
+  bandeja de propuestas de la UI sigue vacía porque el datasource SQL no las
+  proyecta, aunque la API ya las persiste en `ai_proposals`.
 
-Ninguno de los dos modos autentica al usuario. Si se activa SQL, cualquier
-persona que llegue a la UI puede ver los datos de la base, sin separación por
-organización en esa capa. No exponer la UI a Internet.
-
-La cabecera todavía muestra el chip "Modo demo" aunque la fuente sea SQL. Es un
-rótulo de la plantilla que falta ajustar.
+La UI exige login en ambos modos y protege los POST con CSRF. El modo SQL sigue
+sin separación por organización en la capa web: cualquier usuario autenticado
+puede ver la proyección completa. No exponer la UI a Internet.
 
 | Ruta | Pantalla |
 |---|---|
@@ -214,9 +245,9 @@ rótulo de la plantilla que falta ajustar.
 | `/recibos/lote.zip` | ZIP de recibos filtrados |
 | `/salud` y `/health/visual` | Estado visual de componentes |
 
-La UI no tiene autenticación y sus acciones de propuestas solo funcionan en el
-store demo. No debe exponerse a Internet ni usarse con datos personales reales,
-ni siquiera en modo SQL.
+La UI exige login y CSRF, pero sus acciones de propuestas solo funcionan en el
+store demo. No debe exponerse a Internet sin completar el aislamiento por
+organización ni usarse con datos personales reales, ni siquiera en modo SQL.
 
 `GET /health` sigue siendo el health técnico en JSON. El health visual no
 comprueba la base ni el estado real de una liquidación.
@@ -292,13 +323,15 @@ Las variables de configuración usan el prefijo `PAYROLL_` y se leen desde `.env
 | `PAYROLL_SECRET_KEY` | `change-me-in-production` | Firma de la cookie; cambiar siempre |
 | `PAYROLL_DATABASE_URL` | `sqlite:///./data/payroll.db` | URL SQLAlchemy |
 | `PAYROLL_SESSION_COOKIE` | `payroll_session` | Nombre de la cookie |
-| `PAYROLL_ADMIN_EMAIL` | `admin@example.com` | Declarada, no usada por el seed actual |
-| `PAYROLL_ADMIN_PASSWORD` | `admin` | Declarada, no usada por el seed actual |
+| `PAYROLL_ADMIN_EMAIL` | `admin@example.com` | Admin del login web en modo demo; no lo usa el seed actual |
+| `PAYROLL_ADMIN_PASSWORD` | `admin` | Contraseña del login web en modo demo; no la usa el seed actual |
 | `PAYROLL_CORS_ORIGINS` | lista vacía | Orígenes permitidos, en formato JSON |
 | `PAYROLL_COOKIE_SECURE` | `false` | Cookie solo por HTTPS |
 | `PAYROLL_SESSION_MAX_AGE` | `28800` | Duración de la sesión en segundos |
 | `PAYROLL_WEB_DATA_SOURCE` | `demo` | Fuente de la UI: `demo` o `sql` |
+| `PAYROLL_WEB_AUTH_ENABLED` | `true` | Exige login y CSRF en la UI web |
 | `PAYROLL_SEED_DEMO` | `false` | Ejecuta el seed demo al iniciar el contenedor |
+| `PAYROLL_NORMATIVE_CCT_DIR` | `normative/cct` | Directorio del catálogo CCT y sus PDFs |
 
 El proveedor compatible con OpenAI lee, si se construye explícitamente:
 
@@ -345,9 +378,12 @@ docs/                    Arquitectura, datos normativos y operaciones
 
 ## Datos normativos y límites
 
-Los parámetros y escalas actuales son demo, con vigencia técnica 2026 y fuente
-`demo-2026`. El CCT 130/75 está acotado a pocas categorías y sus importes son
-ilustrativos. No hay un paquete normativo aprobado ni un importador de paquetes.
+Los parámetros del seed y del proveedor Argentina siguen siendo demo. El
+catálogo `normative/cct/` reúne 10 CCT con sus PDFs originales y 12 fórmulas
+basadas en artículos, pero solo 8 escalas del CCT 507/07 tienen respaldo
+documental directo. Las otras 21 escalas están marcadas `unverified` y no se
+cargan al motor. No hay todavía actas paritarias 2026 homologadas en el
+repositorio.
 
 El exportador LSD respeta anchos y codificación, pero no fue validado contra la
 especificación oficial vigente ni contra el entorno de ARCA. Los registros 05,
@@ -360,16 +396,21 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
 
 - Es un MVP en desarrollo, no un sistema de producción.
 - No usar con datos personales reales ni para liquidaciones oficiales.
-- La UI web no tiene autenticación. En modo demo no persiste; en modo SQL es una
-  lectura sin separación por organización.
-- La API de IA usa un mock por defecto y no persiste propuestas.
-- Una propuesta aprobada no se publica automáticamente como fórmula.
-- La API solo crea la versión 1 de una fórmula; no hay endpoint para nuevas
-  versiones de una fórmula existente.
-- El cálculo cubre una corrida mensual básica. No incluye SAC, vacaciones,
-  liquidación final, retroactivos complejos, F.931 ni asientos contables.
+- La UI web ya exige login y protección CSRF. En modo demo no persiste; en modo
+  SQL es una lectura sin separación por organización.
+- La API de IA usa un mock por defecto; la persistencia y publicación existen,
+  pero el proveedor real se inyecta en código.
+- La publicación de una propuesta crea una fórmula en `DRAFT`; no la aprueba
+  ni la activa.
+- SAC, vacaciones y liquidación final existen como módulo puro, pero todavía no
+  están integrados en `calculate_payroll` ni en la UI.
+- El reporte F.931 es una planilla interna de control, no el formato oficial.
+- El cálculo cubre una corrida mensual básica. No incluye retroactivos
+  complejos ni asientos contables.
 - No hay trabajos en segundo plano en uso ni auditoría automática de CRUD.
-- No hay CSRF, rate limiting, MFA ni cambio de contraseña.
+- No hay rate limiting, MFA, recuperación ni cambio de contraseña.
+- La sesión web no se rota al iniciar sesión ni tiene cierre por inactividad
+  independiente de `PAYROLL_SESSION_MAX_AGE`.
 - Los valores por defecto de secreto y admin son inseguros.
 - El TXT LSD no está aceptado por ARCA y el recibo no acredita firma o entrega.
 - Docker y PyInstaller tienen configuración inicial, pero no builds verificados.

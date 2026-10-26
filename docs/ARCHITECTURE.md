@@ -136,13 +136,15 @@ limitaciones. Un reporte válido no equivale a una aprobación.
 La API `POST /api/v1/ai/proposals/approve` exige rol `admin` o `editor` y usa
 la identidad del usuario autenticado. El `approved_by` que venga en el cuerpo
 se sobrescribe con el correo de la sesión, o con `user:<id>` si no hay correo.
-La aprobación sigue siendo un registro en memoria y no se escribe en la base.
+El endpoint legacy `/ai/proposals/approve` devuelve un registro en memoria; el
+flujo persistido usa `/ai/proposals/{id}/approve` y guarda el estado en
+`ai_proposals`.
 
-La propuesta aprobada no se persiste automáticamente. Para que el motor la use,
-un usuario debe crear una fórmula en `/api/v1/formulas`, validarla y aprobarla.
-El modelo de datos distingue `FormulaDefinition` de `FormulaVersion`, pero la
-API actual solo crea la versión 1; no existe todavía un endpoint para publicar
-una versión nueva de una fórmula existente.
+La propuesta aprobada se puede persistir en `ai_proposals` y publicar
+manualmente con `POST /api/v1/ai/proposals/{id}/publish`. Esa publicación crea
+una `FormulaVersion` en estado `DRAFT`; después hay que validarla y aprobarla
+por el flujo de fórmulas. `POST /api/v1/formulas/{id}/versions` permite crear
+versiones nuevas sin sobrescribir las anteriores.
 
 ### 5. Motor de cálculo
 
@@ -224,17 +226,22 @@ Controles implementados:
 - la validación y la aprobación son deterministas y revalidan;
 - la API de negocio usa cookie firmada, contraseña con PBKDF2 y roles
   `admin`, `editor` y `viewer`;
+- la UI web reutiliza esa cookie y `verify_password`. En modo demo valida el
+  admin configurado; en modo SQL consulta la tabla `users`. Las rutas de negocio
+  redirigen a `/login?next=...` y las peticiones HTMX reciben `401` con
+  `HX-Redirect`;
+- los formularios POST de la UI validan un token CSRF firmado con doble submit
+  (cookie `payroll_csrf` + campo oculto); `viewer` no puede cambiar estados;
+- `/login`, `/salud` y `/static/*` son públicos;
 - las rutas de cálculo, edición y aprobación exigen rol;
 - los recibos escapan datos y no imprimen claves desconocidas;
 - los archivos de exportación no se cachean y se sirven como descarga.
 
 Límites actuales:
 
-- la UI web no tiene autenticación. Por defecto usa un store demo en memoria;
-  con `PAYROLL_WEB_DATA_SOURCE=sql` lee la base sin separación por organización.
-  No debe exponerse a Internet;
-- no hay CSRF, rate limiting, MFA, recuperación de contraseña ni rotación de
-  sesiones;
+- con `PAYROLL_WEB_DATA_SOURCE=sql` la UI lee la base sin separación por
+  organización. No debe exponerse a Internet sin completar ese aislamiento;
+- no hay rate limiting, MFA, recuperación de contraseña ni rotación de sesiones;
 - los valores por defecto de `PAYROLL_SECRET_KEY` y del admin demo son
   inseguros y deben cambiarse;
 - el endpoint de propuestas usa la identidad de la sesión para aprobar, pero la
@@ -274,20 +281,23 @@ Qué se escribe hoy:
 - las propuestas de IA y sus aprobaciones son objetos en memoria que devuelve
   la API, salvo que otro servicio las persista.
 
-La UI web no autentica usuarios. Por defecto lee de `DemoDataStore`, un store en
-memoria que permite mostrar el producto sin base. Si se configura
+La UI web exige autenticación (`PAYROLL_WEB_AUTH_ENABLED=true` por defecto) y
+protege los POST con CSRF. Por defecto lee de `DemoDataStore`, un store en
+memoria que permite mostrar el producto sin base; en ese modo el login valida
+las credenciales de administrador configuradas. Si se configura
 `PAYROLL_WEB_DATA_SOURCE=sql`, lee de `SqlAlchemyDataSource`, una proyección de
-solo lectura sobre las tablas. Ese modo no separa por organización ni muestra
-propuestas de IA porque no hay tabla persistida. En ambos casos la UI es una
-capa de presentación, no una fuente de verdad para liquidar.
+solo lectura sobre las tablas, y autentica contra la tabla `users`. Ese modo no
+separa por organización ni muestra propuestas de IA porque no hay tabla
+persistida. En ambos casos la UI es una capa de presentación, no una fuente de
+verdad para liquidar.
 
 ## Brechas principales del MVP
 
 1. No hay puente automático entre una propuesta de IA aprobada y una
    `FormulaVersion`.
 2. La API no publica nuevas versiones de una fórmula existente.
-3. La UI no tiene autenticación. El modo SQL es de solo lectura y no está
-   separado por organización.
+3. La UI ya autentica y protege CSRF, pero el modo SQL es de solo lectura y no
+   está separado por organización.
 4. No hay carga de paquetes normativos aprobados ni validación contra ARCA.
 5. El cálculo cubre una corrida mensual básica; no cubre SAC, vacaciones,
    liquidación final, retroactivos complejos ni cierre definitivo.
