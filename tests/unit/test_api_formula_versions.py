@@ -324,3 +324,45 @@ def test_cross_formula_cycle_is_rejected(
 
     assert second.status_code == 422, second.text
     assert "circular" in second.text
+
+
+def test_formula_scope_rejects_unknown_codes_and_accepts_known(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    # B-26: el scope por convenio valida contra convenios/categorías reales.
+    client, local_session = api
+    login(client)
+    formula_id = create_formula(client, code="CON_SCOPE")["id"]
+
+    unknown = client.patch(
+        f"/api/v1/formulas/{formula_id}/scope", json={"agreement_code": "999/99"}
+    )
+    assert unknown.status_code == 422, unknown.text
+
+    with local_session.begin() as db:
+        agreement = models.CollectiveAgreement(code="130/75", year=1975, name="Comercio")
+        db.add(agreement)
+        db.flush()
+        db.add(
+            models.AgreementCategory(
+                agreement_id=agreement.id, code="ADMIN_A", name="Administrativo A"
+            )
+        )
+
+    scoped = client.patch(
+        f"/api/v1/formulas/{formula_id}/scope",
+        json={"agreement_code": "130/75", "category_code": "ADMIN_A"},
+    )
+    assert scoped.status_code == 200, scoped.text
+
+    bad_category = client.patch(
+        f"/api/v1/formulas/{formula_id}/scope",
+        json={"agreement_code": "130/75", "category_code": "NOPE"},
+    )
+    assert bad_category.status_code == 422, bad_category.text
+
+    cleared = client.patch(
+        f"/api/v1/formulas/{formula_id}/scope",
+        json={"agreement_code": None, "category_code": None},
+    )
+    assert cleared.status_code == 200, cleared.text

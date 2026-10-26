@@ -6,9 +6,10 @@ from collections.abc import Generator
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
@@ -16,11 +17,13 @@ from app.database.models import (
     Employee,
     FormulaDefinition,
     FormulaVersion,
+    NormativeParameter,
     PayrollConcept,
     PayrollItem,
     PayrollResult,
     PayrollRun,
     PayrollTrace,
+    Ruleset,
 )
 from app.services.payroll_calculation import calculate_payroll_run
 from scripts.seed_demo import seed
@@ -65,7 +68,7 @@ def _create_run(
 
 
 def _calculate(
-    factory: sessionmaker[Session], run_id: int
+    factory: sessionmaker[Session], run_id: int, **kwargs: Any
 ) -> dict[str, object]:
     # NOTE (B-13): calculate_payroll_run commits its VALIDATING state, so it
     # cannot run inside an explicit transaction block.
@@ -73,7 +76,7 @@ def _calculate(
         run = session.get(PayrollRun, run_id)
         assert run is not None
         try:
-            result = calculate_payroll_run(session, run)
+            result = calculate_payroll_run(session, run, **kwargs)
         except Exception:
             session.rollback()
             raise
@@ -535,3 +538,190 @@ def test_negative_net_is_reported_per_employee_before_persisting(
             )
             == 2
         )
+
+
+def test_formula_scoped_to_another_agreement_is_skipped(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-26: a formula scoped to another CCT never reaches this payroll."""
+
+    factory, context = payroll_db
+    with factory.begin() as session:
+        # JUBILACION is a leaf of the seed dependency graph, so scoping it
+        # away cannot break the remaining formulas' dependencies.
+        formula = session.scalar(
+            select(FormulaDefinition).where(
+                FormulaDefinition.organization_id == context["organization_id"],
+                FormulaDefinition.code == "JUBILACION",
+            )
+        )
+        assert formula is not None
+        formula.agreement_code = "999/99"
+
+    result = _calculate(factory, _create_run(factory, context))
+
+    assert result["status"] == "CALCULATED"
+    results = result["results"]
+    assert isinstance(results, list) and len(results) == 2
+    assert all(
+        "JUBILACION" not in [item["code"] for item in entry["items"]]
+        for entry in results
+    )
+    assert all("BASICO" in [item["code"] for item in entry["items"]] for entry in results)
+
+
+def test_formulas_scoped_nowhere_matching_error_per_employee(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-26: with no applicable formula the employee errors instead of zeros."""
+
+    factory, context = payroll_db
+    with factory.begin() as session:
+        for formula in session.scalars(
+            select(FormulaDefinition).where(
+                FormulaDefinition.organization_id == context["organization_id"]
+            )
+        ).all():
+            formula.agreement_code = "999/99"
+
+    result = _calculate(factory, _create_run(factory, context))
+
+    assert result["status"] == "ERROR"
+    assert result["results"] == []
+    assert len(result["errors"]) == 2
+    assert all(
+        "aplicables al convenio" in error["message"] for error in result["errors"]
+    )
+
+
+def test_calculation_seals_immutable_ruleset_snapshot(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-27: every calculation seals the package applied; rows never change."""
+
+    factory, context = payroll_db
+    run_id = _create_run(factory, context)
+    first = _calculate(factory, run_id)
+
+    assert first["status"] == "CALCULATED"
+    assert first["ruleset_id"] is not None
+    with factory() as session:
+        sealed = session.get(Ruleset, first["ruleset_id"])
+        assert sealed is not None
+        assert sealed.status == "APPROVED"
+        assert sealed.rules["inputs_hash"] == first["inputs_hash"]
+        assert {entry["code"] for entry in sealed.rules["formulas"]} >= {
+            "BASICO",
+            "ANTIGUEDAD",
+        }
+        frozen_rules = dict(sealed.rules)
+
+    second = _calculate(factory, run_id)
+
+    assert second["ruleset_id"] != first["ruleset_id"]
+    assert second["results_hash"] == first["results_hash"]
+    with factory() as session:
+        assert session.get(Ruleset, first["ruleset_id"]).rules == frozen_rules
+
+
+def test_bulk_loading_keeps_related_queries_constant(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-35: categories/scales load once, not once per employee."""
+
+    factory, context = payroll_db
+    engine = factory.kw["bind"]
+    statements: list[str] = []
+
+    def _record(
+        conn: object, cursor: object, statement: str, *args: object
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        result = _calculate(factory, _create_run(factory, context))
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert result["status"] == "CALCULATED"
+    lowered = [statement.lower() for statement in statements]
+    assert sum("salary_scales" in statement for statement in lowered) == 1
+    assert sum("agreement_categories" in statement for statement in lowered) == 1
+
+
+def test_calculation_pagination_keeps_full_summary(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-36: paginated detail keeps complete totals and the same run hash."""
+
+    factory, context = payroll_db
+    run_id = _create_run(factory, context)
+    full = _calculate(factory, run_id)
+    assert full["summary"]["calculated"] == 2
+
+    page = _calculate(factory, run_id, results_limit=1, results_offset=1)
+
+    assert page["summary"] == full["summary"]
+    assert page["results_total"] == 2
+    assert len(page["results"]) == 1
+    assert page["results_hash"] == full["results_hash"]
+
+    summary_only = _calculate(factory, run_id, include_items=False)
+
+    assert summary_only["results"] == []
+    assert summary_only["summary"] == full["summary"]
+
+
+def test_nonstandard_rounding_is_warned_not_coerced(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-79: decimals=0 on a payslip formula warns instead of silently drifting."""
+
+    factory, context = payroll_db
+    with factory.begin() as session:
+        formula = session.scalar(
+            select(FormulaDefinition).where(
+                FormulaDefinition.organization_id == context["organization_id"],
+                FormulaDefinition.code == "BASICO",
+            )
+        )
+        assert formula is not None
+        version = session.scalar(
+            select(FormulaVersion).where(
+                FormulaVersion.formula_id == formula.id,
+                FormulaVersion.version == formula.current_version,
+            )
+        )
+        assert version is not None
+        version.rounding = {"decimals": 0, "mode": "HALF_UP"}
+
+    result = _calculate(factory, _create_run(factory, context))
+
+    assert result["status"] == "CALCULATED"
+    rounding = [w for w in result["warnings"] if w["type"] == "rounding_policy"]
+    assert [w["code"] for w in rounding] == ["BASICO"]
+
+
+def test_colliding_normative_parameter_is_warned(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    """B-31: a parameter shadowed by a base variable surfaces per employee."""
+
+    factory, context = payroll_db
+    with factory.begin() as session:
+        session.add(
+            NormativeParameter(
+                jurisdiction="AR",
+                code="sueldo_basico",
+                value=Decimal("999"),
+                valid_from=date(2026, 1, 1),
+            )
+        )
+
+    result = _calculate(factory, _create_run(factory, context))
+
+    assert result["status"] == "CALCULATED"
+    shadowed = [w for w in result["warnings"] if w["type"] == "parameter_shadowed"]
+    assert {w["employee_code"] for w in shadowed} == {"E-001", "E-002"}
+    assert all(w["code"] == "sueldo_basico" for w in shadowed)

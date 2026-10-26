@@ -35,17 +35,27 @@ def is_valid_cuit_cuil(value: object) -> bool:
 
 
 def parse_period(value: date | str) -> date:
-    """Return the first day of a payroll month from a date or ``AAAAMM``."""
+    """Return a payroll date from a ``date``, ``AAAAMM`` or ISO ``YYYY-MM-DD``.
+
+    B-78: single shared period parser. ``AAAAMM`` (and plain dates, for
+    backward compatibility) resolve to the first day of the month; a full ISO
+    date keeps its day (settlement dates need it).
+    """
     if isinstance(value, date):
         return value.replace(day=1)
-    text = str(value)
-    if not _PERIOD.fullmatch(text):
-        raise ValueError("El período debe tener formato AAAAMM.")
-    year, month = int(text[:4]), int(text[4:])
+    text = str(value).strip()
+    if _PERIOD.fullmatch(text):
+        year, month = int(text[:4]), int(text[4:])
+        try:
+            return date(year, month, 1)
+        except ValueError:
+            raise ValueError("El período debe tener un mes entre 01 y 12.") from None
     try:
-        return date(year, month, 1)
+        return date.fromisoformat(text)
     except ValueError:
-        raise ValueError("El período debe tener un mes entre 01 y 12.") from None
+        raise ValueError(
+            "El período debe tener formato AAAAMM o fecha ISO YYYY-MM-DD."
+        ) from None
 
 
 def validate_period(value: date | str) -> str:

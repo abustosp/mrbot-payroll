@@ -353,3 +353,72 @@ def test_final_settlement_accepts_custom_rounding_policy() -> None:
 
     assert all(item.amount.as_tuple().exponent == 0 for item in result.items)
     assert result.total == Decimal("8976000")
+
+
+def test_sac_rejects_more_than_six_remunerations() -> None:
+    """B-28: seven monthly pays in the window inflate the SAC (+16,7 %)."""
+
+    with pytest.raises(SettlementInputError, match="at most 6"):
+        calculate_sac(
+            [Decimal("1000000")] * 7, PERIOD, months_worked=Decimal("6")
+        )
+
+
+def test_sac_rejects_effective_months_beyond_semester() -> None:
+    """B-28: accrual beyond the six months of a semester is rejected."""
+
+    with pytest.raises(SettlementInputError, match="exceeds"):
+        calculate_sac([Decimal("1000000")], PERIOD, months_worked=Decimal("7"))
+    with pytest.raises(SettlementInputError, match="exceeds"):
+        calculate_sac(
+            [Decimal("1000000")],
+            PERIOD,
+            months_worked=Decimal("6"),
+            days_worked=Decimal("15"),
+            days_base=Decimal("30"),
+        )
+
+
+def test_vacations_missing_plus_rate_warns_but_keeps_amounts() -> None:
+    """B-29: an omitted plus_rate liquidates zero plus with a warning."""
+
+    result = calculate_vacations(Decimal("750000"), Decimal("10"))
+
+    assert result.plus_rate == Decimal("0")
+    assert result.plus_amount == Decimal("0.00")
+    assert result.amount == Decimal("300000.00")
+    assert any("plus_rate" in warning for warning in result.warnings)
+
+
+def test_vacations_explicit_zero_plus_rate_does_not_warn() -> None:
+    """B-29: an explicit zero declares that no plus applies."""
+
+    result = calculate_vacations(Decimal("750000"), Decimal("10"), plus_rate=Decimal("0"))
+
+    assert result.warnings == []
+
+
+def test_vacations_sequential_rounding_is_pinned() -> None:
+    """B-34: current policy (base, plus, total) pinned pending D-6."""
+
+    result = calculate_vacations(
+        Decimal("1000"), Decimal("1"),
+        days_base=Decimal("30"), plus_rate=Decimal("0.10"),
+    )
+
+    assert result.base_amount == Decimal("33.33")
+    assert result.plus_amount == Decimal("3.33")
+    assert result.amount == Decimal("36.66")
+
+
+def test_settlement_period_accepts_aaaamm_like_the_provider() -> None:
+    """B-78: the same period string is valid in settlements and provider."""
+
+    from app.jurisdictions.argentina.validation import parse_period
+
+    result = calculate_sac(
+        [Decimal("1000000")], "202606", months_worked=Decimal("6")
+    )
+
+    assert result.period == date(2026, 6, 1)
+    assert parse_period("202606") == result.period

@@ -23,8 +23,6 @@ from app.database.models import User
 
 router = APIRouter(prefix="/settlements", tags=["settlements"])
 
-ZERO = Decimal("0")
-
 
 class _ResponseModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -66,8 +64,10 @@ class VacationInput(BaseModel):
         gt=0,
         description="Días base para el valor diario.",
     )
-    plus_rate: Decimal = Field(
-        default=ZERO,
+    # B-29: omitido (None) liquida plus 0 con aviso en warnings; 0 explícito
+    # declara que no corresponde plus (el default por CCT sigue en D-6).
+    plus_rate: Decimal | None = Field(
+        default=None,
         ge=0,
         description="Plus como fracción del importe base (0.20 = 20 %).",
     )
@@ -156,6 +156,7 @@ class VacationResponse(_ResponseModel):
     plus_amount: Decimal
     amount: Decimal
     trace: list[str]
+    warnings: list[str] = []
 
 
 class SettlementItemResponse(_ResponseModel):

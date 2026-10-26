@@ -124,3 +124,13 @@ def test_if_comparisons_and_boolean_operators():
     }
     result = evaluate_expression(expression, FormulaContext(variables={"cantidad": "3"}))
     assert result.value == Decimal("10")
+
+
+def test_evaluator_rejects_excessive_depth():
+    """B-33: evaluation of a 600-deep tree fails as FormulaError, not RecursionError."""
+
+    expression: object = {"constant": "1"}
+    for _ in range(600):
+        expression = {"operator": "add", "arguments": [expression, {"constant": "1"}]}
+    with pytest.raises(FormulaError, match="maximum nesting depth"):
+        evaluate_expression(expression, FormulaContext())

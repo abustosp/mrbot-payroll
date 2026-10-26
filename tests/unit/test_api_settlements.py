@@ -198,3 +198,28 @@ def test_endpoints_require_authentication(api_client: TestClient) -> None:
     for response in responses:
         assert response.status_code == 401, response.text
         assert response.json()["detail"] == "Autenticación requerida"
+
+
+def test_vacations_without_plus_rate_warns(api_client: TestClient) -> None:
+    """B-29: omitted plus_rate liquidates zero plus with a warning."""
+
+    payload = {key: value for key, value in VACATION_PAYLOAD.items() if key != "plus_rate"}
+
+    response = api_client.post("/api/v1/settlements/vacations", json=payload)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["plus_rate"] == "0"
+    assert body["plus_amount"] == "0.00"
+    assert any("plus_rate" in warning for warning in body["warnings"])
+
+
+def test_sac_with_seven_remunerations_is_rejected(api_client: TestClient) -> None:
+    """B-28: a seven-pay window inflates the SAC and is rejected."""
+
+    payload = {**SAC_PAYLOAD, "remunerations": ["1000000"] * 7}
+
+    response = api_client.post("/api/v1/settlements/sac", json=payload)
+
+    assert response.status_code == 422, response.text
+    assert "at most 6" in response.json()["detail"]

@@ -46,6 +46,9 @@ _OPERATORS = {
     "and", "or", "not", "coalesce",
 }
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+# B-33: nesting cap so a crafted JSON tree cannot exhaust the call stack
+# (validation reports it as a domain error instead of a 500/RecursionError).
+MAX_DSL_DEPTH = 50
 _ARITY = {
     "add": (2, None),
     "subtract": (2, 2),
@@ -129,7 +132,11 @@ class _Evaluator:
         self.context = context
         self.trace: list[str] = []
 
-    def evaluate(self, expression: Any, path: str = "$") -> Any:
+    def evaluate(self, expression: Any, path: str = "$", _depth: int = 0) -> Any:
+        if _depth > MAX_DSL_DEPTH:
+            raise FormulaError(
+                f"{path}: formula exceeds the maximum nesting depth of {MAX_DSL_DEPTH}"
+            )
         if isinstance(expression, bool):
             return expression
         if isinstance(expression, (Decimal, int)):
@@ -162,29 +169,30 @@ class _Evaluator:
             _check_arity(name, len(arguments))
             # Boolean operators and if only evaluate the branches needed for the result.
             operator_result: Any
+            child = _depth + 1
             if name == "if":
-                test = _boolean(self.evaluate(arguments[0], f"{path}.arguments[0]"), "if condition")
-                operator_result = self.evaluate(arguments[1 if test else 2], f"{path}.arguments[{1 if test else 2}]")
+                test = _boolean(self.evaluate(arguments[0], f"{path}.arguments[0]", child), "if condition")
+                operator_result = self.evaluate(arguments[1 if test else 2], f"{path}.arguments[{1 if test else 2}]", child)
             elif name == "and":
                 operator_result = True
                 for index, argument in enumerate(arguments):
-                    if not _boolean(self.evaluate(argument, f"{path}.arguments[{index}]"), "and argument"):
+                    if not _boolean(self.evaluate(argument, f"{path}.arguments[{index}]", child), "and argument"):
                         operator_result = False
                         break
             elif name == "or":
                 operator_result = False
                 for index, argument in enumerate(arguments):
-                    if _boolean(self.evaluate(argument, f"{path}.arguments[{index}]"), "or argument"):
+                    if _boolean(self.evaluate(argument, f"{path}.arguments[{index}]", child), "or argument"):
                         operator_result = True
                         break
             elif name == "coalesce":
                 operator_result = None
                 for index, argument in enumerate(arguments):
-                    operator_result = self.evaluate(argument, f"{path}.arguments[{index}]")
+                    operator_result = self.evaluate(argument, f"{path}.arguments[{index}]", child)
                     if operator_result is not None:
                         break
             else:
-                values = [self.evaluate(arg, f"{path}.arguments[{index}]") for index, arg in enumerate(arguments)]
+                values = [self.evaluate(arg, f"{path}.arguments[{index}]", child) for index, arg in enumerate(arguments)]
                 operator_result = self._apply(name, values, path)
             self.trace.append(f"{name} = {_shown(operator_result)}")
             return operator_result
@@ -197,14 +205,14 @@ class _Evaluator:
             if not isinstance(arguments, list):
                 raise FormulaError(f"{path}: function arguments must be a list")
             if name in _OPERATORS:
-                result = self.evaluate({"operator": name, "arguments": arguments}, path)
+                result = self.evaluate({"operator": name, "arguments": arguments}, path, _depth + 1)
                 self.trace.append(f"function {name} = {_shown(result)}")
                 return result
             else:
                 function = self.context.functions.get(name)
                 if not callable(function):
                     raise FormulaError(f"{path}: unknown function {name!r}; register it by name in FormulaContext.functions")
-                values = [self.evaluate(arg, f"{path}.arguments[{index}]") for index, arg in enumerate(arguments)]
+                values = [self.evaluate(arg, f"{path}.arguments[{index}]", _depth + 1) for index, arg in enumerate(arguments)]
                 numeric_values = [_numeric(value, f"argument to function {name!r}") for value in values]
                 try:
                     result = function(*numeric_values)
@@ -303,22 +311,25 @@ def _decimal_places(value: Decimal, path: str) -> int:
 
 
 def _concept_dependencies(expression: Any) -> set[str]:
+    # Iterative (B-33): dependency scanning must not exhaust the call stack on
+    # deeply nested trees; depth itself is rejected by validation/evaluation.
     dependencies: set[str] = set()
-    if isinstance(expression, dict):
-        if set(expression) == {"concept"} and isinstance(expression["concept"], str):
-            dependencies.add(expression["concept"])
-        # The calculator exposes every computed concept as a variable alias
-        # (concept_<code>/concepto_<code>), so a {"variable": "concept_X"}
-        # reference is a dependency on X and must order the calculation.
-        if set(expression) == {"variable"} and isinstance(expression["variable"], str):
-            alias_of = _concept_alias_target(expression["variable"])
-            if alias_of is not None:
-                dependencies.add(alias_of)
-        for value in expression.values():
-            dependencies.update(_concept_dependencies(value))
-    elif isinstance(expression, list):
-        for value in expression:
-            dependencies.update(_concept_dependencies(value))
+    stack: list[Any] = [expression]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if set(node) == {"concept"} and isinstance(node["concept"], str):
+                dependencies.add(node["concept"])
+            # The calculator exposes every computed concept as a variable alias
+            # (concept_<code>/concepto_<code>), so a {"variable": "concept_X"}
+            # reference is a dependency on X and must order the calculation.
+            if set(node) == {"variable"} and isinstance(node["variable"], str):
+                alias_of = _concept_alias_target(node["variable"])
+                if alias_of is not None:
+                    dependencies.add(alias_of)
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
     return dependencies
 
 

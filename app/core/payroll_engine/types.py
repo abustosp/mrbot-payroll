@@ -42,6 +42,11 @@ class FormulaDefinition(BaseModel):
 
     code: str
     description: str = ""
+    # B-26: optional agreement scope. ``None`` applies to every employee;
+    # otherwise the formula only runs for matching CCT/category (compared
+    # case-insensitively, matching the runtime aliasing).
+    agreement_code: str | None = None
+    category_code: str | None = None
     formula: dict[str, Any]
     conditions: list[dict[str, Any]] = Field(default_factory=list)
     rounding: RoundingPolicy = Field(default_factory=RoundingPolicy)
@@ -65,7 +70,15 @@ class FormulaDefinition(BaseModel):
 
 @dataclass(slots=True)
 class FormulaContext:
-    """All values available to a formula, already resolved for the period."""
+    """All values available to a formula, already resolved for the period.
+
+    B-77: what a formula can see. ``variables`` holds exact ``Decimal``
+    amounts (salary aliases, seniority, workday factor, category, period
+    parts, parameters and novelties, each under its exact/upper/lower
+    spellings). ``start_date``/``period`` are also present as ``date``
+    objects for traceability, but the DSL only accepts numbers and
+    booleans, so reading them raises a ``FormulaError`` by design.
+    """
 
     variables: Mapping[str, Any] = field(default_factory=dict)
     parameters: Mapping[str, Any] = field(default_factory=dict)
@@ -122,6 +135,9 @@ class PayrollResult:
     trace: list[str] = field(default_factory=list)
     # B-11: period novelty codes consumed by no formula (silently no-ops).
     unconsumed_novelties: list[str] = field(default_factory=list)
+    # B-31: caller-supplied parameter names shadowed by a base variable.
+    # The base value wins; the parameter value is never read.
+    shadowed_parameters: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -137,4 +153,5 @@ class PayrollResult:
             "employer_cost": str(self.employer_cost),
             "trace": list(self.trace),
             "unconsumed_novelties": list(self.unconsumed_novelties),
+            "shadowed_parameters": list(self.shadowed_parameters),
         }

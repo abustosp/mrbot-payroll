@@ -3,12 +3,30 @@
 The calculator is intentionally a thin orchestration layer:
 
 1. normalise employee, novelties and parameters;
-2. select definitions valid for the period and order them with the dependency resolver;
+2. select definitions valid for the period and the employee's agreement scope,
+   and order them with the dependency resolver;
 3. evaluate each definition with the DSL engine;
 4. classify concept natures and apply the closing identities.
 
 No legal percentages, caps or collective-agreement formulas live here.  Those are
 data supplied through formula definitions and parameters.
+
+B-77: what a formula can read. Every name below is exposed under its exact,
+upper and lower spellings. All values are exact ``Decimal`` except where noted:
+
+- salary: ``base_salary``/``basic_salary``/``salary``/``salario_basico``/
+  ``sueldo``/``basico``/``sueldo_basico``/``sueldo_básico``/``sueldo_basico_mensual``;
+- seniority: ``years_of_service``/``service_years``/``years``/``antiguedad``/
+  ``antigüedad`` (+ ``_anios`` variants), ``service_months``/``antiguedad_meses``,
+  ``service_days``/``antiguedad_dias``;
+- workday: ``workday_factor``/``jornada``/``factor_jornada``;
+- identity: ``agreement_category``/``categoria``, ``employee_id``/``legajo``,
+  ``period_year``/``period_month``/``period_day``;
+- every caller parameter and novelty (``<CODE>``/``novedad_<CODE>`` plus
+  ``_cantidad``/``_quantity``/``_importe``/``_amount`` suffixes);
+- ``start_date``/``period`` are present as ``date`` objects for traceability
+  but the DSL only accepts numbers and booleans, so reading them raises a
+  ``FormulaError`` by design.
 """
 
 from __future__ import annotations
@@ -69,6 +87,8 @@ class EmployeeData:
     start_date: date
     agreement_category: str | None = None
     workday_factor: Decimal = Decimal("1")
+    # B-26: CCT code (e.g. "130/75") used to filter agreement-scoped formulas.
+    agreement_code: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +96,7 @@ class EmployeeData:
             "base_salary": str(self.base_salary),
             "start_date": self.start_date,
             "agreement_category": self.agreement_category,
+            "agreement_code": self.agreement_code,
             "workday_factor": str(self.workday_factor),
         }
 
@@ -153,12 +174,16 @@ def _normalise_employee(
     )
     category = None if raw_category is None else str(raw_category).strip() or None
 
+    raw_agreement = _read(employee, ("agreement_code", "convenio", "cct"))
+    agreement = None if raw_agreement is None else str(raw_agreement).strip() or None
+
     return EmployeeData(
         id=str(raw_id).strip(),
         base_salary=base_salary,
         start_date=start_date,
         agreement_category=category,
         workday_factor=workday_factor,
+        agreement_code=agreement,
     )
 
 
@@ -270,10 +295,37 @@ def _normalise_parameters(parameters: Mapping[str, Any] | None) -> dict[str, Any
     return result
 
 
+def _definition_applies(
+    definition: FormulaDefinition,
+    *,
+    agreement_code: str | None,
+    category: str | None,
+) -> str | None:
+    """Return the skip reason when a scoped formula does not match, else ``None``.
+
+    B-26: unscoped definitions apply to every employee. Scoped ones match
+    case-insensitively; an employee with unknown scope never matches a scoped
+    formula (fail-closed: a CCT-specific rule must not leak to another CCT).
+    """
+
+    want_agreement = (definition.agreement_code or "").strip()
+    if want_agreement:
+        if (agreement_code or "").strip().casefold() != want_agreement.casefold():
+            return f"agreement scope {want_agreement!r} does not match employee"
+    want_category = (definition.category_code or "").strip()
+    if want_category:
+        if (category or "").strip().casefold() != want_category.casefold():
+            return f"category scope {want_category!r} does not match employee"
+    return None
+
+
 def _select_definitions(
     definitions: Iterable[FormulaDefinition],
     period: date,
     trace: list[str],
+    *,
+    agreement_code: str | None = None,
+    category: str | None = None,
 ) -> list[FormulaDefinition]:
     selected: list[FormulaDefinition] = []
     by_code: dict[str, FormulaDefinition] = {}
@@ -289,6 +341,12 @@ def _select_definitions(
             continue
         if definition.valid_to is not None and period > definition.valid_to:
             trace.append(f"skipped {definition.code}: not valid until {definition.valid_to}")
+            continue
+        scope_miss = _definition_applies(
+            definition, agreement_code=agreement_code, category=category
+        )
+        if scope_miss is not None:
+            trace.append(f"skipped {definition.code}: {scope_miss}")
             continue
         if definition.code in by_code:
             raise PayrollCalculationError(
@@ -351,23 +409,23 @@ def _referenced_variable_names(
     """Collect every variable/condition-field name the definitions can read."""
     names: set[str] = set()
 
-    def visit(node: Any) -> None:
+    # Iterative (B-33): name scanning must not exhaust the call stack on
+    # deeply nested trees; depth itself is rejected by validation/evaluation.
+    stack: list[Any] = []
+    for definition in definitions:
+        stack.append(definition.formula)
+        stack.extend(definition.conditions)
+    while stack:
+        node = stack.pop()
         if isinstance(node, dict):
             if set(node) == {"variable"} and isinstance(node["variable"], str):
                 names.add(node["variable"])
             field = node.get("field")
             if isinstance(field, str) and set(node) <= {"field", "operator", "value"}:
                 names.add(field)
-            for value in node.values():
-                visit(value)
+            stack.extend(node.values())
         elif isinstance(node, list):
-            for value in node:
-                visit(value)
-
-    for definition in definitions:
-        visit(definition.formula)
-        for condition in definition.conditions:
-            visit(condition)
+            stack.extend(node)
     return names
 
 
@@ -447,7 +505,13 @@ def calculate_payroll(
         f"employee={data.id} period={period.isoformat()}",
     ]
 
-    selected = _select_definitions(definitions, period, trace)
+    selected = _select_definitions(
+        definitions,
+        period,
+        trace,
+        agreement_code=data.agreement_code,
+        category=data.agreement_category,
+    )
     ordered = _ordered_definitions(selected)
     trace.append("calculation order: " + ", ".join(item.code for item in ordered))
 
@@ -455,6 +519,12 @@ def calculate_payroll(
     aggregated_novelties = aggregate_novelties(novelties)
 
     variables: dict[str, Any] = _base_variables(data, period)
+    # B-31: a parameter colliding with a base variable does not override it
+    # (the base value wins below for ``{"variable"}``/``{"field"}`` reads;
+    # only explicit ``{"parameter"}`` nodes see the parameter value).
+    # It is reported instead of silently ignored.
+    base_names = {name.casefold() for name in variables}
+    shadowed_parameters = [name for name in params if name.casefold() in base_names]
     # Parameters are also exposed as variables so conditions written with the
     # ``{"field": ...}`` shorthand (see plan.md section 6.2) can reference them.
     # Explicit ``{"parameter": ...}`` nodes keep working through FormulaContext.
@@ -553,6 +623,10 @@ def calculate_payroll(
         ]
     )
     trace.extend(f"unconsumed novelty: {code}" for code in unconsumed_novelties)
+    trace.extend(
+        f"shadowed parameter: {name!r} collides with a base variable (base value wins)"
+        for name in shadowed_parameters
+    )
 
     return PayrollResult(
         employee_id=data.id,
@@ -567,6 +641,7 @@ def calculate_payroll(
         employer_cost=employer_cost,
         trace=trace,
         unconsumed_novelties=unconsumed_novelties,
+        shadowed_parameters=shadowed_parameters,
     )
 
 

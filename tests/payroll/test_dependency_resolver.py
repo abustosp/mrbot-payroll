@@ -44,3 +44,30 @@ def test_resolve_dependencies_reports_missing_concept_variable_alias():
     ]
     with pytest.raises(DependencyError, match="missing formula dependency.*FANTASMA"):
         resolve_dependencies(definitions)
+
+
+def test_resolve_dependencies_ignores_case():
+    """B-32: the resolver matches the runtime, which aliases every code."""
+
+    definitions = [
+        FormulaDefinition(code="SUELDO_BASICO", formula={"constant": "1000"}),
+        FormulaDefinition(
+            code="ANTIGUEDAD",
+            formula={
+                "operator": "multiply",
+                "arguments": [{"concept": "sueldo_basico"}, {"constant": "2"}],
+            },
+        ),
+    ]
+    assert resolve_dependencies(definitions) == ["SUELDO_BASICO", "ANTIGUEDAD"]
+
+
+def test_resolve_dependencies_rejects_case_colliding_codes():
+    """B-32: two codes differing only by case cannot both exist."""
+
+    definitions = [
+        FormulaDefinition(code="Sueldo", formula={"constant": "1"}),
+        FormulaDefinition(code="SUELDO", formula={"constant": "2"}),
+    ]
+    with pytest.raises(DependencyError, match="ignoring case"):
+        resolve_dependencies(definitions)

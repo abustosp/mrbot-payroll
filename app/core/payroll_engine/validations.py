@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -11,6 +12,7 @@ from app.core.payroll_engine.formula_engine import (
     _ARITY,
     _IDENTIFIER,
     _OPERATORS,
+    MAX_DSL_DEPTH,
     FormulaError,
     _concept_dependencies,
     _normalize_condition,
@@ -34,12 +36,34 @@ def _input_kind(value: Any) -> str:
     return "number"
 
 
+def _lookup(values: Mapping[str, Any], name: str) -> Any:
+    """Find an input by exact name, falling back to a case-insensitive match.
+
+    B-32: the runtime exposes every variable, parameter and concept under its
+    exact, upper and lower spellings, so validation accepts the same spellings.
+    """
+
+    if name in values:
+        return values[name]
+    wanted = name.casefold()
+    for key, value in values.items():
+        if key.casefold() == wanted:
+            return value
+    raise KeyError(name)
+
+
 def _validate_node(
     expression: Any,
     path: str,
     errors: list[str],
     context: FormulaContext | None,
+    _depth: int = 0,
 ) -> str:
+    if _depth > MAX_DSL_DEPTH:
+        errors.append(
+            f"{path}: formula exceeds the maximum nesting depth of {MAX_DSL_DEPTH}"
+        )
+        return "unknown"
     if isinstance(expression, bool):
         return "boolean"
     if isinstance(expression, (int, Decimal)):
@@ -70,11 +94,13 @@ def _validate_node(
                 "parameter": context.parameters,
                 "concept": context.concepts,
             }[key]
-            if payload not in values:
+            try:
+                known = _lookup(values, payload)
+            except KeyError:
                 errors.append(f"{path}: missing {key} {payload!r}")
                 return "unknown"
             try:
-                return _input_kind(values[payload])
+                return _input_kind(known)
             except ValueError as exc:
                 errors.append(f"{path}: invalid {key} {payload!r}: {exc}")
                 return "unknown"
@@ -94,7 +120,7 @@ def _validate_node(
             errors.append(f"{path}: unknown operator {name!r}")
             if isinstance(arguments, list):
                 for index, argument in enumerate(arguments):
-                    _validate_node(argument, f"{path}.arguments[{index}]", errors, context)
+                    _validate_node(argument, f"{path}.arguments[{index}]", errors, context, _depth + 1)
             else:
                 errors.append(f"{path}: operator arguments must be a list")
             return "unknown"
@@ -108,7 +134,7 @@ def _validate_node(
             )
             errors.append(f"{path}: operator {name!r} expects {wanted} argument(s), got {len(arguments)}")
         kinds = [
-            _validate_node(argument, f"{path}.arguments[{index}]", errors, context)
+            _validate_node(argument, f"{path}.arguments[{index}]", errors, context, _depth + 1)
             for index, argument in enumerate(arguments)
         ]
         if name in _NUMERIC_OPERATORS:
@@ -158,11 +184,11 @@ def _validate_node(
             errors.append(f"{path}: function arguments must be a list")
             return "unknown"
         if name in _OPERATORS:
-            return _validate_node({"operator": name, "arguments": arguments}, path, errors, context)
+            return _validate_node({"operator": name, "arguments": arguments}, path, errors, context, _depth + 1)
         if context is None or not callable(context.functions.get(name)):
             errors.append(f"{path}: unknown function {name!r}")
         kinds = [
-            _validate_node(argument, f"{path}.arguments[{index}]", errors, context)
+            _validate_node(argument, f"{path}.arguments[{index}]", errors, context, _depth + 1)
             for index, argument in enumerate(arguments)
         ]
         for index, kind in enumerate(kinds):

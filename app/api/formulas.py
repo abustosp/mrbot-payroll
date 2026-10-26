@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,9 @@ from app.core.payroll_engine.types import FormulaContext
 from app.core.payroll_engine.types import FormulaDefinition as FormulaContract
 from app.core.payroll_engine.validations import validate_formula as validate_formula_dsl
 from app.database.models import (
+    AgreementCategory,
     AuditLog,
+    CollectiveAgreement,
     FormulaDefinition,
     FormulaVersion,
     NormativeParameter,
@@ -41,7 +44,9 @@ def latest_version(db: Session, formula: FormulaDefinition) -> FormulaVersion:
     return version
 
 
-def formula_output(formula: FormulaDefinition, version: FormulaVersion) -> FormulaRead:
+def formula_output(
+    formula: FormulaDefinition, version: FormulaVersion, warnings: list[str] | None = None,
+) -> FormulaRead:
     return FormulaRead(
         id=formula.id,
         code=formula.code,
@@ -54,6 +59,7 @@ def formula_output(formula: FormulaDefinition, version: FormulaVersion) -> Formu
         status=version.status,
         valid_from=version.valid_from,
         valid_to=version.valid_to,
+        warnings=list(warnings or []),
     )
 
 
@@ -198,10 +204,33 @@ def create_formula(
         valid_to=payload.valid_to,
     )
     db.add(version)
+    try:
+        candidate: dict[str, Any] = {
+            "code": row.code,
+            "description": row.description,
+            "formula": payload.formula,
+            "conditions": list(payload.conditions),
+            "depends_on": list(payload.depends_on),
+            "valid_from": payload.valid_from,
+            "valid_to": payload.valid_to,
+        }
+        if payload.rounding is not None:
+            candidate["rounding"] = payload.rounding.model_dump(mode="json")
+        definition = FormulaContract.model_validate(candidate)
+        context, definitions = _validation_context(
+            db,
+            user.organization_id,
+            candidate_code=row.code,
+            valid_from=payload.valid_from,
+            valid_to=payload.valid_to,
+        )
+        warnings = validate_formula_dsl(definition, context, definitions)
+    except ValueError as exc:
+        warnings = [f"DSL inválido: {exc}"]
     commit_or_conflict(db)
     db.refresh(row)
     db.refresh(version)
-    return formula_output(row, version)
+    return formula_output(row, version, warnings=warnings)
 
 
 def _validated_fields(
@@ -347,6 +376,56 @@ def validate_formula(
     version.status = "VALIDATED"
     commit_or_conflict(db)
     return formula_output(row, version)
+
+
+class FormulaScopeInput(BaseModel):
+    """Agreement scope for a formula (B-26; kept here, not in schemas.py).
+
+    ``None`` clears the scope (the formula applies to every employee).
+    """
+
+    agreement_code: str | None = None
+    category_code: str | None = None
+
+
+@router.patch("/{formula_id}/scope", response_model=FormulaRead)
+def set_formula_scope(
+    formula_id: int,
+    payload: FormulaScopeInput,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "editor")),
+):
+    """Scope a formula to one CCT/category so multi-CCT payrolls apply it
+    only to matching employees (B-26). Unscoped formulas apply to everyone.
+    Unknown agreement/category codes are rejected with 422."""
+
+    row = get_scoped(db, FormulaDefinition, formula_id, user.organization_id)
+    agreement = (payload.agreement_code or "").strip() or None
+    category = (payload.category_code or "").strip() or None
+    if agreement is not None and (
+        db.scalar(
+            select(CollectiveAgreement.id).where(CollectiveAgreement.code == agreement)
+        )
+        is None
+    ):
+        raise HTTPException(status_code=422, detail=f"Convenio {agreement!r} inexistente")
+    if category is not None:
+        statement = select(AgreementCategory.id).where(AgreementCategory.code == category)
+        if agreement is not None:
+            statement = statement.where(
+                AgreementCategory.agreement_id.in_(
+                    select(CollectiveAgreement.id).where(
+                        CollectiveAgreement.code == agreement
+                    )
+                )
+            )
+        if db.scalar(statement) is None:
+            raise HTTPException(status_code=422, detail=f"Categoría {category!r} inexistente")
+    row.agreement_code = agreement
+    row.category_code = category
+    commit_or_conflict(db)
+    db.refresh(row)
+    return formula_output(row, latest_version(db, row))
 
 
 @router.post("/{formula_id}/approve", response_model=FormulaRead)

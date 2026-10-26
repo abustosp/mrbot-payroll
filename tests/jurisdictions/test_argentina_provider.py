@@ -112,6 +112,15 @@ def test_cuit_cuil_checksum_and_period_validation() -> None:
         parse_period("202613")
 
 
+def test_parse_period_accepts_iso_dates_like_settlements() -> None:
+    """B-78: AAAAMM, ISO dates and dates share one parser."""
+
+    assert parse_period("2026-06-15") == date(2026, 6, 15)
+    assert parse_period(date(2026, 6, 15)) == date(2026, 6, 1)
+    with pytest.raises(ValueError, match="AAAAMM o fecha ISO"):
+        parse_period("junio-2026")
+
+
 def _approved_provider() -> ArgentinaProvider:
     from app.core.normative.parameters import ParameterStatus
     from app.jurisdictions.argentina.provider import (

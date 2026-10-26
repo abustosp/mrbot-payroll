@@ -202,6 +202,9 @@ class FormulaDefinition(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str] = mapped_column(String(240), default="", nullable=False)
+    # B-26: optional agreement scope (CCT code + category code, NULL = all).
+    agreement_code: Mapped[str | None] = mapped_column(String(40))
+    category_code: Mapped[str | None] = mapped_column(String(40))
     current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 

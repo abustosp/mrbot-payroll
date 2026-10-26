@@ -30,3 +30,34 @@ def test_validate_formula_finds_dependency_cycle():
     definition = FormulaDefinition(code="A", formula={"concept": "A"})
     errors = validate_formula(definition)
     assert any("circular formula dependency" in error for error in errors)
+
+
+def test_validate_formula_accepts_case_insensitive_references():
+    """B-32: validation accepts the same spellings the runtime resolves."""
+
+    definition = FormulaDefinition(
+        code="ANTIGUEDAD",
+        formula={
+            "operator": "multiply",
+            "arguments": [{"concept": "sueldo_basico"}, {"constant": "2"}],
+        },
+    )
+    context = FormulaContext(
+        variables={"SUELDO_BASICO": 1000},
+        parameters={"Tasa": 2},
+        concepts={"SUELDO_BASICO": 1000},
+    )
+    assert validate_formula(definition, context) == []
+
+
+def test_validate_formula_rejects_excessive_depth():
+    """B-33: a 600-deep tree is a domain error, never a RecursionError."""
+
+    expression: object = {"constant": "1"}
+    for _ in range(600):
+        expression = {"operator": "add", "arguments": [expression, {"constant": "1"}]}
+    definition = FormulaDefinition(code="DEEP", formula=expression)
+
+    errors = validate_formula(definition)
+
+    assert any("maximum nesting depth" in error for error in errors)

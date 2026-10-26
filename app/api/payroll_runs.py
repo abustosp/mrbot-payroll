@@ -59,12 +59,28 @@ def get_payroll_run(run_id: int, db: Session = Depends(get_db), user: User = Dep
 @router.post("/{run_id}/calculate")
 def calculate_run(
     run_id: int,
+    include_items: bool = Query(
+        default=True, description="Incluir el detalle por empleado en la respuesta.",
+    ),
+    results_limit: int | None = Query(
+        default=None, ge=1, le=500, description="Ventana de detalle paginado.",
+    ),
+    results_offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "editor")),
 ):
+    """Calculate the run. B-36: the summary is always complete; the detail is
+    paginated with ``include_items``/``results_limit``/``results_offset``."""
+
     row = get_scoped(db, PayrollRun, run_id, user.organization_id)
     try:
-        result = calculate_payroll_run(db, row)
+        result = calculate_payroll_run(
+            db,
+            row,
+            include_items=include_items,
+            results_limit=results_limit,
+            results_offset=results_offset,
+        )
     except PayrollRunStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     commit_or_conflict(db)

@@ -7,13 +7,14 @@ import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.payroll_engine.calculator import calculate_payroll
+from app.core.payroll_engine.calculator import _definition_applies, calculate_payroll
 from app.core.payroll_engine.types import (
     ConceptNature,
     FormulaStatus,
+    RoundingMode,
     RoundingPolicy,
 )
 from app.core.payroll_engine.types import (
@@ -33,6 +34,7 @@ from app.database.models import (
     PayrollResult,
     PayrollRun,
     PayrollTrace,
+    Ruleset,
     SalaryScale,
 )
 
@@ -226,6 +228,10 @@ def _definitions_for_employee(
                 status=FormulaStatus(version.status),
                 version=version.version,
                 source=f"formula_version:{version.id}",
+                # B-26: agreement scope travels with the definition so the
+                # calculator filters per employee before evaluating.
+                agreement_code=formula.agreement_code,
+                category_code=formula.category_code,
             )
         )
     if not definitions:
@@ -233,12 +239,78 @@ def _definitions_for_employee(
     return definitions
 
 
-def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
+def _snapshot_ruleset(
+    db: Session,
+    run: PayrollRun,
+    formulas: list[tuple[FormulaDefinition, FormulaVersion]],
+    parameters: dict[str, Decimal],
+    inputs_hash: str,
+    period: date,
+) -> Ruleset:
+    """Persist an immutable snapshot of the normative package applied (B-27).
+
+    A new ``Ruleset`` row is inserted on every calculation; rows are never
+    updated, so reliquidating an old period with rewritten rules cannot
+    silently change history — the run keeps pointing at its sealed package.
+    """
+
+    snapshot = {
+        "run_id": run.id,
+        "period": period.isoformat(),
+        "inputs_hash": inputs_hash,
+        "formulas": [
+            {
+                "formula_id": formula.id,
+                "code": formula.code,
+                "version_id": version.id,
+                "version": version.version,
+                "expression": version.expression,
+                "conditions": version.conditions,
+                "depends_on": version.depends_on,
+                "rounding": version.rounding,
+                "agreement_code": formula.agreement_code,
+                "category_code": formula.category_code,
+                "valid_from": version.valid_from.isoformat(),
+                "valid_to": version.valid_to.isoformat() if version.valid_to else None,
+                "status": version.status,
+            }
+            for formula, version in formulas
+        ],
+        "parameters": {code: str(value) for code, value in parameters.items()},
+    }
+    # Shared code with a global version sequence (run codes can fill the
+    # 80-char column; the run links back through run.ruleset_id).
+    code = "payroll-run"
+    latest = db.scalar(select(func.max(Ruleset.version)).where(Ruleset.code == code))
+    ruleset = Ruleset(
+        code=code,
+        version=(latest or 0) + 1,
+        status="APPROVED",
+        rules=snapshot,
+    )
+    db.add(ruleset)
+    db.flush()
+    return ruleset
+
+
+def calculate_payroll_run(
+    db: Session,
+    run: PayrollRun,
+    *,
+    include_items: bool = True,
+    results_limit: int | None = None,
+    results_offset: int = 0,
+) -> dict:
     """Calculate eligible employees and replace all results already stored for ``run``.
 
     The VALIDATING state is committed before calculating, so callers must not
     hold an explicit transaction across this call. Final results are flushed;
     the caller commits them (or rolls back on error).
+
+    B-36: ``include_items``/``results_limit``/``results_offset`` paginate the
+    per-employee detail in the response. The summary (totals over every
+    calculated employee) is always complete; every result row is still
+    persisted regardless of the window.
     """
     if run.status not in {"DRAFT", "CALCULATED", "IN_REVIEW", "ERROR"}:
         raise PayrollRunStateError(
@@ -261,7 +333,13 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
     db.flush()
     db.commit()
     try:
-        return _run_calculation(db, run)
+        return _run_calculation(
+            db,
+            run,
+            include_items=include_items,
+            results_limit=results_limit,
+            results_offset=results_offset,
+        )
     except Exception:
         # Un cálculo fallido queda reintentable en vez de atascado en VALIDATING.
         db.rollback()
@@ -271,7 +349,14 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
         raise
 
 
-def _run_calculation(db: Session, run: PayrollRun) -> dict:
+def _run_calculation(
+    db: Session,
+    run: PayrollRun,
+    *,
+    include_items: bool = True,
+    results_limit: int | None = None,
+    results_offset: int = 0,
+) -> dict:
     """Heavy body of :func:`calculate_payroll_run` (run is already VALIDATING)."""
 
     period = run.period_end
@@ -285,6 +370,37 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
         )
     ).all()
     concepts = {concept.code: concept for concept in concept_rows}
+    # B-35: definitions are identical for every employee, so they are built
+    # once (B-26 scope filtering per employee below is a cheap list filter).
+    # A missing concept or an empty formula set keeps the historical
+    # per-employee error channel instead of aborting the whole run.
+    base_definitions: list[FormulaContract] | None
+    definitions_error = ""
+    try:
+        base_definitions = _definitions_for_employee(formulas, concepts)
+    except ValueError as exc:
+        base_definitions = None
+        definitions_error = str(exc)
+
+    # B-79: payslip formulas use decimals=2 HALF_UP; anything else (notably
+    # decimals=0, off by up to $0.50 per concept) is warned, never coerced.
+    rounding_warnings: list[dict[str, str | int]] = []
+    if base_definitions is not None:
+        for scoped in base_definitions:
+            if (
+                scoped.rounding.decimals != 2
+                or scoped.rounding.mode != RoundingMode.HALF_UP
+            ):
+                rounding_warnings.append({
+                    "type": "rounding_policy",
+                    "code": scoped.code,
+                    "message": (
+                        f"La fórmula {scoped.code} redondea con "
+                        f"decimals={scoped.rounding.decimals} "
+                        f"mode={scoped.rounding.mode}; los recibos usan "
+                        "decimals=2 HALF_UP (floor/ceil solo si la norma lo exige)."
+                    ),
+                })
 
     employees = db.scalars(
         select(Employee)
@@ -339,11 +455,63 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
     novelties_by_employee = _novelties_for_employees(
         db, run.organization_id, employee_ids, period
     )
+    # B-35: categories, scales and agreement codes are preloaded with one
+    # query each instead of one query per employee (N+1).
+    category_ids = {
+        contract_row.category_id
+        for contract_list in contracts_by_employee.values()
+        for contract_row in contract_list
+        if contract_row.category_id is not None
+    }
+    categories = (
+        {
+            category.id: category
+            for category in db.scalars(
+                select(AgreementCategory).where(AgreementCategory.id.in_(category_ids))
+            ).all()
+        }
+        if category_ids
+        else {}
+    )
+    scales_by_category: dict[int, list[SalaryScale]] = {}
+    if category_ids:
+        for scale_row in db.scalars(
+            select(SalaryScale).where(
+                SalaryScale.category_id.in_(category_ids),
+                SalaryScale.valid_from <= period,
+                or_(SalaryScale.valid_to.is_(None), SalaryScale.valid_to >= period),
+            )
+        ).all():
+            scales_by_category.setdefault(scale_row.category_id, []).append(scale_row)
+        for group in scales_by_category.values():
+            group.sort(key=lambda item: item.valid_from, reverse=True)
+    agreement_ids = {
+        contract_row.agreement_id
+        for contract_list in contracts_by_employee.values()
+        for contract_row in contract_list
+        if contract_row.agreement_id is not None
+    }
+    agreement_codes = (
+        dict(
+            db.execute(
+                select(CollectiveAgreement.id, CollectiveAgreement.code).where(
+                    CollectiveAgreement.id.in_(sorted(agreement_ids))
+                )
+            ).all()
+        )
+        if agreement_ids
+        else {}
+    )
 
     results: list[dict] = []
     errors: list[dict[str, str | int]] = []
-    warnings: list[dict[str, str | int]] = []
+    warnings: list[dict[str, str | int]] = list(rounding_warnings)
     input_employees: list[dict] = []
+    # B-36: summary accumulators stay complete when the detail is paginated.
+    calculated_total = 0
+    gross_total = Decimal("0")
+    net_total = Decimal("0")
+    result_hashes: list[str] = []
     for candidate in omitted:
         errors.append({
             "employee_id": candidate.id,
@@ -376,16 +544,11 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
         scale = None
         category = None
         if contract.category_id is not None:
-            category = db.get(AgreementCategory, contract.category_id)
-            scales = db.scalars(
-                select(SalaryScale).where(
-                    SalaryScale.category_id == contract.category_id,
-                    SalaryScale.valid_from <= period,
-                    or_(SalaryScale.valid_to.is_(None), SalaryScale.valid_to >= period),
-                ).order_by(SalaryScale.valid_from.desc())
-            ).all()
-            if len(scales) == 1:
-                scale = scales[0]
+            category = categories.get(contract.category_id)
+            candidate_scales = scales_by_category.get(contract.category_id, [])
+            if len(candidate_scales) == 1:
+                scale = candidate_scales[0]
+        agreement_code = agreement_codes.get(contract.agreement_id or -1)
         base_salary = (
             contract.monthly_salary
             if contract.monthly_salary is not None
@@ -422,13 +585,31 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
                 raise ValueError("El contrato no tiene una categoría vigente configurada.")
             if base_salary is None:
                 raise ValueError(f"No hay una escala salarial única vigente para {category.code}.")
-            definitions = _definitions_for_employee(formulas, concepts)
+            if base_definitions is None:
+                raise ValueError(definitions_error)
+            # B-26: agreement-scoped formulas only run for matching employees.
+            definitions = [
+                definition
+                for definition in base_definitions
+                if _definition_applies(
+                    definition,
+                    agreement_code=agreement_code,
+                    category=category.code,
+                )
+                is None
+            ]
+            if not definitions:
+                raise ValueError(
+                    "No hay fórmulas aplicables al convenio/categoría del empleado "
+                    "para el período."
+                )
             calculated = calculate_payroll(
                 {
                     "id": employee.id,
                     "base_salary": base_salary,
                     "start_date": employee.hire_date or contract.valid_from,
                     "agreement_category": category.code,
+                    "agreement_code": agreement_code,
                 },
                 period,
                 definitions,
@@ -458,6 +639,7 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
             continue
 
         serialized = calculated.to_dict()
+        row_hash = _digest(serialized)
         # B-11: novelties consumed by no formula are reported, not silenced.
         for code in calculated.unconsumed_novelties:
             warnings.append({
@@ -468,6 +650,18 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
                 "message": (
                     f"La novedad {code} del período no fue consumida "
                     "por ninguna fórmula."
+                ),
+            })
+        # B-31: parameters shadowed by a base variable are reported too.
+        for name in calculated.shadowed_parameters:
+            warnings.append({
+                "type": "parameter_shadowed",
+                "employee_id": employee.id,
+                "employee_code": employee.employee_code,
+                "code": name,
+                "message": (
+                    f"El parámetro {name} colisiona con una variable base "
+                    "y no la sobrescribe (vale la base)."
                 ),
             })
         result = PayrollResult(
@@ -481,7 +675,7 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
             net=calculated.net,
             employer_cost=calculated.employer_cost,
             calculated_at=datetime.now(UTC),
-            results_hash=_digest(serialized),
+            results_hash=row_hash,
         )
         db.add(result)
         db.flush()
@@ -510,19 +704,31 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
                 "lines": calculated.trace,
             },
         ))
-        results.append({
-            "id": result.id,
-            "employee_id": employee.id,
-            "remunerative": str(result.remunerative),
-            "non_remunerative": str(result.non_remunerative),
-            "deductions": str(result.deductions),
-            "contributions": str(result.contributions),
-            "gross": str(result.gross),
-            "net": str(result.net),
-            "employer_cost": str(result.employer_cost),
-            "items": [item.to_dict() for item in calculated.items],
-            "trace": calculated.trace,
-        })
+        # B-36: every row is persisted, but only the requested window is
+        # serialized into the response; totals below always cover everyone.
+        slot = calculated_total
+        calculated_total += 1
+        gross_total += calculated.gross
+        net_total += calculated.net
+        result_hashes.append(row_hash)
+        if (
+            include_items
+            and slot >= results_offset
+            and (results_limit is None or len(results) < results_limit)
+        ):
+            results.append({
+                "id": result.id,
+                "employee_id": employee.id,
+                "remunerative": str(result.remunerative),
+                "non_remunerative": str(result.non_remunerative),
+                "deductions": str(result.deductions),
+                "contributions": str(result.contributions),
+                "gross": str(result.gross),
+                "net": str(result.net),
+                "employer_cost": str(result.employer_cost),
+                "items": [item.to_dict() for item in calculated.items],
+                "trace": calculated.trace,
+            })
 
     inputs_hash = _digest({
         "run_id": run.id,
@@ -540,23 +746,19 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
     run.inputs_hash = inputs_hash
     # Gancho de cobertura por CCT: avisa (sin bloquear) cuando el período
     # excede la vigencia del catálogo o el estado no está vigente.
-    agreement_ids = {
-        contract_row.agreement_id
-        for contract_list in contracts_by_employee.values()
-        for contract_row in contract_list
-        if contract_row.agreement_id is not None
-    }
     if agreement_ids:
-        codes = db.scalars(
-            select(CollectiveAgreement.code).where(
-                CollectiveAgreement.id.in_(sorted(agreement_ids))
-            )
-        ).all()
         warnings.extend(
-            _cct_coverage_warnings(list(codes), _load_catalog_coverage(), period)
+            _cct_coverage_warnings(
+                sorted(set(agreement_codes.values())), _load_catalog_coverage(), period
+            )
         )
 
-    run.results_hash = _digest({"results": results, "errors": errors})
+    # B-27: seal the normative package applied and point the run at it.
+    ruleset = _snapshot_ruleset(db, run, formulas, parameters, inputs_hash, period)
+    run.ruleset_id = ruleset.id
+    # B-36: compact deterministic hash over the per-row hashes, so a paginated
+    # response carries the same run hash as the full one.
+    run.results_hash = _digest({"results": result_hashes, "errors": errors})
     run.status = "ERROR" if errors else "CALCULATED"
     db.flush()
 
@@ -565,16 +767,18 @@ def _run_calculation(db: Session, run: PayrollRun) -> dict:
         "status": run.status,
         "summary": {
             "employees_total": len(employees) + len(omitted),
-            "calculated": len(results),
+            "calculated": calculated_total,
             "errors": len(errors),
-            "gross": str(sum((Decimal(result["gross"]) for result in results), Decimal("0"))),
-            "net": str(sum((Decimal(result["net"]) for result in results), Decimal("0"))),
+            "gross": str(gross_total),
+            "net": str(net_total),
         },
         "results": results,
+        "results_total": calculated_total,
         "errors": errors,
         "warnings": warnings,
         "inputs_hash": inputs_hash,
         "results_hash": run.results_hash,
+        "ruleset_id": run.ruleset_id,
     }
 
 

@@ -49,22 +49,47 @@ def _find_cycle(graph: dict[str, set[str]]) -> list[str]:
     return []
 
 
-def resolve_dependencies(definitions: list[FormulaDefinition]) -> list[str]:
-    """Return formula codes in stable dependency-first order."""
-    by_code: dict[str, FormulaDefinition] = {}
-    for definition in definitions:
-        if definition.code in by_code:
-            raise DependencyError(f"duplicate formula code {definition.code!r}")
-        by_code[definition.code] = definition
+def _canonical(code: str) -> str:
+    """Case-insensitive comparison key (B-32: the runtime aliases every code)."""
 
-    graph = {code: _dependencies(definition) for code, definition in by_code.items()}
+    return code.casefold()
+
+
+def resolve_dependencies(definitions: list[FormulaDefinition]) -> list[str]:
+    """Return formula codes in stable dependency-first order.
+
+    Codes and dependencies match case-insensitively because the calculator
+    exposes every concept under its exact, upper and lower spellings.  Two
+    codes that only differ by case are rejected as duplicates.
+    """
+    by_canonical: dict[str, FormulaDefinition] = {}
+    for definition in definitions:
+        key = _canonical(definition.code)
+        if key in by_canonical:
+            raise DependencyError(
+                f"duplicate formula code {definition.code!r} "
+                f"(collides with {by_canonical[key].code!r} ignoring case)"
+            )
+        by_canonical[key] = definition
+
+    # Dependencies are reported with the spelling the author wrote, while the
+    # ordering below keeps the historical original-spelling alphabetical order.
+    raw: dict[str, set[str]] = {
+        definition.code: _dependencies(definition) for definition in by_canonical.values()
+    }
     missing = [
         f"{code} -> {dependency}"
-        for code in sorted(graph)
-        for dependency in sorted(graph[code] - by_code.keys())
+        for code in sorted(raw)
+        for dependency in sorted(raw[code])
+        if _canonical(dependency) not in by_canonical
     ]
     if missing:
         raise DependencyError("missing formula dependency: " + ", ".join(missing))
+
+    graph = {
+        code: {by_canonical[_canonical(dependency)].code for dependency in dependencies}
+        for code, dependencies in raw.items()
+    }
 
     dependents: dict[str, set[str]] = {code: set() for code in graph}
     remaining = {code: set(dependencies) for code, dependencies in graph.items()}

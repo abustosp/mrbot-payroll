@@ -7,10 +7,14 @@ import pytest
 from app.core.payroll_engine.calculator import (
     CircularDependencyError,
     PayrollCalculationError,
+    _base_variables,
+    _normalise_employee,
     calculate_payroll,
 )
+from app.core.payroll_engine.formula_engine import FormulaError, evaluate_expression
 from app.core.payroll_engine.types import (
     ConceptNature,
+    FormulaContext,
     FormulaDefinition,
     RoundingMode,
     RoundingPolicy,
@@ -393,3 +397,74 @@ def test_empty_definitions_return_zeroed_result() -> None:
     assert result.net == Decimal("0.00")
     assert result.employer_cost == Decimal("0.00")
     assert result.period == PERIOD
+
+
+def test_scoped_formula_applies_only_to_matching_agreement() -> None:
+    """B-26: a CCT-scoped formula must not leak to another agreement."""
+
+    definitions = [
+        remunerative("SUELDO_BASICO", {"variable": "sueldo_basico"}),
+        remunerative(
+            "PRESENTISMO_COMERCIO",
+            {"constant": "80000"},
+            agreement_code="130/75",
+        ),
+    ]
+    commerce = {**EMPLOYEE, "agreement_code": "130/75"}
+    metal = {**EMPLOYEE, "agreement_code": "40/89"}
+
+    assert [
+        item.code for item in calculate_payroll(commerce, PERIOD, definitions, {}).items
+    ] == ["PRESENTISMO_COMERCIO", "SUELDO_BASICO"]
+    metal_result = calculate_payroll(metal, PERIOD, definitions, {})
+    assert [item.code for item in metal_result.items] == ["SUELDO_BASICO"]
+    assert any("PRESENTISMO_COMERCIO" in line for line in metal_result.trace)
+
+
+def test_scope_matches_category_case_insensitively() -> None:
+    """B-26/B-32: category scope compares ignoring case."""
+
+    definitions = [
+        remunerative("PLUS", {"constant": "10"}, category_code="admin_a"),
+    ]
+    employee = {**EMPLOYEE, "agreement_category": "ADMIN_A"}
+    assert calculate_payroll(employee, PERIOD, definitions, {}).items[0].amount == Decimal(
+        "10.00"
+    )
+    other = calculate_payroll(
+        {**EMPLOYEE, "agreement_category": "ADMIN_B"}, PERIOD, definitions, {}
+    )
+    assert other.items == []
+
+
+def test_shadowed_parameter_is_reported_and_base_wins() -> None:
+    """B-31: a parameter colliding with a base variable does not override it."""
+
+    definitions = [remunerative("S", {"variable": "sueldo_basico"})]
+    result = calculate_payroll(EMPLOYEE, PERIOD, definitions, {"sueldo_basico": "999"})
+
+    assert result.items[0].amount == Decimal("1000000.00")
+    assert result.shadowed_parameters == ["sueldo_basico"]
+    assert any("shadowed parameter" in line for line in result.trace)
+
+
+def test_non_colliding_parameter_is_not_reported() -> None:
+    """B-31: ordinary parameters stay silent."""
+
+    definitions = [remunerative("S", {"variable": "bono"})]
+    result = calculate_payroll(EMPLOYEE, PERIOD, definitions, {"bono": "999"})
+
+    assert result.items[0].amount == Decimal("999.00")
+    assert result.shadowed_parameters == []
+
+
+def test_start_date_and_period_are_exposed_but_not_dsl_readable() -> None:
+    """B-77: dates are present for traceability but the DSL rejects them."""
+
+    data = _normalise_employee(EMPLOYEE, PERIOD)
+    variables = _base_variables(data, PERIOD)
+    assert variables["start_date"] == date(2021, 1, 1)
+    assert variables["period"] == PERIOD
+    for name in ("start_date", "period"):
+        with pytest.raises(FormulaError):
+            evaluate_expression({"variable": name}, FormulaContext(variables=variables))

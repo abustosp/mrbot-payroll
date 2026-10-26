@@ -43,9 +43,13 @@ from typing import Any
 
 from app.core.payroll_engine.rounding import quantize, to_decimal
 from app.core.payroll_engine.types import ConceptNature, RoundingMode, RoundingPolicy
+from app.jurisdictions.argentina.validation import parse_period
 
 SETTLEMENT_ROUNDING = RoundingPolicy(decimals=2, mode=RoundingMode.HALF_UP)
 SAC_DIVISOR = Decimal("12")
+# B-28: a SAC semester holds at most six monthly remunerations / six months.
+SAC_SEMESTER_MONTHS = Decimal("6")
+SAC_SEMESTER_COUNT = 6
 ZERO = Decimal("0")
 
 Numeric = Decimal | int | str
@@ -89,6 +93,8 @@ class VacationResult:
     plus_amount: Decimal
     amount: Decimal
     trace: list[str] = field(default_factory=list)
+    # B-29: non-blocking warnings (e.g. plus_rate taken as 0 by omission).
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -159,17 +165,18 @@ def _positive(
 
 
 def _coerce_period(value: Any) -> date:
+    # B-78: settlement dates share the single payroll period parser, so the
+    # same period is valid here and in the jurisdiction provider (AAAAMM
+    # resolves to the first day of the month; a full ISO date keeps its day).
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
     if isinstance(value, str):
         try:
-            return date.fromisoformat(value.strip())
+            return parse_period(value)
         except ValueError as exc:
-            raise SettlementInputError(
-                f"period must be an ISO date (YYYY-MM-DD), got {value!r}"
-            ) from exc
+            raise SettlementInputError(f"period: {exc}") from exc
     raise SettlementInputError(f"period must be a date, got {type(value).__name__}")
 
 
@@ -265,7 +272,9 @@ def calculate_sac(
         rounding: Money rounding policy, two decimals HALF_UP by default.
 
     Raises:
-        SettlementInputError: For invalid or insufficient input data.
+        SettlementInputError: For invalid or insufficient input data,
+            including a semester window larger than 6 remunerations or
+            6 effective months (B-28; the window itself stays caller-owned).
         SettlementParameterError: When day proration lacks ``days_base``.
     """
 
@@ -283,6 +292,23 @@ def calculate_sac(
 
     days: Decimal | None = None
     effective_months = months
+    # B-28: the caller assembles the semester, but the semester size is a
+    # domain invariant: more than 6 remunerations or 6 effective months
+    # inflates the SAC instead of failing (which semester the months belong
+    # to is still the caller's call; see D-9).
+    if isinstance(remunerations, Mapping):
+        window_size = len(remunerations)
+    elif remunerations is None or isinstance(remunerations, (str, bytes)):
+        window_size = 0
+    else:
+        # Materialised once so generators are not exhausted before use below.
+        remunerations = list(remunerations)
+        window_size = len(remunerations)
+    if window_size > SAC_SEMESTER_COUNT:
+        raise SettlementInputError(
+            f"'remunerations' has {window_size} entries; "
+            f"a SAC semester holds at most {SAC_SEMESTER_COUNT}"
+        )
     if days_worked is not None:
         if days_base is None:
             raise SettlementParameterError(
@@ -310,6 +336,12 @@ def calculate_sac(
         )
     else:
         trace.append(f"months_worked={_format(months)}")
+
+    if effective_months > SAC_SEMESTER_MONTHS:
+        raise SettlementInputError(
+            f"effective_months={_format(effective_months)} exceeds "
+            f"the {SAC_SEMESTER_MONTHS} months of a SAC semester"
+        )
 
     if best_salary is not None:
         base = _non_negative(
@@ -358,7 +390,7 @@ def calculate_vacations(
     days: Numeric,
     *,
     days_base: Numeric = 25,
-    plus_rate: Numeric = 0,
+    plus_rate: Numeric | None = None,
     rounding: RoundingPolicy = SETTLEMENT_ROUNDING,
 ) -> VacationResult:
     """Calculate vacation pay for a number of days.
@@ -367,6 +399,16 @@ def calculate_vacations(
     fraction of the base amount (``0.20`` means a 20 % plus).  ``days_base`` and
     ``plus_rate`` are explicit arguments so a collective agreement can override
     the API defaults.
+
+    B-34 (pinned pending D-6): rounding is sequential — ``base_amount`` is
+    quantized, then ``plus_amount`` is computed over the rounded base and
+    quantized, then the total is quantized (each step ``decimals=2 HALF_UP``
+    by default).  With salary 1000, 1 day, base 30 and a 10 % plus this gives
+    33.33 + 3.33 = 36.66, one cent below single rounding (36.67).  Changing
+    this policy is a legal decision (D-6), not a code fix.
+
+    B-29: ``plus_rate=None`` (omitted) liquidates a zero plus with a warning;
+    pass ``0`` explicitly when no plus applies.
     """
 
     salary = _non_negative(
@@ -384,11 +426,19 @@ def calculate_vacations(
         field_name="days_base",
         error_type=SettlementParameterError,
     )
-    rate = _non_negative(
-        plus_rate,
-        field_name="plus_rate",
-        error_type=SettlementParameterError,
-    )
+    warnings: list[str] = []
+    if plus_rate is None:
+        rate = ZERO
+        warnings.append(
+            "plus_rate no especificado: se liquida plus 0; "
+            "verificar si el CCT exige plus vacacional (ver D-6)"
+        )
+    else:
+        rate = _non_negative(
+            plus_rate,
+            field_name="plus_rate",
+            error_type=SettlementParameterError,
+        )
 
     daily_value = salary / base_days
     base_amount = quantize(daily_value * day_count, rounding)
@@ -403,6 +453,7 @@ def calculate_vacations(
         f"{_format(rate)}={_format(plus_amount)}",
         f"amount={_format(base_amount)}+{_format(plus_amount)}={_format(amount)}",
     ]
+    trace.extend(f"warning: {warning}" for warning in warnings)
 
     return VacationResult(
         monthly_salary=salary,
@@ -414,6 +465,7 @@ def calculate_vacations(
         plus_amount=plus_amount,
         amount=amount,
         trace=trace,
+        warnings=warnings,
     )
 
 
