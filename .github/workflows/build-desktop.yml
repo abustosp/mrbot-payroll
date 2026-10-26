@@ -1,0 +1,39 @@
+name: Build desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Build the optional desktop executable
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: inputs.build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install . pyinstaller
+      - if: runner.os == 'Linux'
+        run: bash desktop/build-linux.sh
+      - if: runner.os == 'Windows'
+        run: powershell -ExecutionPolicy Bypass -File desktop/build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mrbot-payroll-${{ runner.os }}
+          path: dist/

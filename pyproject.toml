@@ -27,6 +27,12 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.6",
 ]
+postgres = [
+  "psycopg[binary]>=3.2",
+]
+desktop = [
+  "pyinstaller>=6.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -56,4 +62,3 @@ python_version = "3.11"
 check_untyped_defs = true
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
-

@@ -13,7 +13,8 @@ data/
 dist/
 build/
 *.spec
+!desktop/payroll.spec
 .env
 .DS_Store
 reports/
-
+.orchestration/
