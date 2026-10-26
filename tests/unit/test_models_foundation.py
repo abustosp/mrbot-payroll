@@ -32,7 +32,11 @@ def test_mvp_tables_and_money_types_are_registered() -> None:
 
 
 def test_keys_and_inclusive_validity_constraints_exist() -> None:
-    assert any(isinstance(item, UniqueConstraint) and {"cuit"} == {column.name for column in item.columns} for item in Company.__table__.constraints)
+    assert any(
+        isinstance(item, UniqueConstraint)
+        and {"organization_id", "cuit"} == {column.name for column in item.columns}
+        for item in Company.__table__.constraints
+    )
     for model in (EmploymentContract, SalaryScale, FormulaVersion):
         checks = [str(item.sqltext) for item in model.__table__.constraints if getattr(item, "sqltext", None) is not None]
         assert any("valid_to" in check and ">=" in check for check in checks)

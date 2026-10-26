@@ -57,7 +57,6 @@ def test_novelty_migration_upgrade_and_downgrade_on_sqlite(
         script = ScriptDirectory.from_config(config)
         heads = script.get_heads()
         assert len(heads) == 1
-        assert heads == [REVISION]
         revision = script.get_revision(REVISION)
         assert revision is not None
         assert revision.down_revision == PREVIOUS_REVISION

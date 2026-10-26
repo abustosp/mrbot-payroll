@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from starlette.requests import Request
 
 import app.main as main
 from app.config import Settings, get_settings
@@ -27,7 +28,9 @@ from app.database.models import (
     User,
 )
 from app.services.payroll_calculation import calculate_payroll_run
+from app.web.auth import WebUser
 from app.web.demo_data import DemoDataStore
+from app.web.routes import _request_data_source
 from app.web.sql_data_source import SqlAlchemyDataSource
 from scripts.seed_demo import seed
 
@@ -405,3 +408,49 @@ def test_web_source_setting_defaults_to_demo_and_can_select_sql(monkeypatch) -> 
     assert response.status_code == 200
     assert "Modo demo" in response.text
     assert isinstance(demo_app.state.payroll_data_source, DemoDataStore)
+
+
+def test_request_data_source_fails_closed_without_organization(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-no-org.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        _seed_organization(
+            session,
+            slug="organization-a",
+            name="Organización A",
+            cuit="30711111118",
+            employee_code="A-001",
+            cuil="20111111112",
+            agreement_code="CCT-A",
+            run_code="run-a",
+            net="100000.00",
+        )
+
+    source = SqlAlchemyDataSource(factory)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "client": ("testclient", 1234),
+        }
+    )
+    user = WebUser(id=999999, email="orphan@example.test", role="admin")
+    try:
+        with factory() as session:
+            scoped = _request_data_source(request, user, session, source)
+
+        assert scoped is not source
+        assert scoped.organization_id == -1
+        assert scoped.list_companies() == []
+        assert scoped.list_employees() == []
+        assert scoped.list_payrolls() == []
+        assert scoped.dashboard_metrics()["companies"] == 0
+        assert request.state.payroll_data_source is scoped
+    finally:
+        engine.dispose()

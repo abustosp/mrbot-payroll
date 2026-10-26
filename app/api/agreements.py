@@ -32,7 +32,7 @@ def list_agreements(
 @router.post("", response_model=AgreementRead, status_code=status.HTTP_201_CREATED)
 def create_agreement(
     payload: AgreementInput, db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin", "editor")),
+    _: User = Depends(require_role("admin")),
 ):
     row = CollectiveAgreement(**payload.model_dump())
     db.add(row)
@@ -49,7 +49,7 @@ def read_agreement(agreement_id: int, db: Session = Depends(get_db), _: User = D
 @router.put("/{agreement_id}", response_model=AgreementRead)
 def update_agreement(
     agreement_id: int, payload: AgreementInput, db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin", "editor")),
+    _: User = Depends(require_role("admin")),
 ):
     row = get_agreement(db, agreement_id)
     for key, value in payload.model_dump().items():

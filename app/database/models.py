@@ -42,12 +42,15 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[str] = mapped_column(String(16), default="viewer", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    session_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class Company(Base):
     __tablename__ = "companies"
-    __table_args__ = (UniqueConstraint("cuit"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "cuit", name="uq_companies_organization_id_cuit"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     cuit: Mapped[str] = mapped_column(String(11), nullable=False)

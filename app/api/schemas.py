@@ -10,6 +10,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.jurisdictions.argentina.validation import normalize_cuit_cuil
+
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -47,6 +49,11 @@ class CompanyInput(BaseModel):
     address: str | None = Field(default=None, max_length=300)
     active: bool = True
 
+    @field_validator("cuit")
+    @classmethod
+    def valid_cuit(cls, value: str) -> str:
+        return normalize_cuit_cuil(value)
+
 
 class CompanyRead(ORMModel):
     id: int
@@ -70,6 +77,11 @@ class EmployeeInput(BaseModel):
     termination_date: date | None = None
     address: str | None = Field(default=None, max_length=300)
     active: bool = True
+
+    @field_validator("cuil")
+    @classmethod
+    def valid_cuil(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_cuit_cuil(value)
 
 
 class EmployeeRead(ORMModel):
@@ -242,5 +254,4 @@ class PayrollRunRead(ORMModel):
     run_type: str
     status: str
     ruleset_id: int | None
-
 

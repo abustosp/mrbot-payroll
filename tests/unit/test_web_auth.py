@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.security import hash_password
@@ -289,6 +289,15 @@ def test_viewer_can_read_but_cannot_change_proposal_status(tmp_path: Path) -> No
                 follow_redirects=False,
             )
             assert forbidden.status_code == 403
+
+            with factory.begin() as session:
+                viewer = session.scalar(select(User).where(User.email == "viewer@example.test"))
+                assert viewer is not None
+                viewer.session_version += 1
+
+            stale_session = client.get("/", follow_redirects=False)
+            assert stale_session.status_code == 303
+            assert "/login?next=" in stale_session.headers["location"]
     finally:
         engine.dispose()
 

@@ -27,7 +27,13 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.security import hash_password, read_session, sign_session, verify_password
+from app.auth.security import (
+    hash_password,
+    read_session_payload,
+    read_session_version,
+    sign_session,
+    verify_password,
+)
 from app.config import Settings, get_settings
 from app.database.models import User
 from app.database.session import get_db
@@ -60,6 +66,7 @@ class WebUser:
     email: str
     role: str
     is_demo: bool = False
+    session_version: int = 1
 
     @property
     def display_name(self) -> str:
@@ -93,6 +100,7 @@ def _demo_user(settings: Settings, *, is_demo: bool = True) -> WebUser:
         email=settings.admin_email.strip().lower(),
         role="admin",
         is_demo=is_demo,
+        session_version=1,
     )
 
 
@@ -117,19 +125,29 @@ def resolve_web_user(
     token = request.cookies.get(settings.session_cookie)
     if not token:
         return None
-    user_id = read_session(token, settings.secret_key, settings.session_max_age)
-    if user_id is None:
+    payload = read_session_payload(token, settings.secret_key, settings.session_max_age)
+    if payload is None:
+        return None
+    user_id = payload.get("user_id")
+    session_version = read_session_version(payload)
+    if not isinstance(user_id, int) or session_version is None:
         return None
 
     if _is_demo_source(data):
-        if user_id == DEMO_USER_ID:
+        if user_id == DEMO_USER_ID and session_version == 1:
             return _demo_user(settings)
         return None
 
     user = db.get(User, user_id)
-    if user is None or not user.active:
+    if user is None or not user.active or user.session_version != session_version:
         return None
-    return WebUser(id=user.id, email=user.email, role=user.role, is_demo=False)
+    return WebUser(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        is_demo=False,
+        session_version=user.session_version,
+    )
 
 
 def authenticate_web_user(
@@ -155,7 +173,13 @@ def authenticate_web_user(
     user = db.scalar(select(User).where(User.email == normalized_email))
     if user is None or not user.active or not verify_password(password, user.password_hash):
         return None
-    return WebUser(id=user.id, email=user.email, role=user.role, is_demo=False)
+    return WebUser(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        is_demo=False,
+        session_version=user.session_version,
+    )
 
 
 def require_web_user(
@@ -231,7 +255,7 @@ def start_web_session(response: Any, user: WebUser, settings: Settings) -> None:
 
     response.set_cookie(
         settings.session_cookie,
-        sign_session(user.id, settings.secret_key),
+        sign_session(user.id, settings.secret_key, user.session_version),
         max_age=settings.session_max_age,
         httponly=True,
         secure=settings.cookie_secure,

@@ -139,7 +139,7 @@ def test_create_next_version_keeps_approved_version_untouched(
     assert listed["status"] == "DRAFT"
 
 
-def test_overlapping_validity_is_rejected(
+def test_overlapping_validity_is_allowed_and_next_version_wins(
     api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     client, sessions = api
@@ -153,10 +153,24 @@ def test_overlapping_validity_is_rejected(
         valid_to="2026-08-15",
     )
 
-    assert response.status_code == 409
-    assert "solapa" in response.json()["detail"].lower()
+    assert response.status_code == 201, response.text
+    assert response.json()["version"] == 2
+    assert response.json()["status"] == "DRAFT"
     with sessions() as db:
-        assert len(db.scalars(select(FormulaVersion)).all()) == 1
+        versions = db.scalars(
+            select(FormulaVersion)
+            .where(FormulaVersion.formula_id == formula_id)
+            .order_by(FormulaVersion.version)
+        ).all()
+        assert [version.version for version in versions] == [1, 2]
+        assert versions[0].valid_from.isoformat() == "2026-01-01"
+        assert versions[0].valid_to.isoformat() == "2026-06-30"
+        assert versions[1].valid_from.isoformat() == "2026-06-15"
+        assert versions[1].valid_to.isoformat() == "2026-08-15"
+
+    listed = client.get("/api/v1/formulas").json()["items"][0]
+    assert listed["version"] == 2
+    assert listed["status"] == "DRAFT"
 
 
 def test_version_with_invalid_dsl_is_rejected(

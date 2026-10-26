@@ -393,3 +393,53 @@ def test_import_endpoint_reads_json_inside_cct_dir(api, tmp_path, monkeypatch) -
     )
     assert response.status_code == 200, response.text
     assert response.json()["dry_run"] is True
+
+
+def test_resolve_catalog_path_uses_cwd_before_allowed_dir(tmp_path, monkeypatch) -> None:
+    """An installed package under /app resolves a repository-relative path."""
+
+    app_root = tmp_path / "app"
+    allowed = app_root / "normative" / "cct"
+    allowed.mkdir(parents=True)
+    package_path = allowed / "catalog.json"
+    package_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        normative_packages, "REPO_ROOT", tmp_path / "site-packages"
+    )
+    monkeypatch.setattr(normative_packages, "NORMATIVE_CCT_DIR", allowed)
+    monkeypatch.chdir(app_root)
+
+    resolved = normative_packages.resolve_catalog_path(
+        "normative/cct/catalog.json"
+    )
+
+    assert resolved == package_path.resolve()
+
+
+def test_resolve_catalog_path_still_rejects_traversal(tmp_path, monkeypatch) -> None:
+    app_root = tmp_path / "app"
+    allowed = app_root / "normative" / "cct"
+    allowed.mkdir(parents=True)
+    monkeypatch.setattr(normative_packages, "NORMATIVE_CCT_DIR", allowed)
+    monkeypatch.chdir(app_root)
+
+    with pytest.raises(normative_packages.PackagePathError):
+        normative_packages.resolve_catalog_path("../catalog.json")
+
+
+def test_import_requires_admin_but_listing_allows_editor(api) -> None:
+    client, local_session = api
+    client.app.dependency_overrides[require_user] = lambda: SimpleNamespace(
+        role="editor", active=True
+    )
+
+    forbidden = client.post(
+        "/api/v1/normative-packages/import",
+        json={"catalog": minimal_catalog()},
+    )
+    assert forbidden.status_code == 403, forbidden.text
+    with local_session() as db:
+        assert _count(db, CollectiveAgreement) == 0
+
+    listing = client.get("/api/v1/normative-packages/ccts")
+    assert listing.status_code == 200, listing.text

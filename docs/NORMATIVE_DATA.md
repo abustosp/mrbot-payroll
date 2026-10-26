@@ -6,16 +6,17 @@ para reemplazarlos por un paquete aprobado y validado contra ARCA.
 
 ## Advertencia
 
-El repositorio **no contiene datos normativos aprobados**. Los parámetros, las
-escalas del CCT 130/75 y las tablas de Ganancias que se usan en tests y en la
-demo son ilustrativos. No deben usarse para liquidaciones reales, presentaciones
-ante ARCA ni decisiones laborales.
+El repositorio **no contiene un paquete normativo aprobado para producción**.
+Los parámetros del seed, las escalas de demostración del CCT 130/75 y las tablas
+de Ganancias que se usan en tests son ilustrativos. No deben usarse para
+liquidaciones reales, presentaciones ante ARCA ni decisiones laborales.
 
-Además, el catálogo de investigación `normative/cct/` reúne 10 convenios con
-sus PDFs originales, pero solo 8 escalas del CCT 507/07 tienen respaldo
-documental directo. Las otras 21 escalas están marcadas `unverified`, tienen
-`importe: null` y el cargador las omite. No se deben convertir esos valores
-estimados en datos de producción.
+El catálogo de investigación `normative/cct/` reúne 10 convenios, 191 documentos
+oficiales y 235 escalas con evidencia para 2020-2026. Cada fila tiene fuente,
+vigencia y hash. Eso es evidencia documental, no una aprobación profesional ni
+un paquete listo para producción. Además, algunas escalas publican un total
+conformado que puede incluir sumas no remunerativas; antes de usarlas hay que
+revisar si el importe corresponde al básico o al total.
 
 Tampoco deben interpretarse como asesoramiento legal. La fuente aplicable, la
 vigencia y el tratamiento de cada concepto deben verificarse con la normativa
@@ -38,12 +39,14 @@ La implementación actual se concentra en
 | Selección por fecha | `select_parameter`, `select_parameters` | Implementado, con vigencias inclusivas |
 | Detección de superposiciones | `find_overlaps`, `validate_no_overlaps` | Implementado |
 | Persistencia de documentos y parámetros | `NormativeDocument`, `NormativeParameter`, `SalaryScale` | Modelos y migración inicial |
-| Carga de un paquete validado | `package_loader.py` + API `/normative-packages/import` | Implementado con dry-run; faltan actas 2026 aprobadas |
+| Carga de un paquete validado | `package_loader.py` + API `/normative-packages/import` | Implementado; 235 escalas verificadas cargables |
 
 El catálogo de investigación está en `normative/cct/catalog.json`. El cargador
 `app/core/normative/package_loader.py` valida ese archivo y omite toda escala
 `unverified`; solo persiste escalas con importe y fuente verificables. La API
-`POST /api/v1/normative-packages/import` hace dry-run por defecto.
+`POST /api/v1/normative-packages/import` hace dry-run por defecto y exige rol
+admin para confirmar. Los PDFs crudos de evidencia no se versionan por tamaño;
+sus URLs, hashes y notas están en `normative/cct/evidence/`.
 
 La vigencia técnica de la demo es del 1 de enero al 31 de diciembre de 2026.
 Es una decisión del código de ejemplo, no una afirmación sobre la vigencia

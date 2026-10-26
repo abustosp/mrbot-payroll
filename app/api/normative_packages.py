@@ -1,8 +1,9 @@
 # ruff: noqa: B008 -- FastAPI resolves Depends defaults at request time.
 """Admin/editor API for validated CCT catalog packages.
 
-The router only exposes validated package operations.  ``POST /import`` is a
-dry run by default: the caller must send ``"dry_run": false`` to persist.
+The router exposes read operations to admins and editors.  ``POST /import``
+modifies global normative data and is restricted to admins.  It is a dry run by
+default: the caller must send ``"dry_run": false`` to persist.
 """
 
 from __future__ import annotations
@@ -65,19 +66,26 @@ def resolve_catalog_path(raw_path: str, *, allowed_dir: Path | None = None) -> P
 
     requested = Path(text)
     if requested.is_absolute():
-        candidate = requested.resolve()
+        candidates = [requested.resolve()]
     else:
-        candidate = (REPO_ROOT / requested).resolve()
-        if not candidate.is_relative_to(allowed):
-            candidate = (allowed / requested).resolve()
+        # ``Path.cwd()`` first so a package installed with the project at
+        # ``/app`` accepts ``normative/cct/catalog.json``; ``REPO_ROOT`` covers
+        # editable installs and ``allowed`` accepts bare ``catalog.json``.
+        candidates = [
+            (Path.cwd() / requested).resolve(),
+            (REPO_ROOT / requested).resolve(),
+            (allowed / requested).resolve(),
+        ]
 
-    if not candidate.is_relative_to(allowed):
+    inside_allowed = [candidate for candidate in candidates if candidate.is_relative_to(allowed)]
+    if not inside_allowed:
         raise PackagePathError("La ruta debe estar dentro de normative/cct/")
-    if candidate.suffix.lower() != ".json":
-        raise PackagePathError("El paquete debe ser un archivo .json")
-    if not candidate.is_file():
-        raise FileNotFoundError(f"No existe el paquete {text!r}")
-    return candidate
+    for candidate in inside_allowed:
+        if candidate.suffix.lower() != ".json":
+            raise PackagePathError("El paquete debe ser un archivo .json")
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"No existe el paquete {text!r}")
 
 
 @router.get("/ccts")
@@ -138,7 +146,7 @@ def list_normative_ccts(
 def import_normative_package(
     payload: NormativePackageImportInput,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin", "editor")),
+    _: User = Depends(require_role("admin")),
 ):
     """Validate and optionally import a CCT catalog (dry run by default)."""
 

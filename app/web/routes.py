@@ -122,8 +122,11 @@ def _request_data_source(
         select(User.organization_id).where(User.id == user.id)
     )
     if organization_id is None:
-        request.state.payroll_data_source = data
-        return data
+        # Fail closed: never expose an unscoped source when the organization
+        # cannot be resolved.
+        scoped = scope_data_source(data, -1)
+        request.state.payroll_data_source = scoped
+        return scoped
     scoped = scope_data_source(data, organization_id)
     request.state.payroll_data_source = scoped
     return scoped

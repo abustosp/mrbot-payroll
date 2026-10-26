@@ -1,5 +1,5 @@
 # ruff: noqa: B008 -- FastAPI resolves Depends defaults at request time.
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -82,21 +82,6 @@ def create_formula(
     return formula_output(row, version)
 
 
-def _periods_overlap(
-    start_a: date,
-    end_a: date | None,
-    start_b: date,
-    end_b: date | None,
-) -> bool:
-    """Inclusive overlap test; ``None`` means an open-ended period."""
-
-    if end_a is not None and start_b > end_a:
-        return False
-    if end_b is not None and start_a > end_b:
-        return False
-    return True
-
-
 def _validated_expression(
     formula: FormulaDefinition,
     payload: FormulaVersionInput,
@@ -135,8 +120,9 @@ def create_formula_version(
     """Create the next formula version as a draft.
 
     The previous versions are never mutated: an approved version remains an
-    immutable historical record. Overlapping validity periods are rejected
-    instead of silently closing an approved version.
+    immutable historical record.  Validity ranges may overlap; when more than
+    one approved version is applicable to a period, the highest version wins
+    during payroll calculation.
     """
 
     row = get_scoped(db, FormulaDefinition, formula_id, user.organization_id)
@@ -146,21 +132,6 @@ def create_formula_version(
         .where(FormulaVersion.formula_id == row.id)
         .order_by(FormulaVersion.version)
     ).all()
-    for version in existing:
-        if _periods_overlap(
-            payload.valid_from,
-            payload.valid_to,
-            version.valid_from,
-            version.valid_to,
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "La vigencia se solapa con la versión "
-                    f"{version.version} ({version.valid_from} - {version.valid_to or 'sin fin'})"
-                ),
-            )
-
     next_version = max((version.version for version in existing), default=0) + 1
     version = FormulaVersion(
         formula_id=row.id,

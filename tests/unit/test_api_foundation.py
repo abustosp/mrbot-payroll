@@ -2,12 +2,12 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.service import seed_admin
 from app.database import Base, models  # noqa: F401
-from app.database.models import PayrollRun, User
+from app.database.models import Organization, PayrollRun, User
 from app.database.session import get_db
 from app.main import app
 
@@ -54,21 +54,34 @@ def test_auth_and_company_employee_agreement_crud(api) -> None:
 
     company = client.post(
         "/api/v1/companies",
-        json={"cuit": "30711223344", "legal_name": "Empresa SA"},
+        json={"cuit": "30711223343", "legal_name": "Empresa SA"},
     )
     assert company.status_code == 201, company.text
     company_id = company.json()["id"]
     assert client.get("/api/v1/companies?limit=1").json()["total"] == 1
     assert client.put(
         f"/api/v1/companies/{company_id}",
-        json={"cuit": "30711223344", "legal_name": "Empresa SRL"},
+        json={"cuit": "30711223343", "legal_name": "Empresa SRL"},
     ).json()["legal_name"] == "Empresa SRL"
 
     employee = client.post(
         "/api/v1/employees",
-        json={"employee_code": "E-1", "first_name": "Ana", "last_name": "Pérez", "cuil": "20301234567"},
+        json={"employee_code": "E-1", "first_name": "Ana", "last_name": "Pérez", "cuil": "20123456786"},
     )
     assert employee.status_code == 201, employee.text
+    assert client.post(
+        "/api/v1/employees",
+        json={
+            "employee_code": "E-2",
+            "first_name": "Beto",
+            "last_name": "Prueba",
+            "cuil": "20301234567",
+        },
+    ).status_code == 422
+    assert client.post(
+        "/api/v1/companies",
+        json={"cuit": "30711223344", "legal_name": "CUIT inválido"},
+    ).status_code == 422
     assert client.get("/api/v1/employees?limit=10&offset=0").json()["items"][0]["employee_code"] == "E-1"
 
     concept = client.post(
@@ -89,6 +102,35 @@ def test_auth_and_company_employee_agreement_crud(api) -> None:
 
     client.post("/api/v1/auth/logout")
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_company_cuit_is_unique_within_organization(api) -> None:
+    client, sessions = api
+    login(client)
+
+    payload = {"cuit": "30711223343", "legal_name": "Empresa SA"}
+    assert client.post("/api/v1/companies", json=payload).status_code == 201
+    duplicate = client.post("/api/v1/companies", json=payload)
+    assert duplicate.status_code == 409
+
+    with sessions() as db:
+        admin = db.scalar(select(User).where(User.email == "admin@example.test"))
+        assert admin is not None
+        organization = Organization(name="Otra", slug="otra")
+        db.add(organization)
+        db.flush()
+        db.add(
+            User(
+                organization_id=organization.id,
+                email="other-admin@example.test",
+                password_hash=admin.password_hash,
+                role="admin",
+            )
+        )
+        db.commit()
+
+    login(client, email="other-admin@example.test")
+    assert client.post("/api/v1/companies", json=payload).status_code == 201
 
 
 def test_formula_draft_validation_approval_payroll_and_role_guards(api) -> None:
@@ -113,7 +155,7 @@ def test_formula_draft_validation_approval_payroll_and_role_guards(api) -> None:
     assert invalid.status_code == 201
     assert client.post(f"/api/v1/formulas/{invalid.json()['id']}/validate").status_code == 422
 
-    company = client.post("/api/v1/companies", json={"cuit": "30799887766", "legal_name": "Otra SA"}).json()
+    company = client.post("/api/v1/companies", json={"cuit": "30799887769", "legal_name": "Otra SA"}).json()
     run = client.post(
         "/api/v1/payroll-runs",
         json={"company_id": company["id"], "code": "2026-10", "period_start": "2026-10-01", "period_end": "2026-10-31"},
@@ -132,5 +174,48 @@ def test_formula_draft_validation_approval_payroll_and_role_guards(api) -> None:
     )
     assert viewer_response.status_code == 200
     assert client.get("/api/v1/companies").status_code == 200
-    assert client.post("/api/v1/companies", json={"cuit": "30999887766", "legal_name": "No"}).status_code == 403
+    assert client.post("/api/v1/companies", json={"cuit": "30999887763", "legal_name": "No"}).status_code == 403
     assert client.post(f"/api/v1/formulas/{formula_id}/approve").status_code == 403
+
+
+def test_agreement_writes_require_admin(api) -> None:
+    client, sessions = api
+    login(client)
+    agreement = client.post(
+        "/api/v1/agreements",
+        json={"code": "130/75", "year": 1975, "name": "Empleados de Comercio"},
+    )
+    assert agreement.status_code == 201, agreement.text
+    agreement_id = agreement.json()["id"]
+    with sessions() as db:
+        admin = db.scalar(select(User).where(User.email == "admin@example.test"))
+        assert admin is not None
+        db.add(
+            User(
+                organization_id=admin.organization_id,
+                email="editor@example.test",
+                password_hash=admin.password_hash,
+                role="editor",
+            )
+        )
+        db.commit()
+
+    login(client, email="editor@example.test")
+    assert client.get("/api/v1/agreements").status_code == 200
+    assert client.get(f"/api/v1/agreements/{agreement_id}").status_code == 200
+    assert client.post(
+        "/api/v1/agreements",
+        json={"code": "SECUNDARIO", "year": 2026, "name": "Otro convenio"},
+    ).status_code == 403
+    assert client.put(
+        f"/api/v1/agreements/{agreement_id}",
+        json={"code": "130/75", "year": 1975, "name": "Editor no autorizado"},
+    ).status_code == 403
+    assert client.delete(f"/api/v1/agreements/{agreement_id}").status_code == 403
+
+    login(client)
+    assert client.put(
+        f"/api/v1/agreements/{agreement_id}",
+        json={"code": "130/75", "year": 1975, "name": "Actualizado por admin"},
+    ).status_code == 200
+    assert client.delete(f"/api/v1/agreements/{agreement_id}").status_code == 204

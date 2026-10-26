@@ -98,11 +98,17 @@ def test_change_password_updates_hash_rotates_cookie_and_old_password_fails(api)
     assert new_cookie != old_cookie
     assert client.get("/api/v1/auth/me").status_code == 200
 
+    client.cookies.set("payroll_session", old_cookie)
+    assert client.get("/api/v1/auth/me").status_code == 401
+    client.cookies.set("payroll_session", new_cookie)
+    assert client.get("/api/v1/auth/me").status_code == 200
+
     with sessions() as db:
         admin = db.scalar(select(User).where(User.email == ADMIN_EMAIL))
         assert admin is not None
         assert verify_password(NEW_PASSWORD, admin.password_hash)
         assert not verify_password(PASSWORD, admin.password_hash)
+        assert admin.session_version == 2
 
     assert login(client, password=PASSWORD).status_code == 401
     assert login(client, password=NEW_PASSWORD).status_code == 200

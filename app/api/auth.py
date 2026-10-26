@@ -23,10 +23,15 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client is not None else "unknown"
 
 
-def _set_session_cookie(response: Response, user_id: int, settings: Settings) -> None:
+def _set_session_cookie(
+    response: Response,
+    user_id: int,
+    settings: Settings,
+    session_version: int = 1,
+) -> None:
     response.set_cookie(
         settings.session_cookie,
-        sign_session(user_id, settings.secret_key),
+        sign_session(user_id, settings.secret_key, session_version),
         max_age=settings.session_max_age,
         httponly=True,
         secure=settings.cookie_secure,
@@ -65,7 +70,7 @@ def login(
         )
 
     login_attempts.reset(client_ip, email)
-    _set_session_cookie(response, user.id, settings)
+    _set_session_cookie(response, user.id, settings, user.session_version)
     return user
 
 
@@ -89,10 +94,10 @@ def change_password(
         )
 
     user.password_hash = hash_password(payload.new_password)
+    user.session_version += 1
     db.add(user)
     db.commit()
-    # La cookie se reemite con un nonce nuevo: rotación efectiva del token.
-    _set_session_cookie(response, user.id, settings)
+    _set_session_cookie(response, user.id, settings, user.session_version)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

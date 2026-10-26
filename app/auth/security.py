@@ -9,6 +9,7 @@ from collections import deque
 from collections.abc import Callable
 from functools import lru_cache
 from threading import Lock
+from typing import Any
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -134,16 +135,26 @@ def session_serializer(secret_key: str) -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(secret_key, salt="payroll-session-v1")
 
 
-def sign_session(user_id: int, secret_key: str) -> str:
+def sign_session(user_id: int, secret_key: str, session_version: int = 1) -> str:
     return session_serializer(secret_key).dumps(
-        {"user_id": user_id, "nonce": secrets.token_urlsafe(16)}
+        {"user_id": user_id, "sv": session_version, "nonce": secrets.token_urlsafe(16)}
     )
 
 
-def read_session(token: str, secret_key: str, max_age: int) -> int | None:
+def read_session_payload(token: str, secret_key: str, max_age: int) -> dict[str, Any] | None:
     try:
         payload = session_serializer(secret_key).loads(token, max_age=max_age)
-        user_id = payload.get("user_id")
-        return user_id if isinstance(user_id, int) else None
+        return payload if isinstance(payload, dict) else None
     except (BadSignature, SignatureExpired, TypeError):
         return None
+
+
+def read_session_version(payload: dict[str, Any]) -> int | None:
+    version = payload.get("sv", 1)
+    return version if isinstance(version, int) and not isinstance(version, bool) and version >= 1 else None
+
+
+def read_session(token: str, secret_key: str, max_age: int) -> int | None:
+    payload = read_session_payload(token, secret_key, max_age)
+    user_id = payload.get("user_id") if payload is not None else None
+    return user_id if isinstance(user_id, int) else None

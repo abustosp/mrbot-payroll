@@ -30,17 +30,17 @@ demo y no constituye una implementación lista para producción.
 | UI web | Implementado | Demo por defecto o lectura SQL opcional; login y CSRF |
 | Recibos PDF | Implementado | HTML, PDF individual y ZIP; sin validación legal |
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
-| Importadores CSV/XLSX | Implementado | Biblioteca y API con dry-run; alta idempotente de empleados, novedades solo dry-run |
-| Paquetes normativos CCT | Implementado | Catálogo de 10 CCT, 10 PDF y 12 fórmulas; 8 escalas verificadas y 21 pendientes |
-| Liquidaciones especiales | Implementado como módulo puro | SAC, vacaciones y liquidación final con parámetros, aún sin integrar al flujo web |
+| Importadores CSV/XLSX | Implementado | API con dry-run; alta idempotente de empleados y novedades |
+| Paquetes normativos CCT | Implementado | 10 CCT, 191 documentos de evidencia y 235 escalas verificadas 2020-2026 |
+| Liquidaciones especiales | Implementado como módulo y API | SAC, vacaciones y final; todavía no se eligen desde el tipo de corrida |
 | Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
 
 La autenticación, la API, el motor de fórmulas, el cálculo, el flujo de IA, la
-importación y los reportes internos existen. Lo que sigue pendiente es cargar
-actas paritarias vigentes verificadas, integrar SAC/vacaciones/final al flujo
-web, validar los formatos contra ARCA y completar el endurecimiento para
-producción.
+importación, la evidencia CCT y los reportes internos existen. Lo que sigue
+pendiente es filtrar fórmulas y parámetros por convenio/categoría, integrar
+SAC/vacaciones/final al tipo de corrida, validar los formatos contra ARCA y
+completar el endurecimiento para producción.
 
 ## Requisitos
 
@@ -192,18 +192,21 @@ puede leer.
 | `POST /api/v1/ai/proposals/{id}/approve` | Aprobar una propuesta persistida |
 | `POST /api/v1/ai/proposals/{id}/publish` | Crear una fórmula borrador desde una propuesta aprobada |
 | `POST /api/v1/imports/employees` | Importar empleados desde CSV/XLSX, con dry-run |
-| `POST /api/v1/imports/novelties` | Validar novedades CSV/XLSX, solo dry-run |
+| `POST /api/v1/imports/novelties` | Validar o persistir novedades CSV/XLSX |
 | `GET /api/v1/normative-packages/ccts` | Listar convenios cargados desde paquetes |
 | `POST /api/v1/normative-packages/import` | Validar o importar `catalog.json` |
 | `GET /api/v1/reports/f931/{run_id}.xlsx` | Generar la planilla interna F.931 |
+| `POST /api/v1/settlements/sac` | Simular SAC |
+| `POST /api/v1/settlements/vacations` | Simular vacaciones |
+| `POST /api/v1/settlements/final` | Simular liquidación final |
 
 Los endpoints de exportación LSD reciben los datos en el cuerpo JSON y no
 consultan una liquidación persistida. El de recibos sí parte de un
 `PayrollResult` guardado y comprueba la organización del usuario.
 
 `POST /api/v1/payroll-runs/{id}/calculate` es idempotente: reemplaza los
-resultados anteriores de la corrida. Toma fórmulas `VALIDATED` o `APPROVED`
-vigentes, escala y contrato del empleado, y deja la corrida en `CALCULATED` o
+resultados anteriores de la corrida. Toma solo fórmulas `APPROVED` vigentes,
+escala, contrato y novedades del período, y deja la corrida en `CALCULATED` o
 `ERROR`. La aprobación posterior exige estado calculado o en revisión y rol
 `admin`.
 
@@ -379,11 +382,11 @@ docs/                    Arquitectura, datos normativos y operaciones
 ## Datos normativos y límites
 
 Los parámetros del seed y del proveedor Argentina siguen siendo demo. El
-catálogo `normative/cct/` reúne 10 CCT con sus PDFs originales y 12 fórmulas
-basadas en artículos, pero solo 8 escalas del CCT 507/07 tienen respaldo
-documental directo. Las otras 21 escalas están marcadas `unverified` y no se
-cargan al motor. No hay todavía actas paritarias 2026 homologadas en el
-repositorio.
+catálogo `normative/cct/` reúne 10 CCT, 191 documentos oficiales y **235 escalas
+verificadas** con vigencia 2020-2026, incluidas escalas programadas para
+noviembre y diciembre de 2026. Las fuentes, hashes y notas están en
+`normative/cct/evidence/`. Los PDFs crudos de evidencia quedan en el working
+tree pero no se versionan por tamaño; las URLs y hashes sí.
 
 El exportador LSD respeta anchos y codificación, pero no fue validado contra la
 especificación oficial vigente ni contra el entorno de ARCA. Los registros 05,
@@ -397,20 +400,19 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
 - Es un MVP en desarrollo, no un sistema de producción.
 - No usar con datos personales reales ni para liquidaciones oficiales.
 - La UI web ya exige login y protección CSRF. En modo demo no persiste; en modo
-  SQL es una lectura sin separación por organización.
+  SQL filtra por la organización del usuario autenticado.
 - La API de IA usa un mock por defecto; la persistencia y publicación existen,
   pero el proveedor real se inyecta en código.
 - La publicación de una propuesta crea una fórmula en `DRAFT`; no la aprueba
   ni la activa.
-- SAC, vacaciones y liquidación final existen como módulo puro, pero todavía no
-  están integrados en `calculate_payroll` ni en la UI.
+- SAC, vacaciones y liquidación final tienen API de simulación, pero todavía no
+  se eligen automáticamente desde el tipo de corrida ni desde la UI.
 - El reporte F.931 es una planilla interna de control, no el formato oficial.
 - El cálculo cubre una corrida mensual básica. No incluye retroactivos
   complejos ni asientos contables.
 - No hay trabajos en segundo plano en uso ni auditoría automática de CRUD.
-- No hay rate limiting, MFA, recuperación ni cambio de contraseña.
-- La sesión web no se rota al iniciar sesión ni tiene cierre por inactividad
-  independiente de `PAYROLL_SESSION_MAX_AGE`.
+- Hay rate limiting de login en memoria, cambio de contraseña e invalidación de
+  sesiones por versión. Faltan MFA, recuperación y rate limiting compartido.
 - Los valores por defecto de secreto y admin son inseguros.
 - El TXT LSD no está aceptado por ARCA y el recibo no acredita firma o entrega.
 - Docker y PyInstaller tienen configuración inicial, pero no builds verificados.
@@ -419,6 +421,7 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
 ## Documentación
 
 - `docs/ARCHITECTURE.md`: componentes, flujo, seguridad y auditoría.
+- `docs/AUDIT_2026-10-26.md`: hallazgos de la auditoría y correcciones aplicadas.
 - `docs/NORMATIVE_DATA.md`: datos demo, versionado y validación pendiente.
 - `docs/OPERATIONS.md`: salud, backups y operación.
 - `docs/IMPLEMENTATION_CONTRACTS.md`: contratos entre módulos.

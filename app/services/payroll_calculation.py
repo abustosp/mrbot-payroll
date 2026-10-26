@@ -52,7 +52,7 @@ def _applicable_formulas(
         .join(FormulaVersion, FormulaVersion.formula_id == FormulaDefinition.id)
         .where(
             FormulaDefinition.organization_id == organization_id,
-            FormulaVersion.status.in_(("VALIDATED", "APPROVED")),
+            FormulaVersion.status == "APPROVED",
             FormulaVersion.valid_from <= period,
             or_(FormulaVersion.valid_to.is_(None), FormulaVersion.valid_to >= period),
         )
@@ -156,7 +156,7 @@ def _definitions_for_employee(
             )
         )
     if not definitions:
-        raise ValueError("No hay fórmulas validadas o aprobadas vigentes para el período.")
+        raise ValueError("No hay fórmulas aprobadas vigentes para el período.")
     return definitions
 
 
@@ -184,6 +184,10 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
         .where(
             Employee.organization_id == run.organization_id,
             Employee.active.is_(True),
+            or_(
+                Employee.termination_date.is_(None),
+                Employee.termination_date >= period,
+            ),
             EmploymentContract.company_id == run.company_id,
             EmploymentContract.active.is_(True),
             EmploymentContract.valid_from <= period,
@@ -279,6 +283,11 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
             )
             if any(len(item.code) > 40 for item in calculated.items):
                 raise ValueError("El código de un concepto supera los 40 caracteres permitidos.")
+            if calculated.net < 0:
+                raise ValueError(
+                    "El resultado de la liquidación tiene un neto negativo "
+                    f"({calculated.net})."
+                )
         except (ArithmeticError, LookupError, TypeError, ValueError) as exc:
             message = str(exc)
             errors.append({

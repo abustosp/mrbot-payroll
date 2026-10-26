@@ -3,6 +3,8 @@ from app.auth.security import (
     dummy_password_hash,
     hash_password,
     read_session,
+    read_session_payload,
+    read_session_version,
     sign_session,
     verify_password,
 )
@@ -16,18 +18,25 @@ def test_password_hash_and_signed_session() -> None:
     assert not verify_password("wrong", hashed)
 
     token = sign_session(42, "unit-test-secret")
+    payload = read_session_payload(token, "unit-test-secret", 60)
+    assert payload is not None
+    assert payload["sv"] == 1
+    assert read_session_version(payload) == 1
     assert read_session(token, "unit-test-secret", 60) == 42
     assert read_session(token, "different-secret", 60) is None
     assert read_session("malformed", "unit-test-secret", 60) is None
 
 
 def test_signed_session_token_rotates_between_emissions() -> None:
-    first = sign_session(42, "unit-test-secret")
-    second = sign_session(42, "unit-test-secret")
+    first = sign_session(42, "unit-test-secret", session_version=2)
+    second = sign_session(42, "unit-test-secret", session_version=2)
 
     assert first != second
     assert read_session(first, "unit-test-secret", 60) == 42
     assert read_session(second, "unit-test-secret", 60) == 42
+    payload = read_session_payload(first, "unit-test-secret", 60)
+    assert payload is not None
+    assert read_session_version(payload) == 2
 
 
 def test_dummy_password_hash_is_a_valid_pbkdf2_hash() -> None:

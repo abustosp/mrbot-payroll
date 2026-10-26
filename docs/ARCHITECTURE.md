@@ -239,14 +239,15 @@ Controles implementados:
 
 Límites actuales:
 
-- con `PAYROLL_WEB_DATA_SOURCE=sql` la UI lee la base sin separación por
-  organización. No debe exponerse a Internet sin completar ese aislamiento;
-- no hay rate limiting, MFA, recuperación de contraseña ni rotación de sesiones;
+- con `PAYROLL_WEB_DATA_SOURCE=sql` la UI filtra por la organización del
+  usuario autenticado; sigue siendo una proyección de solo lectura;
+- hay rate limiting de login en memoria, cambio de contraseña e invalidación de
+  sesiones por `session_version`; faltan MFA, recuperación y un limitador
+  compartido entre procesos;
 - los valores por defecto de `PAYROLL_SECRET_KEY` y del admin demo son
   inseguros y deben cambiarse;
-- el endpoint de propuestas usa la identidad de la sesión para aprobar, pero la
-  aprobación no se persiste ni se enlaza a una fórmula publicada;
-- las propuestas de IA no se persisten ni quedan en una auditoría propia;
+- las propuestas de IA se persisten en `ai_proposals`; la aprobación usa la
+  identidad de la sesión y la publicación manual crea fórmulas `DRAFT`;
 - `AuditLog` existe como modelo, pero las operaciones CRUD no lo completan de
   forma automática;
 - no hay trabajos en segundo plano ni cola persistente en uso, aunque existen
@@ -278,29 +279,31 @@ Qué se escribe hoy:
   `PayrollTrace`, y actualiza hashes y estado de la corrida;
 - la aprobación de una liquidación escribe `PayrollApproval`;
 - `AuditLog` no se completa automáticamente;
-- las propuestas de IA y sus aprobaciones son objetos en memoria que devuelve
-  la API, salvo que otro servicio las persista.
+- las propuestas de IA y sus aprobaciones se guardan en `ai_proposals`; el
+  endpoint legacy `/ai/proposals/approve` sigue devolviendo un objeto en
+  memoria.
 
 La UI web exige autenticación (`PAYROLL_WEB_AUTH_ENABLED=true` por defecto) y
 protege los POST con CSRF. Por defecto lee de `DemoDataStore`, un store en
 memoria que permite mostrar el producto sin base; en ese modo el login valida
 las credenciales de administrador configuradas. Si se configura
 `PAYROLL_WEB_DATA_SOURCE=sql`, lee de `SqlAlchemyDataSource`, una proyección de
-solo lectura sobre las tablas, y autentica contra la tabla `users`. Ese modo no
-separa por organización ni muestra propuestas de IA porque no hay tabla
-persistida. En ambos casos la UI es una capa de presentación, no una fuente de
-verdad para liquidar.
+solo lectura sobre las tablas, autentica contra la tabla `users` y filtra
+empresas, empleados, recibos y propuestas por la organización del usuario. En
+ambos casos la UI es una capa de presentación, no una fuente de verdad para
+liquidar.
 
 ## Brechas principales del MVP
 
-1. No hay puente automático entre una propuesta de IA aprobada y una
-   `FormulaVersion`.
-2. La API no publica nuevas versiones de una fórmula existente.
-3. La UI ya autentica y protege CSRF, pero el modo SQL es de solo lectura y no
-   está separado por organización.
-4. No hay carga de paquetes normativos aprobados ni validación contra ARCA.
-5. El cálculo cubre una corrida mensual básica; no cubre SAC, vacaciones,
-   liquidación final, retroactivos complejos ni cierre definitivo.
+1. La publicación de IA crea fórmulas `DRAFT`; falta un flujo de UI para
+   revisarlas y aprobarlas.
+2. El cálculo elige fórmulas por organización y fecha, pero todavía no por
+   convenio, categoría o `ruleset_id`. Falta ese filtro para multi-CCT estricto.
+3. SAC, vacaciones y liquidación final tienen API de simulación, pero no se
+   eligen automáticamente desde el tipo de corrida.
+4. Las novedades importadas se guardan como remunerativas y el período es
+   `AAAAMM`; no cubren quincenas ni naturalezas no remunerativas.
+5. La validación contra ARCA sigue pendiente.
 6. No hay auditoría automática de cambios ni trabajos persistentes.
 7. Docker y PyInstaller tienen configuración inicial, pero no builds
    verificados en este repositorio.
