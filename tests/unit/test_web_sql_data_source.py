@@ -12,7 +12,20 @@ from sqlalchemy.orm import sessionmaker
 import app.main as main
 from app.config import Settings, get_settings
 from app.database import Base
-from app.database.models import PayrollRun
+from app.database.models import (
+    AgreementCategory,
+    AiProposal,
+    CollectiveAgreement,
+    Company,
+    Employee,
+    EmploymentContract,
+    Organization,
+    PayrollItem,
+    PayrollResult,
+    PayrollRun,
+    SalaryScale,
+    User,
+)
 from app.services.payroll_calculation import calculate_payroll_run
 from app.web.demo_data import DemoDataStore
 from app.web.sql_data_source import SqlAlchemyDataSource
@@ -42,8 +55,9 @@ def test_sql_data_source_maps_seed_and_calculated_payroll(tmp_path: Path) -> Non
         calculate_payroll_run(session, run)
         run_id = run.id
         company_id = company.id
+        organization_id = demo["organization"].id
 
-    source = SqlAlchemyDataSource(factory)
+    source = SqlAlchemyDataSource(factory, organization_id)
     try:
         assert source.is_demo is False
         assert source.source_name == "Base de datos SQL"
@@ -88,8 +102,9 @@ def test_sql_data_source_maps_seed_and_calculated_payroll(tmp_path: Path) -> Non
 
         assert source.list_proposals() == []
         assert source.get_proposal("1") is None
-        with pytest.raises(ValueError, match="No hay propuestas IA persistidas"):
-            source.set_proposal_status("1", "approved")
+        assert source.set_proposal_status("1", "approved") is None
+        with pytest.raises(ValueError, match="Estado de propuesta no valido"):
+            source.set_proposal_status("1", "invented")
 
         receipts = source.list_receipts()
         assert len(receipts) == 2
@@ -99,6 +114,266 @@ def test_sql_data_source_maps_seed_and_calculated_payroll(tmp_path: Path) -> Non
         assert receipts[0].to_pdf_context()["items"]
     finally:
         engine.dispose()
+
+
+def test_sql_data_source_isolates_organizations(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-isolation.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        org_a = _seed_organization(
+            session,
+            slug="organization-a",
+            name="Organización A",
+            cuit="30711111118",
+            employee_code="A-001",
+            cuil="20111111112",
+            agreement_code="CCT-A",
+            run_code="run-a",
+            net="100000.00",
+        )
+        org_b = _seed_organization(
+            session,
+            slug="organization-b",
+            name="Organización B",
+            cuit="30722222227",
+            employee_code="B-001",
+            cuil="20222222223",
+            agreement_code="CCT-B",
+            run_code="run-b",
+            net="900000.00",
+        )
+
+    source_a = SqlAlchemyDataSource(factory, org_a["organization_id"])
+    source_b = SqlAlchemyDataSource(factory, org_b["organization_id"])
+    unscoped = SqlAlchemyDataSource(factory)
+    try:
+        companies_a = source_a.list_companies()
+        assert [company.id for company in companies_a] == [str(org_a["company_id"])]
+        assert source_a.get_company(str(org_b["company_id"])) is None
+        assert source_a.get_company(str(org_a["company_id"])) is not None
+
+        employees_a = source_a.list_employees()
+        assert [employee.id for employee in employees_a] == [str(org_a["employee_id"])]
+        assert source_a.list_employees(company_id=str(org_b["company_id"])) == []
+        assert source_a.employees_for_company(str(org_b["company_id"])) == []
+        assert source_a.get_employee(str(org_b["employee_id"])) is None
+
+        agreements_a = source_a.list_agreements()
+        assert [agreement.id for agreement in agreements_a] == [str(org_a["agreement_id"])]
+        assert source_a.get_agreement(str(org_b["agreement_id"])) is None
+        assert source_a.get_agreement(str(org_a["agreement_id"])) is not None
+
+        payrolls_a = source_a.list_payrolls()
+        assert [payroll.id for payroll in payrolls_a] == [str(org_a["run_id"])]
+        assert source_a.list_payrolls(company_id=str(org_b["company_id"])) == []
+        assert source_a.get_payroll(str(org_b["run_id"])) is None
+
+        receipts_a = source_a.list_receipts()
+        assert [receipt.id for receipt in receipts_a] == [str(org_a["result_id"])]
+        assert receipts_a[0].company_id == str(org_a["company_id"])
+        assert source_a.list_receipts(company_id=str(org_b["company_id"])) == []
+        assert source_a.list_receipts(period="2026-09") == receipts_a
+        assert source_a.get_receipt(str(org_b["result_id"])) is None
+        assert source_a.receipt_periods() == [("2026-09", "Septiembre 2026")]
+
+        proposals_a = source_a.list_proposals()
+        assert [proposal.id for proposal in proposals_a] == [str(org_a["proposal_id"])]
+        assert proposals_a[0].status == "draft"
+        assert proposals_a[0].title == "Propuesta Organización A"
+        assert proposals_a[0].agreement == "CCT-A"
+        assert proposals_a[0].source_page == "Artículo 1, página 3"
+        assert source_a.list_proposals(status="approved") == []
+        assert source_a.get_proposal(str(org_b["proposal_id"])) is None
+        assert source_a.set_proposal_status(str(org_b["proposal_id"]), "approved") is None
+        with factory() as session:
+            assert session.get(AiProposal, org_b["proposal_id"]).status == "draft"
+        metrics_before_update = source_a.dashboard_metrics()
+        assert metrics_before_update["pending_proposals"] == 1
+        updated = source_a.set_proposal_status(str(org_a["proposal_id"]), "approved")
+        assert updated is not None and updated.status == "approved"
+        with factory() as session:
+            assert session.get(AiProposal, org_b["proposal_id"]).status == "draft"
+
+        metrics_a = source_a.dashboard_metrics()
+        metrics_b = source_b.dashboard_metrics()
+        assert metrics_a["companies"] == 1
+        assert metrics_a["active_employees"] == 1
+        assert metrics_a["in_review"] == 0
+        assert metrics_a["pending_proposals"] == 0
+        assert metrics_b["pending_proposals"] == 1
+        assert metrics_a["issued_receipts"] == 1
+        assert metrics_a["latest_payroll"].id == str(org_a["run_id"])
+        assert metrics_a["total_net"] == Decimal("100000.00")
+        assert metrics_b["total_net"] == Decimal("900000.00")
+        assert metrics_a["total_net"] != metrics_b["total_net"]
+
+        # A source without a resolved organization must never project all rows.
+        assert unscoped.list_companies() == []
+        assert unscoped.list_employees() == []
+        assert unscoped.list_agreements() == []
+        assert unscoped.list_payrolls() == []
+        assert unscoped.list_receipts() == []
+        assert unscoped.list_proposals() == []
+        assert unscoped.dashboard_metrics()["companies"] == 0
+        assert unscoped.dashboard_metrics()["latest_payroll"] is None
+    finally:
+        engine.dispose()
+
+
+def _seed_organization(
+    session,
+    *,
+    slug: str,
+    name: str,
+    cuit: str,
+    employee_code: str,
+    cuil: str,
+    agreement_code: str,
+    run_code: str,
+    net: str,
+) -> dict[str, int]:
+    amount = Decimal(net)
+    deductions = Decimal("100.00")
+    gross = amount + deductions
+
+    organization = Organization(name=name, slug=slug)
+    agreement = CollectiveAgreement(
+        code=agreement_code,
+        year=2026,
+        name=f"Convenio {name}",
+        scope="Convenio de prueba",
+    )
+    session.add_all([organization, agreement])
+    session.flush()
+
+    user = User(
+        organization_id=organization.id,
+        email=f"{slug}@example.test",
+        password_hash="not-used-in-this-test",
+        role="admin",
+    )
+    category = AgreementCategory(
+        agreement_id=agreement.id,
+        code="A",
+        name=f"Categoría {name}",
+    )
+    company = Company(
+        organization_id=organization.id,
+        cuit=cuit,
+        legal_name=f"Empresa {name}",
+        tax_activity="Servicios",
+        address="Calle 1, Ciudad",
+        active=True,
+    )
+    session.add_all([user, category, company])
+    session.flush()
+
+    session.add(
+        SalaryScale(
+            category_id=category.id,
+            valid_from=date(2026, 1, 1),
+            valid_to=date(2026, 12, 31),
+            base_salary=amount,
+            additional=Decimal("0"),
+        )
+    )
+    employee = Employee(
+        organization_id=organization.id,
+        employee_code=employee_code,
+        first_name="Empleado",
+        last_name=name,
+        cuil=cuil,
+        hire_date=date(2024, 1, 1),
+        active=True,
+    )
+    session.add(employee)
+    session.flush()
+
+    contract = EmploymentContract(
+        employee_id=employee.id,
+        company_id=company.id,
+        agreement_id=agreement.id,
+        category_id=category.id,
+        valid_from=date(2024, 1, 1),
+        active=True,
+        monthly_salary=amount,
+    )
+    run = PayrollRun(
+        organization_id=organization.id,
+        company_id=company.id,
+        code=run_code,
+        period_start=date(2026, 9, 1),
+        period_end=date(2026, 9, 30),
+        run_type="MONTHLY",
+        status="APPROVED",
+        created_by=user.id,
+    )
+    session.add_all([contract, run])
+    session.flush()
+
+    result = PayrollResult(
+        payroll_run_id=run.id,
+        employee_id=employee.id,
+        remunerative=amount,
+        non_remunerative=Decimal("0"),
+        deductions=deductions,
+        contributions=Decimal("0"),
+        gross=gross,
+        net=amount,
+        employer_cost=gross,
+    )
+    session.add(result)
+    session.flush()
+
+    session.add(
+        PayrollItem(
+            payroll_result_id=result.id,
+            code="BASICO",
+            description="Sueldo básico",
+            nature="REMUNERATIVE",
+            quantity=Decimal("1"),
+            unit_value=amount,
+            amount=amount,
+        )
+    )
+    proposal = AiProposal(
+        organization_id=organization.id,
+        document_id=f"doc-{slug}",
+        title=f"Propuesta {name}",
+        raw_json={
+            "summary": f"Resumen de {name}",
+            "agreement_number": agreement_code,
+            "agreement_title": f"Convenio {name}",
+            "formulas": [
+                {
+                    "code": "BASICO",
+                    "description": f"Fórmula de {name}",
+                    "source": {
+                        "document_id": f"doc-{slug}",
+                        "version": "1",
+                        "page": 3,
+                        "article": "Artículo 1",
+                    },
+                }
+            ],
+            "ambiguities": [f"Advertencia de {name}"],
+        },
+        validation_json={"is_valid": True, "reports": []},
+        status="draft",
+    )
+    session.add(proposal)
+    session.flush()
+
+    return {
+        "organization_id": organization.id,
+        "company_id": company.id,
+        "employee_id": employee.id,
+        "agreement_id": agreement.id,
+        "run_id": run.id,
+        "result_id": result.id,
+        "proposal_id": proposal.id,
+    }
 
 
 def test_web_source_setting_defaults_to_demo_and_can_select_sql(monkeypatch) -> None:

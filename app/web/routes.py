@@ -21,9 +21,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.database.models import User
 from app.database.session import get_db
 from app.exporters.pdf.receipts import (
     ReceiptContextError,
@@ -45,7 +47,7 @@ from app.web.auth import (
     set_csrf_cookie,
     start_web_session,
 )
-from app.web.dependencies import get_data_source
+from app.web.dependencies import get_data_source, scope_data_source
 from app.web.formatting import (
     date_ar,
     initials,
@@ -93,10 +95,41 @@ router = APIRouter()
 web_router = router
 protected_router = APIRouter(dependencies=[Depends(require_web_user)])
 
-DataSource = Annotated[Any, Depends(get_data_source)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[Session, Depends(get_db)]
 WebUserDep = Annotated[WebUser, Depends(require_web_user)]
+PublicDataSource = Annotated[Any, Depends(get_data_source)]
+
+
+def _request_data_source(
+    request: Request,
+    user: WebUserDep,
+    db: SessionDep,
+    data: PublicDataSource,
+) -> Any:
+    """Scope the configured source to the authenticated user's organization.
+
+    ``user`` is deliberately the first dependency so the source is resolved
+    only after authentication; the scope itself is then derived from the user,
+    never from a client-supplied parameter.  Demo sources are returned
+    untouched.
+    """
+
+    if user.is_demo or bool(getattr(data, "is_demo", False)):
+        request.state.payroll_data_source = data
+        return data
+    organization_id = db.scalar(
+        select(User.organization_id).where(User.id == user.id)
+    )
+    if organization_id is None:
+        request.state.payroll_data_source = data
+        return data
+    scoped = scope_data_source(data, organization_id)
+    request.state.payroll_data_source = scoped
+    return scoped
+
+
+DataSource = Annotated[Any, Depends(_request_data_source)]
 
 PAYROLL_STATUS_OPTIONS = [
     ("", "Todos los estados"),
@@ -250,7 +283,7 @@ def login_page(
     request: Request,
     settings: SettingsDep,
     db: SessionDep,
-    data: DataSource,
+    data: PublicDataSource,
 ) -> Response:
     next_url = safe_next_url(request.query_params.get("next"))
     if not settings.web_auth_enabled:
@@ -265,7 +298,7 @@ def login_submit(
     request: Request,
     settings: SettingsDep,
     db: SessionDep,
-    data: DataSource,
+    data: PublicDataSource,
     email: Annotated[str, Form()] = "",
     password: Annotated[str, Form()] = "",
     csrf_token: Annotated[str, Form()] = "",
@@ -333,7 +366,7 @@ def dashboard(request: Request, data: DataSource) -> HTMLResponse:
 
 
 @router.get("/salud", name="health_page")
-def health_page(request: Request, data: DataSource) -> HTMLResponse:
+def health_page(request: Request, data: PublicDataSource) -> HTMLResponse:
     pdf_ok, pdf_detail = pdf_backend_status()
     checks = [
         {
@@ -385,7 +418,7 @@ def health_page(request: Request, data: DataSource) -> HTMLResponse:
 
 
 @router.get("/health/visual", name="health_visual", include_in_schema=False)
-def health_visual(request: Request, data: DataSource) -> HTMLResponse:
+def health_visual(request: Request, data: PublicDataSource) -> HTMLResponse:
     """Alias en inglés del health visual; no colisiona con ``GET /health``."""
 
     return health_page(request, data)

@@ -269,7 +269,6 @@ def test_migration_has_one_head_and_creates_ai_proposals(
         script = ScriptDirectory.from_config(config)
         heads = script.get_heads()
         assert len(heads) == 1
-        assert "8f3c2a91d4b7" in heads
 
         command.upgrade(config, "head")
 
@@ -279,5 +278,6 @@ def test_migration_has_one_head_and_creates_ai_proposals(
         finally:
             engine.dispose()
         assert "ai_proposals" in tables
+        assert "payroll_novelties" in tables
     finally:
         get_settings.cache_clear()

@@ -1,7 +1,14 @@
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class ORMModel(BaseModel):
@@ -11,6 +18,18 @@ class ORMModel(BaseModel):
 class LoginInput(BaseModel):
     email: str
     password: str
+
+
+class ChangePasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+    confirm_password: str = Field(min_length=12, max_length=256)
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> Self:
+        if self.new_password != self.confirm_password:
+            raise ValueError("La confirmación no coincide con la nueva contraseña")
+        return self
 
 
 class UserRead(ORMModel):

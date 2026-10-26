@@ -1,7 +1,17 @@
-"""Read-only web projections backed by the payroll SQLAlchemy models."""
+"""Web projections backed by the payroll SQLAlchemy models.
+
+Every projection is scoped to one organization.  The source is created by the
+application without an organization because the organization belongs to the
+authenticated request, not to the process; :meth:`SqlAlchemyDataSource.for_organization`
+returns a request-scoped copy that filters every query.  A source without an
+organization deliberately returns no rows so a missed scope can never expose
+cross-organization data.  The only write is the supervised review status of an
+AI proposal, always restricted to the same organization.
+"""
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import date, datetime
@@ -22,6 +32,9 @@ from app.database.models import (
     PayrollResult,
     PayrollRun,
     SalaryScale,
+)
+from app.database.models import (
+    AiProposal as PersistedProposal,
 )
 from app.database.session import SessionLocal
 from app.web.demo_data import (
@@ -78,6 +91,109 @@ _RUN_TYPES = {
     "COMPLEMENTARY": "Complementaria",
     "SIMULATION": "Simulación",
 }
+_PROPOSAL_STATUSES = {
+    "draft": "draft",
+    "validated": "in_review",
+    "in_review": "in_review",
+    "approved": "approved",
+    "published": "approved",
+    "rejected": "rejected",
+}
+_PROPOSAL_STATUS_FILTERS: dict[str, tuple[str, ...]] = {
+    "draft": ("draft",),
+    "in_review": ("validated", "in_review"),
+    "validated": ("validated", "in_review"),
+    "approved": ("approved", "published"),
+    "published": ("published",),
+    "rejected": ("rejected",),
+}
+_PROPOSAL_STATUS_DB = {
+    "draft": "draft",
+    "in_review": "validated",
+    "approved": "approved",
+    "rejected": "rejected",
+}
+
+
+def _proposal_status(value: str | None) -> str:
+    return _PROPOSAL_STATUSES.get((value or "").casefold(), (value or "").casefold())
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+    """Return a JSON object from a dict or a JSON-encoded string."""
+
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _text_items(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _validation_warnings(value: Any) -> list[str]:
+    warnings: list[str] = []
+    reports = value if isinstance(value, list) else _json_object(value).get("reports")
+    if not isinstance(reports, list):
+        return warnings
+    for report in reports:
+        if not isinstance(report, dict):
+            continue
+        for key in ("errors", "warnings"):
+            issues = report.get(key)
+            if not isinstance(issues, list):
+                continue
+            for issue in issues:
+                if isinstance(issue, dict) and str(issue.get("message") or "").strip():
+                    warnings.append(str(issue["message"]).strip())
+    return warnings
+
+
+def _validation_is_valid(value: Any) -> bool:
+    return _json_object(value).get("is_valid") is True
+
+
+def _proposal_rules(raw: dict[str, Any]) -> list[str]:
+    rules: list[str] = []
+    formulas = raw.get("formulas")
+    if isinstance(formulas, list):
+        for formula in formulas:
+            if not isinstance(formula, dict):
+                continue
+            label = str(formula.get("description") or formula.get("code") or "").strip()
+            if label:
+                rules.append(label)
+    return rules
+
+
+def _proposal_source(raw: dict[str, Any]) -> str:
+    for key in ("formulas", "concepts", "parameters"):
+        items = raw.get(key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("source")
+            if not isinstance(source, dict):
+                continue
+            article = str(source.get("article") or "").strip()
+            page = source.get("page")
+            if article and page is not None:
+                return f"{article}, página {page}"
+            if article:
+                return article
+            if page is not None:
+                return f"Página {page}"
+    return ""
 
 
 def _id(value: str | int) -> int | None:
@@ -114,25 +230,42 @@ def _location(address: str | None) -> tuple[str, str]:
 class SqlAlchemyDataSource:
     """The read-only SQL equivalent of :class:`DemoDataStore`.
 
-    The current schema has no company address parts, agreement document links,
-    or persisted AI proposal table, so those views use the available fields and
-    leave unsupported proposal and document counts empty.
+    The current schema has no company address parts or agreement document links,
+    so those views use the available fields and leave unsupported document
+    counts empty.  ``ai_proposals`` is a persisted table and is projected from
+    the raw JSON captured by the supervised AI pipeline.
     """
 
     is_demo = False
     source_name = "Base de datos SQL"
     explanation = (
-        "La interfaz consulta la base SQL. Las propuestas IA quedan vacías y los "
-        "conteos de fórmulas y documentos por convenio son cero porque el esquema "
-        "todavía no relaciona esos datos. La dirección se usa como ubicación porque "
-        "la empresa no tiene campos separados de ciudad y provincia."
+        "La interfaz consulta la base SQL con el alcance de la organización del "
+        "usuario autenticado. Empresas, empleados, convenios, liquidaciones, "
+        "recibos, métricas y propuestas IA se filtran por organización; las "
+        "propuestas se leen de ai_proposals y requieren revisión humana. La "
+        "dirección se usa como ubicación porque la empresa no tiene campos "
+        "separados de ciudad y provincia."
     )
 
-    def __init__(self, session_factory: Callable[[], Session] = SessionLocal) -> None:
+    def __init__(
+        self,
+        session_factory: Callable[[], Session] = SessionLocal,
+        organization_id: int | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self.organization_id = organization_id
+
+    def for_organization(self, organization_id: int) -> SqlAlchemyDataSource:
+        """Return a view of this source restricted to one organization."""
+
+        return SqlAlchemyDataSource(self._session_factory, organization_id)
+
+    def _scope(self) -> int | None:
+        return self.organization_id
 
     def _companies(self, session: Session, rows: Sequence[Company]) -> list[WebCompany]:
-        if not rows:
+        organization_id = self._scope()
+        if not rows or organization_id is None:
             return []
         company_ids = [row.id for row in rows]
         today = date.today()
@@ -140,7 +273,10 @@ class SqlAlchemyDataSource:
             select(EmploymentContract, CollectiveAgreement, Employee)
             .join(Employee, Employee.id == EmploymentContract.employee_id)
             .outerjoin(CollectiveAgreement, CollectiveAgreement.id == EmploymentContract.agreement_id)
-            .where(EmploymentContract.company_id.in_(company_ids))
+            .where(
+                EmploymentContract.company_id.in_(company_ids),
+                Employee.organization_id == organization_id,
+            )
             .order_by(EmploymentContract.valid_from.desc())
         ).all()
         contracts_by_company: dict[int, list[tuple[EmploymentContract, CollectiveAgreement | None, Employee]]] = defaultdict(list)
@@ -178,8 +314,15 @@ class SqlAlchemyDataSource:
         return output
 
     def list_companies(self, query: str = "") -> list[WebCompany]:
+        organization_id = self._scope()
+        if organization_id is None:
+            return []
         with self._session_factory() as session:
-            rows = session.scalars(select(Company).order_by(Company.legal_name)).all()
+            rows = session.scalars(
+                select(Company)
+                .where(Company.organization_id == organization_id)
+                .order_by(Company.legal_name)
+            ).all()
             return [
                 company for company in self._companies(session, rows)
                 if _matches(query, company.name, company.cuit, company.city, company.activity)
@@ -187,11 +330,14 @@ class SqlAlchemyDataSource:
 
     def get_company(self, company_id: str) -> WebCompany | None:
         row_id = _id(company_id)
-        if row_id is None:
+        organization_id = self._scope()
+        if row_id is None or organization_id is None:
             return None
         with self._session_factory() as session:
             row = session.get(Company, row_id)
-            return self._companies(session, [row])[0] if row else None
+            if row is None or row.organization_id != organization_id:
+                return None
+            return self._companies(session, [row])[0]
 
     def _employees(
         self,
@@ -199,15 +345,20 @@ class SqlAlchemyDataSource:
         rows: Sequence[Employee],
         preferred_company_id: int | None = None,
     ) -> list[WebEmployee]:
-        if not rows:
+        organization_id = self._scope()
+        if not rows or organization_id is None:
             return []
         employee_ids = [row.id for row in rows]
         today = date.today()
+        company_ids_subquery = select(Company.id).where(Company.organization_id == organization_id)
         contract_rows = session.execute(
             select(EmploymentContract, AgreementCategory, CollectiveAgreement)
             .outerjoin(AgreementCategory, AgreementCategory.id == EmploymentContract.category_id)
             .outerjoin(CollectiveAgreement, CollectiveAgreement.id == EmploymentContract.agreement_id)
-            .where(EmploymentContract.employee_id.in_(employee_ids))
+            .where(
+                EmploymentContract.employee_id.in_(employee_ids),
+                EmploymentContract.company_id.in_(company_ids_subquery),
+            )
             .order_by(EmploymentContract.valid_from.desc())
         ).all()
         contracts_by_employee: dict[int, list[tuple[EmploymentContract, AgreementCategory | None, CollectiveAgreement | None]]] = defaultdict(list)
@@ -218,7 +369,12 @@ class SqlAlchemyDataSource:
         company_ids = {contract.company_id for contract, _category, _agreement in contract_rows}
         companies = {
             company.id: company
-            for company in session.scalars(select(Company).where(Company.id.in_(company_ids))).all()
+            for company in session.scalars(
+                select(Company).where(
+                    Company.id.in_(company_ids),
+                    Company.organization_id == organization_id,
+                )
+            ).all()
         } if company_ids else {}
         category_ids = {category.id for _contract, category, _agreement in contract_rows if category}
         scales_by_category: dict[int, list[SalaryScale]] = defaultdict(list)
@@ -288,10 +444,15 @@ class SqlAlchemyDataSource:
         status: str = "",
     ) -> list[WebEmployee]:
         requested_company = _id(company_id) if company_id else None
-        if company_id and requested_company is None:
+        organization_id = self._scope()
+        if (company_id and requested_company is None) or organization_id is None:
             return []
         with self._session_factory() as session:
-            rows = session.scalars(select(Employee).order_by(Employee.last_name, Employee.first_name)).all()
+            rows = session.scalars(
+                select(Employee)
+                .where(Employee.organization_id == organization_id)
+                .order_by(Employee.last_name, Employee.first_name)
+            ).all()
             employees = self._employees(session, rows, requested_company)
             return [
                 employee for employee in employees
@@ -309,11 +470,14 @@ class SqlAlchemyDataSource:
 
     def get_employee(self, employee_id: str) -> WebEmployee | None:
         row_id = _id(employee_id)
-        if row_id is None:
+        organization_id = self._scope()
+        if row_id is None or organization_id is None:
             return None
         with self._session_factory() as session:
             row = session.get(Employee, row_id)
-            return self._employees(session, [row])[0] if row else None
+            if row is None or row.organization_id != organization_id:
+                return None
+            return self._employees(session, [row])[0]
 
     def _agreements(self, session: Session, rows: Sequence[CollectiveAgreement]) -> list[WebAgreement]:
         if not rows:
@@ -351,10 +515,36 @@ class SqlAlchemyDataSource:
             summary=row.scope or "Convenio registrado en la base de datos.",
         ) for row in rows]
 
+    def _agreement_ids(self, session: Session, organization_id: int) -> set[int]:
+        """Agreements are global, so scope them through the organization's contracts."""
+
+        return {
+            agreement_id
+            for agreement_id in session.scalars(
+                select(EmploymentContract.agreement_id)
+                .join(Employee, Employee.id == EmploymentContract.employee_id)
+                .join(Company, Company.id == EmploymentContract.company_id)
+                .where(
+                    Employee.organization_id == organization_id,
+                    Company.organization_id == organization_id,
+                    EmploymentContract.agreement_id.is_not(None),
+                )
+            ).all()
+            if agreement_id is not None
+        }
+
     def list_agreements(self, query: str = "") -> list[WebAgreement]:
+        organization_id = self._scope()
+        if organization_id is None:
+            return []
         with self._session_factory() as session:
+            agreement_ids = self._agreement_ids(session, organization_id)
+            if not agreement_ids:
+                return []
             rows = session.scalars(
-                select(CollectiveAgreement).order_by(CollectiveAgreement.code, CollectiveAgreement.year)
+                select(CollectiveAgreement)
+                .where(CollectiveAgreement.id.in_(agreement_ids))
+                .order_by(CollectiveAgreement.code, CollectiveAgreement.year)
             ).all()
             return [
                 agreement for agreement in self._agreements(session, rows)
@@ -363,20 +553,29 @@ class SqlAlchemyDataSource:
 
     def get_agreement(self, agreement_id: str) -> WebAgreement | None:
         row_id = _id(agreement_id)
-        if row_id is None:
+        organization_id = self._scope()
+        if row_id is None or organization_id is None:
             return None
         with self._session_factory() as session:
             row = session.get(CollectiveAgreement, row_id)
-            return self._agreements(session, [row])[0] if row else None
+            if row is None or row.id not in self._agreement_ids(session, organization_id):
+                return None
+            return self._agreements(session, [row])[0]
 
     def _payrolls(self, session: Session, rows: Sequence[PayrollRun]) -> list[WebPayrollRun]:
-        if not rows:
+        organization_id = self._scope()
+        if not rows or organization_id is None:
             return []
         run_ids = [row.id for row in rows]
         company_ids = {row.company_id for row in rows}
         companies = {
             company.id: company
-            for company in session.scalars(select(Company).where(Company.id.in_(company_ids))).all()
+            for company in session.scalars(
+                select(Company).where(
+                    Company.id.in_(company_ids),
+                    Company.organization_id == organization_id,
+                )
+            ).all()
         }
         results = session.scalars(
             select(PayrollResult)
@@ -390,7 +589,10 @@ class SqlAlchemyDataSource:
         employees = {
             employee.id: employee
             for employee in session.scalars(
-                select(Employee).where(Employee.id.in_({result.employee_id for result in results}))
+                select(Employee).where(
+                    Employee.id.in_({result.employee_id for result in results}),
+                    Employee.organization_id == organization_id,
+                )
             ).all()
         } if results else {}
         items_by_result: dict[int, list[PayrollItem]] = defaultdict(list)
@@ -455,10 +657,15 @@ class SqlAlchemyDataSource:
 
     def list_payrolls(self, status: str = "", company_id: str = "") -> list[WebPayrollRun]:
         requested_company = _id(company_id) if company_id else None
-        if company_id and requested_company is None:
+        organization_id = self._scope()
+        if (company_id and requested_company is None) or organization_id is None:
             return []
         with self._session_factory() as session:
-            statement = select(PayrollRun).order_by(PayrollRun.period_start.desc(), PayrollRun.id.desc())
+            statement = (
+                select(PayrollRun)
+                .where(PayrollRun.organization_id == organization_id)
+                .order_by(PayrollRun.period_start.desc(), PayrollRun.id.desc())
+            )
             if requested_company is not None:
                 statement = statement.where(PayrollRun.company_id == requested_company)
             rows = session.scalars(statement).all()
@@ -467,27 +674,98 @@ class SqlAlchemyDataSource:
 
     def get_payroll(self, payroll_id: str) -> WebPayrollRun | None:
         row_id = _id(payroll_id)
-        if row_id is None:
+        organization_id = self._scope()
+        if row_id is None or organization_id is None:
             return None
         with self._session_factory() as session:
             row = session.get(PayrollRun, row_id)
-            return self._payrolls(session, [row])[0] if row else None
+            if row is None or row.organization_id != organization_id:
+                return None
+            return self._payrolls(session, [row])[0]
+
+    def _proposal(self, row: PersistedProposal) -> AIProposal:
+        raw = _json_object(row.raw_json)
+        number = str(raw.get("agreement_number") or "").strip()
+        agreement_title = str(raw.get("agreement_title") or "").strip()
+        if number:
+            agreement = number if number.upper().startswith("CCT") else f"CCT {number}"
+        else:
+            agreement = agreement_title
+        title = (row.title or agreement_title).strip() if (row.title or agreement_title) else ""
+        validation = row.validation_json
+        warnings = _text_items(raw.get("ambiguities")) + _text_items(raw.get("security_warnings"))
+        warnings.extend(_validation_warnings(validation))
+        created_at = (
+            row.created_at.date() if isinstance(row.created_at, datetime) else date.today()
+        )
+        return AIProposal(
+            id=str(row.id),
+            title=title or f"Propuesta {row.id}",
+            agreement=agreement,
+            document=row.document_id,
+            status=_proposal_status(row.status),
+            confidence=Decimal("100.0") if _validation_is_valid(validation) else Decimal("0.0"),
+            created_at=created_at,
+            summary=str(raw.get("summary") or "").strip()
+            or "Propuesta persistida en la base de datos, pendiente de revisión humana.",
+            rules=_proposal_rules(raw),
+            warnings=warnings,
+            source_page=_proposal_source(raw),
+        )
 
     def list_proposals(self, status: str = "") -> list[AIProposal]:
-        return []
+        organization_id = self._scope()
+        if organization_id is None:
+            return []
+        if status and status.casefold() not in _PROPOSAL_STATUS_FILTERS:
+            return []
+        with self._session_factory() as session:
+            statement = (
+                select(PersistedProposal)
+                .where(PersistedProposal.organization_id == organization_id)
+                .order_by(PersistedProposal.created_at.desc(), PersistedProposal.id.desc())
+            )
+            if status:
+                statement = statement.where(
+                    PersistedProposal.status.in_(_PROPOSAL_STATUS_FILTERS[status.casefold()])
+                )
+            rows = session.scalars(statement).all()
+            return [self._proposal(row) for row in rows]
 
     def get_proposal(self, proposal_id: str) -> AIProposal | None:
-        return None
+        row_id = _id(proposal_id)
+        organization_id = self._scope()
+        if row_id is None or organization_id is None:
+            return None
+        with self._session_factory() as session:
+            row = session.get(PersistedProposal, row_id)
+            if row is None or row.organization_id != organization_id:
+                return None
+            return self._proposal(row)
 
     def set_proposal_status(self, proposal_id: str, status: str) -> AIProposal | None:
-        raise ValueError("No hay propuestas IA persistidas en la base de datos.")
+        if status not in _PROPOSAL_STATUS_DB:
+            raise ValueError(f"Estado de propuesta no valido: {status}")
+        row_id = _id(proposal_id)
+        organization_id = self._scope()
+        if row_id is None or organization_id is None:
+            return None
+        with self._session_factory() as session:
+            row = session.get(PersistedProposal, row_id)
+            if row is None or row.organization_id != organization_id:
+                return None
+            row.status = _PROPOSAL_STATUS_DB[status]
+            session.commit()
+            session.refresh(row)
+            return self._proposal(row)
 
     def _receipts(
         self,
         session: Session,
         result_rows: Sequence[Row[PayrollResult, PayrollRun]],
     ) -> list[WebReceipt]:
-        if not result_rows:
+        organization_id = self._scope()
+        if not result_rows or organization_id is None:
             return []
         run_rows = list({run.id: run for _result, run in result_rows}.values())
         payrolls = {payroll.id: payroll for payroll in self._payrolls(session, run_rows)}
@@ -500,7 +778,12 @@ class SqlAlchemyDataSource:
         employee_ids = {result.employee_id for result, _run in result_rows}
         employees = {
             employee.id: employee
-            for employee in session.scalars(select(Employee).where(Employee.id.in_(employee_ids))).all()
+            for employee in session.scalars(
+                select(Employee).where(
+                    Employee.id.in_(employee_ids),
+                    Employee.organization_id == organization_id,
+                )
+            ).all()
         }
         employee_views = {
             int(employee.id): employee
@@ -509,7 +792,10 @@ class SqlAlchemyDataSource:
         companies = {
             company.id: company
             for company in session.scalars(
-                select(Company).where(Company.id.in_({run.company_id for _result, run in result_rows}))
+                select(Company).where(
+                    Company.id.in_({run.company_id for _result, run in result_rows}),
+                    Company.organization_id == organization_id,
+                )
             ).all()
         }
         output = []
@@ -572,12 +858,14 @@ class SqlAlchemyDataSource:
         status: str = "",
     ) -> list[WebReceipt]:
         requested_company = _id(company_id) if company_id else None
-        if company_id and requested_company is None:
+        organization_id = self._scope()
+        if (company_id and requested_company is None) or organization_id is None:
             return []
         with self._session_factory() as session:
             statement = (
                 select(PayrollResult, PayrollRun)
                 .join(PayrollRun, PayrollRun.id == PayrollResult.payroll_run_id)
+                .where(PayrollRun.organization_id == organization_id)
                 .order_by(PayrollRun.period_start.desc(), PayrollResult.id.desc())
             )
             if requested_company is not None:
@@ -593,13 +881,17 @@ class SqlAlchemyDataSource:
 
     def get_receipt(self, receipt_id: str) -> WebReceipt | None:
         result_id = _id(receipt_id)
-        if result_id is None:
+        organization_id = self._scope()
+        if result_id is None or organization_id is None:
             return None
         with self._session_factory() as session:
             row = session.execute(
                 select(PayrollResult, PayrollRun)
                 .join(PayrollRun, PayrollRun.id == PayrollResult.payroll_run_id)
-                .where(PayrollResult.id == result_id)
+                .where(
+                    PayrollResult.id == result_id,
+                    PayrollRun.organization_id == organization_id,
+                )
             ).first()
             return self._receipts(session, [row])[0] if row else None
 
@@ -609,12 +901,32 @@ class SqlAlchemyDataSource:
 
     def dashboard_metrics(self) -> dict[str, Any]:
         today = date.today()
+        organization_id = self._scope()
+        if organization_id is None:
+            return {
+                "companies": 0,
+                "active_employees": 0,
+                "in_review": 0,
+                "pending_proposals": 0,
+                "issued_receipts": 0,
+                "latest_payroll": None,
+                "total_net": _ZERO,
+                "total_gross": _ZERO,
+                "employer_cost": _ZERO,
+            }
         with self._session_factory() as session:
-            companies_count = session.scalar(select(func.count()).select_from(Company)) or 0
+            companies_count = session.scalar(
+                select(func.count())
+                .select_from(Company)
+                .where(Company.organization_id == organization_id)
+            ) or 0
             active_employees = session.scalar(
                 select(func.count(func.distinct(Employee.id)))
                 .join(EmploymentContract, EmploymentContract.employee_id == Employee.id)
+                .join(Company, Company.id == EmploymentContract.company_id)
                 .where(
+                    Employee.organization_id == organization_id,
+                    Company.organization_id == organization_id,
                     Employee.active.is_(True),
                     or_(Employee.termination_date.is_(None), Employee.termination_date >= today),
                     EmploymentContract.active.is_(True),
@@ -623,7 +935,9 @@ class SqlAlchemyDataSource:
                 )
             ) or 0
             rows = session.scalars(
-                select(PayrollRun).order_by(PayrollRun.period_start.desc(), PayrollRun.id.desc())
+                select(PayrollRun)
+                .where(PayrollRun.organization_id == organization_id)
+                .order_by(PayrollRun.period_start.desc(), PayrollRun.id.desc())
             ).all()
             payrolls = self._payrolls(session, rows)
             latest = next((payroll for payroll in payrolls if payroll.status != "draft"), payrolls[0] if payrolls else None)
@@ -631,13 +945,24 @@ class SqlAlchemyDataSource:
                 select(func.count())
                 .select_from(PayrollResult)
                 .join(PayrollRun, PayrollRun.id == PayrollResult.payroll_run_id)
-                .where(PayrollRun.status.in_(("APPROVED", "CLOSED")))
+                .where(
+                    PayrollRun.organization_id == organization_id,
+                    PayrollRun.status.in_(("APPROVED", "CLOSED")),
+                )
+            ) or 0
+            pending_proposals = session.scalar(
+                select(func.count())
+                .select_from(PersistedProposal)
+                .where(
+                    PersistedProposal.organization_id == organization_id,
+                    PersistedProposal.status.in_(("draft", "validated")),
+                )
             ) or 0
             return {
                 "companies": companies_count,
                 "active_employees": active_employees,
                 "in_review": sum(payroll.status in {"calculated", "review"} for payroll in payrolls),
-                "pending_proposals": 0,
+                "pending_proposals": pending_proposals,
                 "issued_receipts": issued_receipts,
                 "latest_payroll": latest,
                 "total_net": latest.net if latest else _ZERO,

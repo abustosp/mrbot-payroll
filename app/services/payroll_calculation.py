@@ -27,6 +27,7 @@ from app.database.models import (
     NormativeParameter,
     PayrollConcept,
     PayrollItem,
+    PayrollNovelty,
     PayrollResult,
     PayrollRun,
     PayrollTrace,
@@ -81,6 +82,48 @@ def _applicable_parameters(db: Session, period: date) -> dict[str, Decimal]:
     for row in rows:
         parameters.setdefault(row.code, row.value)
     return parameters
+
+
+def _novelties_for_employees(
+    db: Session,
+    organization_id: int,
+    employee_ids: list[int],
+    period: date,
+) -> dict[int, list[dict[str, object]]]:
+    """Load period novelties using the contract expected by ``calculate_payroll``.
+
+    Only the persisted values are mapped; aggregation and business rules stay in
+    the payroll engine.
+
+    Contract note: ``calculate_payroll`` raises when a formula references a
+    novelty variable that is absent. Consequently, a formula that consumes
+    novelties needs a row for every employee it is evaluated for; the service
+    does not invent zero-valued novelties to hide missing inputs.
+    """
+    if not employee_ids:
+        return {}
+    period_key = f"{period.year:04d}{period.month:02d}"
+    rows = db.scalars(
+        select(PayrollNovelty)
+        .where(
+            PayrollNovelty.organization_id == organization_id,
+            PayrollNovelty.employee_id.in_(employee_ids),
+            PayrollNovelty.period == period_key,
+        )
+        .order_by(PayrollNovelty.id)
+    ).all()
+    novelties: dict[int, list[dict[str, object]]] = {}
+    for row in rows:
+        novelties.setdefault(row.employee_id, []).append(
+            {
+                "code": row.code,
+                "quantity": row.quantity,
+                "amount": row.amount,
+                "unit": row.unit,
+                "kind": row.kind,
+            }
+        )
+    return novelties
 
 
 def _clear_previous_results(db: Session, run_id: int) -> None:
@@ -161,6 +204,9 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
     contracts_by_employee: dict[int, list[EmploymentContract]] = {}
     for contract_row in contracts:
         contracts_by_employee.setdefault(contract_row.employee_id, []).append(contract_row)
+    novelties_by_employee = _novelties_for_employees(
+        db, run.organization_id, employee_ids, period
+    )
 
     results: list[dict] = []
     errors: list[dict[str, str | int]] = []
@@ -195,6 +241,7 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
             else (scale.base_salary + scale.additional if scale is not None else None)
         )
 
+        employee_novelties = novelties_by_employee.get(employee.id, [])
         input_employees.append({
             "employee_id": employee.id,
             "contract_id": contract.id,
@@ -206,6 +253,7 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
             "hire_date": employee.hire_date,
             "contract_valid_from": contract.valid_from,
             "contract_valid_to": contract.valid_to,
+            "novelties": employee_novelties,
             "formula_versions": [
                 {"code": formula.code, "version": version.version, "expression": version.expression}
                 for formula, version in formulas
@@ -227,6 +275,7 @@ def calculate_payroll_run(db: Session, run: PayrollRun) -> dict:
                 period,
                 definitions,
                 parameters,
+                novelties=employee_novelties,
             )
             if any(len(item.code) > 40 for item in calculated.items):
                 raise ValueError("El código de un concepto supera los 40 caracteres permitidos.")

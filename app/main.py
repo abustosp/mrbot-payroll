@@ -13,6 +13,7 @@ from app.api import (
     normative_packages,
     payroll_runs,
     reports,
+    settlements,
 )
 from app.config import get_settings
 from app.web.routes import router as web_router
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
         imports.router,
         normative_packages.router,
         reports.router,
+        settlements.router,
     ):
         application.include_router(router, prefix="/api/v1")
     if ai_router is not None:

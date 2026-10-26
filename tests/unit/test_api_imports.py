@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import date
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 
@@ -15,7 +16,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.imports import MAX_IMPORT_BYTES, router
 from app.auth.dependencies import require_user
 from app.database import Base
-from app.database.models import Company, Employee, EmploymentContract, Organization, User
+from app.database.models import (
+    Company,
+    Employee,
+    EmploymentContract,
+    Organization,
+    PayrollNovelty,
+    User,
+)
 from app.database.session import get_db
 from app.importers import cuil_check_digit
 
@@ -53,6 +61,26 @@ def make_xlsx(headers: list[str], rows: list[list[object]]) -> bytes:
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
+
+
+def add_employee(
+    factory: sessionmaker[Session],
+    employee_code: str,
+    *,
+    organization_id: int = 1,
+    first_name: str = "Test",
+    last_name: str = "Empleado",
+) -> int:
+    with factory.begin() as session:
+        employee = Employee(
+            organization_id=organization_id,
+            employee_code=employee_code,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        session.add(employee)
+        session.flush()
+        return employee.id
 
 
 @pytest.fixture
@@ -212,9 +240,84 @@ def test_novelties_dry_run_returns_preview(api) -> None:
     assert data["valid_rows"][0]["tipo"] == "horas_extra"
 
 
-def test_novelties_commit_is_rejected_with_422(api) -> None:
-    client, _, _ = api
-    content = novelty_csv(["1;202601;horas_extra;10;1500,50"])
+def test_novelties_commit_persists_and_is_idempotent(api) -> None:
+    client, factory, _ = api
+    employee_id = add_employee(factory, "E-30")
+    content = novelty_csv(
+        [
+            "E-30;202601;horas_extra;10;1500,50",
+            "E-30;202601;ausencia;2;",
+        ]
+    )
+
+    first = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false"},
+        files={"file": ("novelties.csv", content, "text/csv")},
+    )
+
+    assert first.status_code == 200, first.text
+    first_data = first.json()
+    assert first_data["kind"] == "novelties"
+    assert first_data["dry_run"] is False
+    assert first_data["created"] == 2
+    assert first_data["skipped"] == 0
+    assert first_data["valid_count"] == 2
+    assert first_data["error_count"] == 0
+    assert first_data["duplicate_count"] == 0
+    assert first_data["source"] == "import"
+
+    with factory() as session:
+        rows = session.scalars(
+            select(PayrollNovelty).order_by(PayrollNovelty.id)
+        ).all()
+        assert len(rows) == 2
+        overtime = rows[0]
+        assert overtime.organization_id == 1
+        assert overtime.employee_id == employee_id
+        assert overtime.period == "202601"
+        assert overtime.code == "horas_extra"
+        assert overtime.kind == "REMUNERATIVE"
+        assert overtime.quantity == Decimal("10")
+        assert overtime.amount == Decimal("1500.50")
+        assert overtime.unit is None
+        assert overtime.description is None
+        assert overtime.source == "import"
+        assert overtime.external_id is None
+        assert overtime.created_at is not None
+        absence = rows[1]
+        assert absence.code == "ausencia"
+        assert absence.quantity == Decimal("2")
+        assert absence.amount is None
+
+    second = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false"},
+        files={"file": ("novelties.csv", content, "text/csv")},
+    )
+
+    assert second.status_code == 200, second.text
+    second_data = second.json()
+    assert second_data["created"] == 0
+    assert second_data["skipped"] == 2
+    assert second_data["duplicate_count"] == 2
+    assert {item["key"] for item in second_data["duplicates"]} == {
+        "legajo:E-30|periodo:202601|tipo:horas_extra",
+        "legajo:E-30|periodo:202601|tipo:ausencia",
+    }
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(PayrollNovelty)) == 2
+
+
+def test_novelties_commit_reports_unknown_legajo_without_aborting(api) -> None:
+    client, factory, _ = api
+    employee_id = add_employee(factory, "E-31")
+    content = novelty_csv(
+        [
+            "E-999;202601;horas_extra;5;100",
+            "E-31;202601;horas_extra;5;100",
+        ]
+    )
 
     response = client.post(
         "/api/v1/imports/novelties",
@@ -222,10 +325,80 @@ def test_novelties_commit_is_rejected_with_422(api) -> None:
         files={"file": ("novelties.csv", content, "text/csv")},
     )
 
-    assert response.status_code == 422
-    detail = response.json()["detail"]
-    assert "dry_run" in detail
-    assert "novedades" in detail
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["created"] == 1
+    assert data["skipped"] == 1
+    assert data["valid_count"] == 2
+    assert data["error_count"] == 1
+    assert data["errors"][0]["code"] == "legajo_no_encontrado"
+    assert data["errors"][0]["field"] == "legajo"
+    assert data["errors"][0]["value"] == "E-999"
+    with factory() as session:
+        rows = session.scalars(select(PayrollNovelty)).all()
+        assert len(rows) == 1
+        assert rows[0].employee_id == employee_id
+
+
+def test_novelties_commit_is_isolated_by_organization(api) -> None:
+    client, factory, _ = api
+    with factory.begin() as session:
+        session.add(Organization(id=2, name="Otra Organizacion", slug="otra"))
+        company = Company(
+            organization_id=1,
+            cuit="30711223344",
+            legal_name="Empresa Propia SA",
+        )
+        foreign_company = Company(
+            organization_id=2,
+            cuit="30799999999",
+            legal_name="Empresa Ajena SA",
+        )
+        session.add_all([company, foreign_company])
+        session.flush()
+        company_id = company.id
+        foreign_company_id = foreign_company.id
+    foreign_employee_id = add_employee(factory, "E-40", organization_id=2)
+    content = novelty_csv(["E-40;202601;horas_extra;7;200"])
+
+    foreign = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false", "company_id": company_id},
+        files={"file": ("novelties.csv", content, "text/csv")},
+    )
+
+    assert foreign.status_code == 200, foreign.text
+    foreign_data = foreign.json()
+    assert foreign_data["created"] == 0
+    assert foreign_data["error_count"] == 1
+    assert foreign_data["errors"][0]["code"] == "legajo_no_encontrado"
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(PayrollNovelty)) == 0
+        assert session.get(Employee, foreign_employee_id) is not None
+
+    local_employee_id = add_employee(factory, "E-40", organization_id=1)
+    local = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false", "company_id": company_id},
+        files={"file": ("novelties.csv", content, "text/csv")},
+    )
+
+    assert local.status_code == 200, local.text
+    local_data = local.json()
+    assert local_data["created"] == 1
+    assert local_data["company_id"] == company_id
+    with factory() as session:
+        novelty = session.scalar(select(PayrollNovelty))
+        assert novelty is not None
+        assert novelty.organization_id == 1
+        assert novelty.employee_id == local_employee_id
+
+    missing = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false", "company_id": foreign_company_id},
+        files={"file": ("novelties.csv", content, "text/csv")},
+    )
+    assert missing.status_code == 404
 
 
 def test_employees_commit_is_idempotent(api) -> None:

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.auth.security import hash_password
 from app.config import Settings, get_settings
 from app.database import Base
-from app.database.models import Organization, User
+from app.database.models import AiProposal, Company, Organization, User
 from app.database.session import get_db
 from app.web.auth import CSRF_COOKIE
 from app.web.demo_data import DemoDataStore
@@ -290,4 +290,108 @@ def test_viewer_can_read_but_cannot_change_proposal_status(tmp_path: Path) -> No
             )
             assert forbidden.status_code == 403
     finally:
+        engine.dispose()
+
+
+def test_sql_web_pages_are_scoped_to_the_authenticated_organization(
+    tmp_path: Path,
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-org-scope.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        org_a = Organization(name="Organización A", slug="org-a")
+        org_b = Organization(name="Organización B", slug="org-b")
+        session.add_all([org_a, org_b])
+        session.flush()
+        session.add_all(
+            [
+                User(
+                    organization_id=org_a.id,
+                    email="admin-a@example.test",
+                    password_hash=hash_password("secret-a"),
+                    role="admin",
+                ),
+                User(
+                    organization_id=org_b.id,
+                    email="admin-b@example.test",
+                    password_hash=hash_password("secret-b"),
+                    role="admin",
+                ),
+                Company(
+                    organization_id=org_a.id,
+                    cuit="30733333332",
+                    legal_name="Empresa Visible A",
+                    active=True,
+                ),
+                Company(
+                    organization_id=org_b.id,
+                    cuit="30744444443",
+                    legal_name="Empresa Oculta B",
+                    active=True,
+                ),
+                AiProposal(
+                    organization_id=org_a.id,
+                    document_id="doc-a",
+                    title="Propuesta Visible A",
+                    raw_json={"summary": "Resumen A", "agreement_number": "130/75"},
+                    status="draft",
+                ),
+                AiProposal(
+                    organization_id=org_b.id,
+                    document_id="doc-b",
+                    title="Propuesta Oculta B",
+                    raw_json={"summary": "Resumen B", "agreement_number": "260/75"},
+                    status="draft",
+                ),
+            ]
+        )
+
+    application = FastAPI()
+    application.include_router(router)
+    application.state.payroll_data_source = SqlAlchemyDataSource(factory)
+
+    def override_db() -> Generator[Session, None, None]:
+        with factory() as session:
+            yield session
+
+    application.dependency_overrides[get_db] = override_db
+    application.dependency_overrides[get_settings] = _test_settings
+    try:
+        with TestClient(application) as client_a:
+            response = _login(
+                client_a,
+                email="admin-a@example.test",
+                password="secret-a",
+            )
+            assert response.status_code == 303
+            companies = client_a.get("/empresas")
+            assert companies.status_code == 200
+            assert "Empresa Visible A" in companies.text
+            assert "Empresa Oculta B" not in companies.text
+            employees = client_a.get("/empleados")
+            assert employees.status_code == 200
+            assert "Empresa Oculta B" not in employees.text
+            proposals = client_a.get("/propuestas-ia")
+            assert proposals.status_code == 200
+            assert "Propuesta Visible A" in proposals.text
+            assert "Propuesta Oculta B" not in proposals.text
+
+        with TestClient(application) as client_b:
+            response = _login(
+                client_b,
+                email="admin-b@example.test",
+                password="secret-b",
+            )
+            assert response.status_code == 303
+            companies = client_b.get("/empresas")
+            assert companies.status_code == 200
+            assert "Empresa Oculta B" in companies.text
+            assert "Empresa Visible A" not in companies.text
+            proposals = client_b.get("/propuestas-ia")
+            assert proposals.status_code == 200
+            assert "Propuesta Oculta B" in proposals.text
+            assert "Propuesta Visible A" not in proposals.text
+    finally:
+        application.dependency_overrides.clear()
         engine.dispose()

@@ -2,14 +2,17 @@
 """API de importacion de empleados y novedades desde CSV/XLSX.
 
 Los endpoints reutilizan los importadores puros de ``app.importers``: primero
-se arma un :class:`~app.importers.models.ImportPreview` y, en los commits de
-empleados, se revalidan las filas con ``import_rows`` antes de persistirlas.
-El ``dry_run`` es el modo por defecto, por lo que un pedido sin ``dry_run=false``
-nunca modifica la base de datos.
+se arma un :class:`~app.importers.models.ImportPreview` y, en los commits, se
+revalidan las filas con ``import_rows`` antes de persistirlas. El ``dry_run``
+es el modo por defecto, por lo que un pedido sin ``dry_run=false`` nunca
+modifica la base de datos.
 
-La importacion de **novedades** solo admite ``dry_run=true``. No existe una
-tabla de novedades en el modelo de datos actual, asi que un pedido con
-``dry_run=false`` se rechaza con 422 en lugar de inventar persistencia.
+El commit de **novedades** persiste las filas validas en
+``payroll_novelties`` y es idempotente por la clave natural
+``(employee_id, period, code, source)``. Los legajos se resuelven dentro de la
+organizacion del usuario; una fila cuyo legajo no existe se informa como error
+sin abortar el resto del lote. ``company_id`` es opcional y, si se informa, se
+valida que la empresa pertenezca a la organizacion.
 """
 
 from __future__ import annotations
@@ -25,13 +28,20 @@ from sqlalchemy.orm import Session
 
 from app.api.common import commit_or_conflict
 from app.auth.dependencies import require_user
-from app.database.models import Company, Employee, EmploymentContract, User
+from app.database.models import (
+    Company,
+    Employee,
+    EmploymentContract,
+    PayrollNovelty,
+    User,
+)
 from app.database.session import get_db
 from app.importers.models import (
     DuplicateRow,
     EmployeeRow,
     ImportPreview,
     ImportResult,
+    NoveltyRow,
     RowError,
 )
 from app.importers.readers import ImportFileError
@@ -42,6 +52,11 @@ router = APIRouter(prefix="/imports", tags=["imports"])
 MAX_IMPORT_BYTES = 5 * 1024 * 1024
 ALLOWED_SUFFIXES = frozenset({".csv", ".xlsx", ".xlsm"})
 COMMIT_ROLES = frozenset({"admin", "editor"})
+NOVELTY_SOURCE = "import"
+# El importador CSV/XLSX no trae una columna de naturaleza: las novedades
+# importadas se guardan como remunerativas. La naturaleza del concepto (no este
+# dato) es la que gobierna el calculo.
+NOVELTY_KIND = "REMUNERATIVE"
 
 
 class _NamedBytesIO(io.BytesIO):
@@ -239,6 +254,143 @@ def _commit_employees(
     )
 
 
+def _commit_novelties(
+    db: Session,
+    user: User,
+    preview: ImportPreview,
+    company_id: int | None,
+) -> dict[str, Any]:
+    """Persiste novedades validas sin abortar el lote por una fila con error.
+
+    La idempotencia se garantiza por ``(employee_id, period, code, source)``.
+    Una novedad ya importada se informa como duplicada y no se vuelve a crear;
+    si dos filas compiten por la misma clave, el ``IntegrityError`` se aisla con
+    un ``SAVEPOINT`` y se continua con las restantes. Los legajos se resuelven
+    solo dentro de la organizacion del usuario.
+    """
+    result = import_rows(list(preview.valid_rows), "novelties")
+    result.total = preview.total
+    result.errors = [*preview.errors, *result.errors]
+    result.duplicates = [*preview.duplicates, *result.duplicates]
+    result.dry_run = False
+
+    if company_id is not None:
+        _scoped_company(db, company_id, user.organization_id)
+
+    employees_by_code = {
+        employee.employee_code: employee
+        for employee in db.scalars(
+            select(Employee).where(Employee.organization_id == user.organization_id)
+        ).all()
+    }
+    periods = sorted(
+        {row.periodo for row in result.valid_rows if isinstance(row, NoveltyRow)}
+    )
+    existing: set[tuple[int, str, str]] = set()
+    if periods:
+        existing = {
+            (row[0], row[1], row[2])
+            for row in db.execute(
+                select(
+                    PayrollNovelty.employee_id,
+                    PayrollNovelty.period,
+                    PayrollNovelty.code,
+                ).where(
+                    PayrollNovelty.organization_id == user.organization_id,
+                    PayrollNovelty.source == NOVELTY_SOURCE,
+                    PayrollNovelty.period.in_(periods),
+                )
+            )
+        }
+
+    created = 0
+    skipped = 0
+    for index, row in enumerate(result.valid_rows):
+        if not isinstance(row, NoveltyRow):
+            continue
+        row_number = index + 2
+        employee = employees_by_code.get(row.legajo)
+        if employee is None:
+            skipped += 1
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field="legajo",
+                    code="legajo_no_encontrado",
+                    message=(
+                        "No existe un empleado con ese legajo en la organizacion; "
+                        "la fila se omite."
+                    ),
+                    value=row.legajo,
+                )
+            )
+            continue
+
+        key = (employee.id, row.periodo, row.tipo)
+        if key in existing:
+            skipped += 1
+            result.duplicates.append(
+                DuplicateRow(
+                    row=row_number,
+                    first_row=row_number,
+                    key=(
+                        f"legajo:{row.legajo}|periodo:{row.periodo}|"
+                        f"tipo:{row.tipo}"
+                    ),
+                    message=(
+                        "Ya existe una novedad con el mismo legajo, periodo, tipo "
+                        "y origen; la fila se omite."
+                    ),
+                )
+            )
+            continue
+
+        novelty = PayrollNovelty(
+            organization_id=user.organization_id,
+            employee_id=employee.id,
+            period=row.periodo,
+            code=row.tipo,
+            kind=NOVELTY_KIND,
+            quantity=row.cantidad,
+            unit=None,
+            amount=row.importe,
+            description=row.observacion,
+            source=NOVELTY_SOURCE,
+            external_id=None,
+        )
+        try:
+            with db.begin_nested():
+                db.add(novelty)
+                db.flush()
+        except IntegrityError:
+            skipped += 1
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field=None,
+                    code="conflicto_bd",
+                    message=(
+                        "La novedad entra en conflicto con una clave unica "
+                        "existente; la fila se omite."
+                    ),
+                    value=row.legajo,
+                )
+            )
+            continue
+
+        existing.add(key)
+        created += 1
+
+    commit_or_conflict(db)
+    return _serialize(
+        result,
+        created=created,
+        skipped=skipped,
+        company_id=company_id,
+        source=NOVELTY_SOURCE,
+    )
+
+
 @router.post("/employees")
 def import_employees(
     file: UploadFile = File(...),
@@ -269,26 +421,27 @@ def import_employees(
 def import_novelties(
     file: UploadFile = File(...),
     dry_run: bool = Query(default=True),
+    company_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ) -> dict[str, Any]:
-    """Analiza novedades desde un CSV/XLSX en modo dry-run.
+    """Analiza o persiste novedades desde un CSV/XLSX.
 
-    El modelo de datos actual no tiene una tabla de novedades, por lo que este
-    endpoint solo soporta ``dry_run=true``. Un pedido con ``dry_run=false``
-    responde 422 de forma explicita: no se persiste ni se simula persistencia.
+    Con ``dry_run=true`` (por defecto) devuelve solo el preview. Con
+    ``dry_run=false`` persiste las filas validas en ``payroll_novelties`` y
+    devuelve el resultado del commit junto con los conteos de creadas y
+    omitidas. Las novedades ya importadas se informan como duplicadas y no
+    interrumpen el resto del lote. ``company_id`` es opcional: si se informa,
+    se valida que la empresa pertenezca a la organizacion del usuario.
     """
     if not dry_run:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "La importacion de novedades solo admite dry_run=true: no existe "
-                "una tabla de novedades donde persistirlas."
-            ),
-        )
+        _ensure_commit_role(user)
 
     content, filename = _read_upload(file)
     preview = _analyze(content, filename, "novelties")
-    return _serialize(preview)
+    if dry_run:
+        return _serialize(preview)
+    return _commit_novelties(db, user, preview, company_id)
 
 
 __all__ = ["MAX_IMPORT_BYTES", "router"]

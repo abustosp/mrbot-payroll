@@ -350,6 +350,66 @@ class PayrollItem(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
 
 
+class PayrollNovelty(Base):
+    """A novelty imputed to one employee for a payroll period.
+
+    ``period`` is the imputation period in ``AAAAMM`` format. ``kind`` classifies
+    the novelty nature using the same values as ``PayrollConcept.nature``. The
+    natural key ``(employee_id, period, code, source)`` makes imports
+    idempotent, while ``(organization_id, external_id)`` prevents the same
+    external record from being imported twice. Multiple null ``external_id``
+    values are allowed by the unique constraint, as required for manually
+    created rows.
+    """
+
+    __tablename__ = "payroll_novelties"
+    __table_args__ = (
+        UniqueConstraint(
+            "employee_id",
+            "period",
+            "code",
+            "source",
+            name="uq_payroll_novelties_employee_period_code_source",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "external_id",
+            name="uq_payroll_novelties_organization_external_id",
+        ),
+        CheckConstraint(
+            "length(period) = 6 "
+            "AND CAST(period AS INTEGER) BETWEEN 190001 AND 299912 "
+            "AND substr(period, 5, 2) BETWEEN '01' AND '12'",
+            name="valid_period",
+        ),
+        CheckConstraint(
+            "kind IN ('REMUNERATIVE', 'NON_REMUNERATIVE', 'DEDUCTION', "
+            "'CONTRIBUTION', 'AUXILIARY')",
+            name="valid_kind",
+        ),
+        Index("ix_payroll_novelty_employee_period", "employee_id", "period"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
+    )
+    period: Mapped[str] = mapped_column(String(6), nullable=False)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    kind: Mapped[str] = mapped_column(
+        String(24), default="REMUNERATIVE", nullable=False
+    )
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    unit: Mapped[str | None] = mapped_column(String(20))
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(40), default="import", nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+
 class PayrollTrace(Base):
     __tablename__ = "payroll_calculation_traces"
     id: Mapped[int] = mapped_column(primary_key=True)
