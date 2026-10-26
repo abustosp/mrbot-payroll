@@ -27,7 +27,9 @@ from app.ai import (
     DocumentTooLargeError,
     LLMProvider,
     MockProvider,
+    OpenAICompatibleProvider,
     ProposedFormula,
+    ProviderConfigurationError,
     ProviderError,
     ValidationReport,
     analyze_agreement,
@@ -38,6 +40,7 @@ from app.ai import (
 from app.api.common import commit_or_conflict, get_scoped
 from app.api.schemas import AiProposalPublishRead, AiProposalRead
 from app.auth.dependencies import require_role, require_user
+from app.config import Settings, get_settings
 from app.database.models import (
     AiProposal,
     AuditLog,
@@ -182,14 +185,31 @@ def _mock_analysis_json(metadata: DocumentMetadata) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
-def get_ai_provider(payload: AnalyzeAgreementRequest) -> LLMProvider:
-    """Provide the default offline provider.
+def get_ai_provider(
+    payload: AnalyzeAgreementRequest,
+    settings: Settings = Depends(get_settings),
+) -> LLMProvider:
+    """Select the AI provider by environment.
 
-    Deployments and tests can override this FastAPI dependency to inject a real
-    ``LLMProvider`` without changing the route logic.
+    ``development``/``test`` keep the deterministic mock so the suite and local
+    runs stay offline. Any other environment requires a real provider: with a
+    key it returns ``OpenAICompatibleProvider``, without one it fails with
+    503 explícito. Deployments and tests can still override this FastAPI
+    dependency to inject any ``LLMProvider`` (D-4).
     """
 
-    return MockProvider(_mock_analysis_json(payload.to_metadata()))
+    if (settings.environment or "").strip().lower() in {"development", "dev", "test", "testing"}:
+        return MockProvider(_mock_analysis_json(payload.to_metadata()))
+    try:
+        return OpenAICompatibleProvider()
+    except ProviderConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Proveedor IA no configurado: defina PAYROLL_AI_API_KEY (o OPENAI_API_KEY) "
+                f"o despliegue en development/test para usar el mock. Detalle: {exc}"
+            ),
+        ) from exc
 
 
 def _with_validation_reports(analysis: AgreementAnalysis) -> AgreementAnalysis:

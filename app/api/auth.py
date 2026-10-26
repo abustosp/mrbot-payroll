@@ -101,7 +101,15 @@ def change_password(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response, settings: Settings = Depends(get_settings)):
+def logout(
+    response: Response,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    user.session_version += 1
+    db.add(user)
+    db.commit()
     response.delete_cookie(
         settings.session_cookie,
         path="/",
