@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -134,4 +135,3 @@ class PayrollResult:
             "employer_cost": str(self.employer_cost),
             "trace": list(self.trace),
         }
-
