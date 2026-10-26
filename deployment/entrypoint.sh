@@ -12,6 +12,17 @@ if [ "${PAYROLL_ENVIRONMENT:-development}" != "development" ]; then
     esac
 fi
 
+# B-71: con el perfil postgres activo, password vacio = base inaccesible;
+# fallar con el remedio en vez de arrancar a ciegas.
+case ",${COMPOSE_PROFILES:-}," in
+    *,postgres,*)
+        if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+            echo "ERROR: POSTGRES_PASSWORD debe tener un valor no vacío con el perfil postgres activo." >&2
+            exit 1
+        fi
+        ;;
+esac
+
 # B-22: tolerar una base ya creada por create_all sin sellar (la migra
 # directa falla con "table ... already exists"): sellar y reintentar una vez.
 # shortcut: se asume que el fallo es por base pre-creada; una migracion rota

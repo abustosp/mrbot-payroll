@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
+import sys
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.auth.security import hash_password, verify_password
@@ -225,7 +229,7 @@ def seed(session: Session) -> dict[str, object]:
             concept.active = True
         concept_rows[code] = concept
 
-    expressions = {
+    expressions: dict[str, dict[str, Any]] = {
         "BASICO": {"variable": "sueldo_basico"},
         "ANTIGUEDAD": {
             "operator": "multiply",
@@ -328,10 +332,23 @@ def seed(session: Session) -> dict[str, object]:
     }
 
 
-def main() -> None:
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal.begin() as session:
-        seed(session)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Crea o actualiza los datos demo (idempotente, no duplica)."
+    )
+    parser.parse_args(argv)
+    try:
+        Base.metadata.create_all(bind=engine)
+        with SessionLocal.begin() as session:
+            seed(session)
+    except OperationalError as exc:
+        # B-62: la base existe con un esquema anterior o no es accesible.
+        print(
+            "No se pudo sembrar: la base no es accesible o tiene un esquema "
+            "anterior. Ejecutá `alembic upgrade head` y reintentá.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from exc
     # B-22: create_all no deja version de alembic y el upgrade posterior falla
     # con "table ... already exists"; sellar head tras crear (idempotente).
     from alembic.command import stamp

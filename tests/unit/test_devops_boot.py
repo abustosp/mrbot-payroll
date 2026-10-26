@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
 
 import app.main as main_module
+import scripts.seed_demo as seed_demo
 from app.config import Settings
 from app.main import app
 
@@ -30,6 +32,31 @@ def test_health_ok_with_live_database() -> None:
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_seed_help_exits_without_seeding(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        seed_demo.main(["--help"])
+    assert exc.value.code == 0
+    assert "usage" in capsys.readouterr().out
+
+
+def test_seed_operational_error_prints_remedy(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class _Metadata:
+        @staticmethod
+        def create_all(bind: object = None) -> None:
+            raise OperationalError("select 1", {}, Exception("db vieja"))
+
+    class _Base:
+        metadata = _Metadata()
+
+    monkeypatch.setattr(seed_demo, "Base", _Base())
+    with pytest.raises(SystemExit) as exc:
+        seed_demo.main([])
+    assert exc.value.code == 1
+    assert "alembic upgrade head" in capsys.readouterr().err
 
 
 def test_health_reports_503_when_database_is_down(monkeypatch: pytest.MonkeyPatch) -> None:

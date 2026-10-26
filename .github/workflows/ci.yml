@@ -24,9 +24,9 @@ jobs:
           enable-cache: true
       - run: sudo apt-get update && sudo apt-get install -y libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 libpangocairo-1.0-0
       - run: uv sync --frozen --extra dev
-      - run: uv run --no-sync python -m pytest
+      - run: uv run --no-sync python -m pytest --cov=app --cov-fail-under=80
       - run: uv run --no-sync ruff check .
-      - run: uv run --no-sync mypy app
+      - run: uv run --no-sync mypy app scripts alembic
 
   docker:
     runs-on: ubuntu-latest

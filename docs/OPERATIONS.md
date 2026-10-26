@@ -52,6 +52,50 @@ scripts.seed_demo`; no usar esa opción con datos reales.
 
 Todavía no existe un paquete de datos normativos ni un proceso de actualización implementado. Cuando se agregue, registrar fuente, jurisdicción, vigencia, versión y checksum; revisar cambios con un profesional, correr validaciones y casos de referencia, guardar el paquete anterior y respaldar la base antes de activar la nueva versión. Los datos demo no reemplazan una revisión normativa y no son asesoramiento legal.
 
+## Modelos reservados (B-63, PENDING decisión D-7, 2026-10-26)
+
+`Establishment`, `EmploymentHistory`, `ConceptTaxTreatment` y
+`BackgroundJob` (`app/database/models.py:65,115,188,460`) hoy no tienen
+ningún consumidor fuera de modelos, la migración y un test de nombres.
+NO borrarlos: quedan reservados hasta que D-7 decida entre borrarlos
+(con migración) o darles uso. Cada cambio de esquema los arrastra
+mientras tanto.
+
+## Alias `document_processing` (B-64, PENDING decisión D-7, 2026-10-26)
+
+`app/ai/document_processing/` re-exporta `app.ai.documents` sin
+consumidores propios. NO borrarlo todavía. Plan exacto si D-7 decide
+borrar: eliminar el paquete `app/ai/document_processing/`, dejar
+`app.ai.documents` como única vía y actualizar `plan.md` §5 si nombra
+el paquete.
+
+## Deuda de migración SQLite → Postgres (B-87)
+
+Si se migra (decisión D-2), revisar antes:
+
+- `JSON` genérico (`ConceptTaxTreatment.tax_metadata:195`,
+  `FormulaVersion.expression:219`, `AiProposal.raw_json:251` en
+  `app/database/models.py`): pasar a `JSONB` donde se filtre por dentro
+  del documento.
+- `DateTime(timezone=True)` (`app/database/session.py:12-25` y
+  modelos): SQLite ignora la zona horaria; Postgres la exige:
+  normalizar a UTC al migrar.
+- `CHECK` con `CAST`/`SUBSTR` de dialecto: reescribir al dialecto
+  Postgres y revalidar.
+
+## Escritorio (B-73, PENDING decisión D-3, 2026-10-26)
+
+`desktop/` no funciona (spec sin templates/estáticos, launcher sin
+migrar ni sembrar, puerto fijo, navegador a ciegas) y el README lo
+declara no listo. SIN CAMBIOS hasta que D-3 decida. Plan exacto:
+
+- Reparar: empaquetar templates/estáticos en `payroll.spec`
+  (`datas=[]` hoy), migrar (`alembic upgrade head`) y sembrar al
+  inicio del launcher, evitar el puerto 8000 fijo y esperar al
+  backend sano antes de abrir el navegador.
+- Borrar: eliminar `desktop/` completo y su workflow
+  `build-desktop.yml` hasta que se necesite.
+
 ## Actualización y recuperación
 
 Antes de actualizar la imagen o el ejecutable, crear y verificar un backup. Desplegar la nueva versión, ejecutar las migraciones disponibles y comprobar `/health` y los logs. Si falla, detener la versión nueva, restaurar el backup previo si hubo cambios de esquema o datos y volver a la versión anterior; conservar logs y la base fallida para investigar.

@@ -17,6 +17,8 @@ services:
       PAYROLL_DATABASE_URL: ${PAYROLL_DATABASE_URL:-sqlite:///./data/payroll.db}
       PAYROLL_WEB_DATA_SOURCE: ${PAYROLL_WEB_DATA_SOURCE:-demo}
       PAYROLL_SEED_DEMO: ${PAYROLL_SEED_DEMO:-false}
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     healthcheck:
       test:
         - CMD
