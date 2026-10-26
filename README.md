@@ -31,7 +31,7 @@ demo y no constituye una implementación lista para producción.
 | Recibos PDF | Implementado | HTML, PDF individual y ZIP; sin validación legal |
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
 | Importadores CSV/XLSX | Implementado | API con dry-run; alta idempotente de empleados y novedades |
-| Paquetes normativos CCT | Implementado | 10 CCT, 191 documentos de evidencia y 235 escalas verificadas 2020-2026 |
+| Paquetes normativos CCT | Implementado | 10 CCT, 191 documentos y 235 escalas verificadas (227 desde 2020 y 8 históricas) |
 | Liquidaciones especiales | Implementado como módulo y API | SAC, vacaciones y final; todavía no se eligen desde el tipo de corrida |
 | Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
@@ -383,8 +383,8 @@ docs/                    Arquitectura, datos normativos y operaciones
 
 Los parámetros del seed y del proveedor Argentina siguen siendo demo. El
 catálogo `normative/cct/` reúne 10 CCT, 191 documentos oficiales y **235 escalas
-verificadas** con vigencia 2020-2026, incluidas escalas programadas para
-noviembre y diciembre de 2026. Las fuentes, hashes y notas están en
+verificadas**: 227 con vigencia desde 2020 y 8 históricas de 2007, incluidas
+escalas programadas para noviembre y diciembre de 2026. Las fuentes, hashes y notas están en
 `normative/cct/evidence/`. Los PDFs crudos de evidencia quedan en el working
 tree pero no se versionan por tamaño; las URLs y hashes sí.
 
