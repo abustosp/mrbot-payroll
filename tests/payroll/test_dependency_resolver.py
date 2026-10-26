@@ -26,3 +26,21 @@ def test_resolve_dependencies_reports_cycles_with_path():
     ]
     with pytest.raises(DependencyError, match="circular formula dependency: A -> B -> A"):
         resolve_dependencies(definitions)
+
+
+def test_resolve_dependencies_tracks_concept_variable_alias():
+    # B-12: {"variable": "concept_B"} is exposed by the calculator, so the
+    # resolver must order B before A instead of failing on alphabetical order.
+    definitions = [
+        FormulaDefinition(code="A", formula={"variable": "concept_B"}),
+        FormulaDefinition(code="B", formula={"constant": "10"}),
+    ]
+    assert resolve_dependencies(definitions) == ["B", "A"]
+
+
+def test_resolve_dependencies_reports_missing_concept_variable_alias():
+    definitions = [
+        FormulaDefinition(code="A", formula={"variable": "concept_FANTASMA"}),
+    ]
+    with pytest.raises(DependencyError, match="missing formula dependency.*FANTASMA"):
+        resolve_dependencies(definitions)

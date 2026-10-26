@@ -163,6 +163,10 @@ class SalaryScale(Base):
     valid_to: Mapped[date | None] = mapped_column(Date)
     base_salary: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     additional: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"), nullable=False)
+    # B-02: "basico" (remunerative base) vs "conformado" (total split on load).
+    amount_type: Mapped[str] = mapped_column(
+        String(16), default="basico", server_default="basico", nullable=False
+    )
     source_document_id: Mapped[int | None] = mapped_column(ForeignKey("normative_documents.id"))
 
 
@@ -213,6 +217,11 @@ class FormulaVersion(Base):
     formula_id: Mapped[int] = mapped_column(ForeignKey("formula_definitions.id", ondelete="CASCADE"), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     expression: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # B-07: conditions/rounding/depends_on travel with the version so the
+    # service executes exactly what was approved.
+    conditions: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    depends_on: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    rounding: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="DRAFT", nullable=False)
     valid_from: Mapped[date] = mapped_column(Date, default=date.min, nullable=False)
     valid_to: Mapped[date | None] = mapped_column(Date)

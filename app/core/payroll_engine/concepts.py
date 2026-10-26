@@ -207,6 +207,28 @@ def _add_aliases(target: dict[str, Any], name: str, value: Any) -> None:
         target.setdefault(variant, value)
 
 
+def novelty_exposed_names(novelty: NormalizedNovelty) -> dict[str, Decimal]:
+    """Map every variable spelling that reads one novelty to its scalar value.
+
+    Single source for the spellings documented in :func:`novelty_variables`;
+    the calculator reuses it to detect novelties consumed by no formula (B-11).
+    """
+
+    names: dict[str, Decimal] = {
+        novelty.code: novelty.value,
+        f"novedad_{novelty.code}": novelty.value,
+    }
+    if novelty.quantity is not None:
+        for suffix in ("_cantidad", "_quantity"):
+            names[f"{novelty.code}{suffix}"] = novelty.quantity
+            names[f"novedad_{novelty.code}{suffix}"] = novelty.quantity
+    if novelty.amount is not None:
+        for suffix in ("_importe", "_amount"):
+            names[f"{novelty.code}{suffix}"] = novelty.amount
+            names[f"novedad_{novelty.code}{suffix}"] = novelty.amount
+    return names
+
+
 def novelty_variables(
     novelties: Iterable[Mapping[str, Any] | object] | None,
 ) -> dict[str, Decimal]:
@@ -223,20 +245,8 @@ def novelty_variables(
 
     variables: dict[str, Decimal] = {}
     for novelty in aggregate_novelties(novelties).values():
-        _add_aliases(variables, novelty.code, novelty.value)
-        _add_aliases(variables, f"novedad_{novelty.code}", novelty.value)
-
-        if novelty.quantity is not None:
-            _add_aliases(variables, f"{novelty.code}_cantidad", novelty.quantity)
-            _add_aliases(variables, f"{novelty.code}_quantity", novelty.quantity)
-            _add_aliases(variables, f"novedad_{novelty.code}_cantidad", novelty.quantity)
-            _add_aliases(variables, f"novedad_{novelty.code}_quantity", novelty.quantity)
-
-        if novelty.amount is not None:
-            _add_aliases(variables, f"{novelty.code}_importe", novelty.amount)
-            _add_aliases(variables, f"{novelty.code}_amount", novelty.amount)
-            _add_aliases(variables, f"novedad_{novelty.code}_importe", novelty.amount)
-            _add_aliases(variables, f"novedad_{novelty.code}_amount", novelty.amount)
+        for name, value in novelty_exposed_names(novelty).items():
+            _add_aliases(variables, name, value)
     return variables
 
 
@@ -288,6 +298,7 @@ __all__ = [
     "concept_amounts_by_nature",
     "normalize_novelty",
     "normalize_novelties",
+    "novelty_exposed_names",
     "novelty_variables",
     "to_decimal",
 ]

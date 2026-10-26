@@ -75,13 +75,23 @@ def test_f931_endpoint_is_authenticated_scoped_and_requires_calculated_run(
             )
             session.add(foreign_run)
             session.flush()
-            calculation = calculate_payroll_run(session, calculated)
+            calculated_id = calculated.id
+            draft_id = draft.id
+            foreign_id = foreign_run.id
+            admin_id = admin.id
+        # NOTE (B-13): calculate_payroll_run commits its VALIDATING state, so
+        # it cannot run inside an explicit transaction block.
+        with factory() as session:
+            calculated_run = session.get(PayrollRun, calculated_id)
+            assert calculated_run is not None
+            calculation = calculate_payroll_run(session, calculated_run)
             assert calculation["summary"]["calculated"] == 2
+            session.commit()
             ids = {
-                "admin": admin.id,
-                "calculated": calculated.id,
-                "draft": draft.id,
-                "foreign": foreign_run.id,
+                "admin": admin_id,
+                "calculated": calculated_id,
+                "draft": draft_id,
+                "foreign": foreign_id,
             }
 
         def override_get_db() -> Generator[Session, None, None]:

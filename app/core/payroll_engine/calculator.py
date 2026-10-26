@@ -25,6 +25,7 @@ from app.core.payroll_engine.concepts import (
     aggregate_novelties,
     build_concept_result,
     concept_amounts_by_nature,
+    novelty_exposed_names,
     novelty_variables,
     to_decimal,
 )
@@ -344,6 +345,32 @@ def _ordered_definitions(
     return ordered
 
 
+def _referenced_variable_names(
+    definitions: Sequence[FormulaDefinition],
+) -> set[str]:
+    """Collect every variable/condition-field name the definitions can read."""
+    names: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            if set(node) == {"variable"} and isinstance(node["variable"], str):
+                names.add(node["variable"])
+            field = node.get("field")
+            if isinstance(field, str) and set(node) <= {"field", "operator", "value"}:
+                names.add(field)
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    for definition in definitions:
+        visit(definition.formula)
+        for condition in definition.conditions:
+            visit(condition)
+    return names
+
+
 def _concept_context(
     *,
     variables: Mapping[str, Any],
@@ -433,6 +460,19 @@ def calculate_payroll(
     # Explicit ``{"parameter": ...}`` nodes keep working through FormulaContext.
     for name, value in params.items():
         _set_aliases(variables, name, value)
+    # B-11: novelties readable through no definition are listed instead of
+    # silently ignored. Names shadowed by base/parameter variables are dead
+    # (setdefault below keeps the base value), so they do not count as reads.
+    referenced = {name.casefold() for name in _referenced_variable_names(ordered)}
+    shadowed = {name.casefold() for name in variables}
+    readable = referenced - shadowed
+    unconsumed_novelties = [
+        novelty.code
+        for novelty in aggregated_novelties.values()
+        if not {
+            name.casefold() for name in novelty_exposed_names(novelty)
+        } & readable
+    ]
     for name, value in novelty_variables(novelties).items():
         variables.setdefault(name, value)
 
@@ -512,6 +552,7 @@ def calculate_payroll(
             f"employer_cost={employer_cost}",
         ]
     )
+    trace.extend(f"unconsumed novelty: {code}" for code in unconsumed_novelties)
 
     return PayrollResult(
         employee_id=data.id,
@@ -525,6 +566,7 @@ def calculate_payroll(
         net=net,
         employer_cost=employer_cost,
         trace=trace,
+        unconsumed_novelties=unconsumed_novelties,
     )
 
 

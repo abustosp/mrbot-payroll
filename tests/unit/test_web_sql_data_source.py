@@ -55,10 +55,16 @@ def test_sql_data_source_maps_seed_and_calculated_payroll(tmp_path: Path) -> Non
         )
         session.add(run)
         session.flush()
-        calculate_payroll_run(session, run)
         run_id = run.id
         company_id = company.id
         organization_id = demo["organization"].id
+    # NOTE (B-13): calculate_payroll_run commits its VALIDATING state, so it
+    # cannot run inside an explicit transaction block.
+    with factory() as session:
+        stored = session.get(PayrollRun, run_id)
+        assert stored is not None
+        calculate_payroll_run(session, stored)
+        session.commit()
 
     source = SqlAlchemyDataSource(factory, organization_id)
     try:

@@ -10,6 +10,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.payroll_engine.types import RoundingPolicy
 from app.jurisdictions.argentina.validation import normalize_cuit_cuil
 
 
@@ -140,6 +141,11 @@ class FormulaInput(BaseModel):
     code: str = Field(min_length=1, max_length=80)
     description: str = Field(default="", max_length=240)
     formula: dict[str, Any]
+    # B-07: conditions/rounding/depends_on are stored on the version so the
+    # service executes exactly what was approved.
+    conditions: list[dict[str, Any]] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    rounding: RoundingPolicy | None = None
     valid_from: date = Field(default_factory=date.today)
     valid_to: date | None = None
 
@@ -177,6 +183,9 @@ class FormulaVersionInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     formula: dict[str, Any] = Field(validation_alias=AliasChoices("formula", "expression"))
+    conditions: list[dict[str, Any]] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    rounding: RoundingPolicy | None = None
     valid_from: date = Field(default_factory=date.today)
     valid_to: date | None = None
 
@@ -202,6 +211,9 @@ class FormulaRead(BaseModel):
     description: str
     version: int
     formula: dict[str, Any]
+    conditions: list[dict[str, Any]] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    rounding: RoundingPolicy | None = None
     status: str
     valid_from: date
     valid_to: date | None
@@ -228,6 +240,9 @@ class AiProposalPublishRead(AiProposalRead):
     formula_status: str
 
 
+SUPPORTED_RUN_TYPES = ("MONTHLY",)
+
+
 class PayrollRunInput(BaseModel):
     company_id: int
     code: str = Field(min_length=1, max_length=80)
@@ -241,6 +256,18 @@ class PayrollRunInput(BaseModel):
         start = info.data.get("period_start")
         if start is not None and value < start:
             raise ValueError("period_end debe ser igual o posterior a period_start")
+        return value
+
+    @field_validator("run_type")
+    @classmethod
+    def run_type_is_supported(cls, value: str) -> str:
+        # B-10: SAC/vacaciones se simulan en /settlements; una corrida con
+        # otro run_type se liquidaría como mensual en silencio (D-9 pendiente).
+        if value not in SUPPORTED_RUN_TYPES:
+            raise ValueError(
+                f"run_type {value!r} no soportado; "
+                f"tipos soportados: {', '.join(SUPPORTED_RUN_TYPES)}"
+            )
         return value
 
 

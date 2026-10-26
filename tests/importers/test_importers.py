@@ -204,6 +204,31 @@ def test_duplicado_por_legajo() -> None:
     assert "legajo" in duplicate.key
 
 
+def test_encabezados_duplicados_se_rechazan() -> None:
+    # B-18: legajo,legajo colapsaba en silencio y un legajo desaparecía.
+    content = (
+        "Legajo;Legajo;Apellido;Nombre;CUIL;Fecha de ingreso\n"
+        "A001;B002;Pérez;Juan;20-12345678-6;15/03/2024\n"
+    )
+
+    preview = analyze_file(BytesIO(content.encode("utf-8")), "employees")
+
+    assert preview.valid_rows == []
+    assert any("duplicado" in error.code for error in preview.errors)
+
+
+def test_encabezados_duplicados_case_insensitive() -> None:
+    content = (
+        "Legajo;LEGAJO;Apellido;Nombre;CUIL;Fecha de ingreso\n"
+        "A001;B002;Pérez;Juan;20-12345678-6;15/03/2024\n"
+    )
+
+    preview = analyze_file(BytesIO(content.encode("utf-8")), "employees")
+
+    assert preview.valid_rows == []
+    assert any("duplicado" in error.code for error in preview.errors)
+
+
 def test_columna_faltante() -> None:
     content = (
         "Legajo;Apellido;Nombre;Fecha de ingreso\n"

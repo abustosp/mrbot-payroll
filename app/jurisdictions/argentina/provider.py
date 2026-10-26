@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -24,6 +25,21 @@ from app.jurisdictions.argentina.validation import (
 DEMO_FROM = date(2026, 1, 1)
 DEMO_TO = date(2026, 12, 31)
 DEMO_SOURCE = "demo-2026"
+
+# Values are pending legal sign-off (D-1): no rate, scale or bracket in this
+# module is legal advice. Anything not marked approved must fail explicitly
+# instead of flowing silently into a payslip.
+APPROVED_STATUSES = frozenset({"approved", "aprobado", "verified", "verificado"})
+
+
+class UnapprovedDataError(ValueError):
+    """Raised when payroll data lacks approved values (B-01/B-03/B-04/B-05)."""
+
+
+def _is_approved_status(status: Any) -> bool:
+    if isinstance(status, ParameterStatus):
+        return status == ParameterStatus.APPROVED
+    return str(status or "").casefold() in APPROVED_STATUSES
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,8 +93,8 @@ ARGENTINA_CCT_130_75_RULES = (
     ),
     PayrollRule(
         "PRESENTISMO",
-        "Presentismo ilustrativo",
-        "(basico + antiguedad) * parameter:cct13075.attendance_rate",
+        "Presentismo ilustrativo: doceava parte de (basico + antiguedad)",
+        "(basico + antiguedad) / 12",
     ),
 )
 
@@ -95,7 +111,6 @@ def _demo_parameters() -> tuple[ParameterVersion, ...]:
         "employer.employment_fund_rate": "0.015",
         "employer.work_risk_rate": "0.00",
         "cct13075.seniority_rate": "0.01",
-        "cct13075.attendance_rate": "0.0833",
     }
     return tuple(
         ParameterVersion(
@@ -151,6 +166,7 @@ class ArgentinaProvider:
         *,
         parameters: Sequence[ParameterVersion] | None = None,
         income_tax_brackets: Sequence[IncomeTaxBracketVersion] | None = None,
+        salary_scales: Sequence[SalaryScale] | None = None,
     ) -> None:
         self.parameters = tuple(parameters) if parameters is not None else _demo_parameters()
         self.income_tax_brackets = (
@@ -158,6 +174,44 @@ class ArgentinaProvider:
             if income_tax_brackets is not None
             else _demo_income_tax_brackets()
         )
+        self.salary_scales = (
+            tuple(salary_scales) if salary_scales is not None else ARGENTINA_CCT_130_75_SCALES
+        )
+
+    def require_approved_data(self) -> None:
+        """Fail explicitly unless every scale, rate and bracket is approved.
+
+        Mechanism for B-01/B-03/B-04/B-05: approved values are still pending
+        (D-1), so the only safe behaviour today is to refuse to calculate
+        with demo data instead of emitting an invalid payslip.
+        """
+        offenders = [
+            f"escala {scale.category_code} ({scale.valid_from.isoformat()}.."
+            f"{scale.valid_to.isoformat() if scale.valid_to else 'abierta'}; "
+            f"status={scale.status})"
+            for scale in self.salary_scales
+            if scale.illustrative or not _is_approved_status(scale.status)
+        ]
+        offenders.extend(
+            f"parámetro {item.code} (status={item.status})"
+            for item in self.parameters
+            if not _is_approved_status(item.status)
+        )
+        offenders.extend(
+            f"tramo Ganancias {item.code} (status={item.status})"
+            for item in self.income_tax_brackets
+            if not _is_approved_status(item.status)
+        )
+        if offenders:
+            raise UnapprovedDataError(
+                "Sin datos aprobados (valores pendientes D-1): " + "; ".join(offenders)
+            )
+
+    def assert_usable_in(self, environment: str | None = None) -> None:
+        """Block demo data outside development; demo is allowed in dev/tests."""
+        env = environment or os.environ.get("PAYROLL_ENVIRONMENT", "development")
+        if str(env).casefold() != "development":
+            self.require_approved_data()
 
     def get_applicable_rules(self, employee_id: str, period: date) -> list[PayrollRule]:
         parse_period(period)
@@ -233,7 +287,7 @@ class ArgentinaProvider:
             basic * Decimal(str(seniority_years)) * parameters["cct13075.seniority_rate"]
         )
         attendance = (
-            money((basic + seniority) * parameters["cct13075.attendance_rate"])
+            money((basic + seniority) / Decimal(12))
             if full_attendance
             else Decimal("0.00")
         )

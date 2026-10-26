@@ -120,6 +120,8 @@ class PayrollResult:
     net: Decimal = Decimal("0")
     employer_cost: Decimal = Decimal("0")
     trace: list[str] = field(default_factory=list)
+    # B-11: period novelty codes consumed by no formula (silently no-ops).
+    unconsumed_novelties: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -134,4 +136,5 @@ class PayrollResult:
             "net": str(self.net),
             "employer_cost": str(self.employer_cost),
             "trace": list(self.trace),
+            "unconsumed_novelties": list(self.unconsumed_novelties),
         }

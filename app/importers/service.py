@@ -403,6 +403,22 @@ def _table_records(table: Table) -> list[tuple[int, dict[str, Any]]]:
     return records
 
 
+def _duplicate_headers(headers: list[str]) -> list[str]:
+    """Return the first spelling of each case-insensitive duplicated header."""
+    seen: dict[str, str] = {}
+    duplicates: list[str] = []
+    for header in headers:
+        key = normalize_text(header).strip().casefold()
+        if not key:
+            continue
+        if key in seen:
+            if seen[key] not in duplicates:
+                duplicates.append(seen[key])
+        else:
+            seen[key] = str(header).strip()
+    return duplicates
+
+
 def analyze_file(
     stream: Any,
     kind: str,
@@ -436,6 +452,37 @@ def analyze_file(
             dry_run=True,
             mapping=resolved,
             missing_columns=[],
+        )
+
+    # B-18: dict(zip(headers, ...)) collapses duplicated headers silently and
+    # one legajo disappears; reject the file with an explicit error instead.
+    repeated = _duplicate_headers(table.headers)
+    if repeated:
+        total = sum(
+            1
+            for _, values in table.rows
+            if not all(is_blank(value) for value in values)
+        )
+        return ImportPreview(
+            kind=canonical_kind,
+            total=total,
+            valid_rows=[],
+            errors=[
+                RowError(
+                    row=0,
+                    field=name,
+                    code="duplicado",
+                    message=(
+                        f"El encabezado {name!r} está duplicado; "
+                        "corrija el archivo y vuelva a importarlo."
+                    ),
+                )
+                for name in repeated
+            ],
+            duplicates=[],
+            dry_run=True,
+            mapping=resolved,
+            missing_columns=missing,
         )
 
     total, valid_rows, errors, duplicates = _analyze_records(

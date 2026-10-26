@@ -17,6 +17,7 @@ in :func:`load_cct_catalog`.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -93,6 +94,9 @@ class CatalogScale:
     source: str = ""
     version: int = 1
     status: str = "unverified"
+    # B-02: "basico" (remunerative base) vs "conformado" (total including the
+    # non-remunerative part, which is split into ``additional`` on load).
+    amount_type: str = "basico"
 
 
 @dataclass(frozen=True, slots=True)
@@ -664,12 +668,14 @@ def _read_scales(
             errors.append(f"{item_path}: falta el importe obligatorio 'amount'")
         additional = _read_decimal(
             item,
-            ("additional", "adicional"),
+            ("additional", "adicional", "no_remunerativo", "nr"),
             item_path,
             errors,
             minimum=Decimal("0"),
             label="adicional",
         )
+        raw_amount_type = _text(_first(item, "amount_type", "tipo_importe", "tipo_monto", "tipo"))
+        amount_type = _normalise_amount_type(raw_amount_type, item_path, errors)
         valid_from = _read_date(
             item,
             ("valid_from", "vigencia_desde", "desde", "from"),
@@ -694,19 +700,57 @@ def _read_scales(
         version = _read_int(item, ("version", "versión"), item_path, errors, minimum=1) or 1
         if category_code is None or amount is None or valid_from is None:
             continue
+        base_amount = amount
+        extra = additional if additional is not None else Decimal("0")
+        if amount_type == "conformado":
+            if extra > 0:
+                if extra > amount:
+                    errors.append(
+                        f"{item_path}: el adicional NR no puede superar el total conformado"
+                    )
+                    continue
+                base_amount = amount - extra
+            else:
+                warnings.append(
+                    f"{item_path}: la escala declara amount_type 'conformado' "
+                    "sin desglose NR; se trata como básico hasta "
+                    "completar el desglose (B-02)"
+                )
         scales.append(
             CatalogScale(
                 category_code=category_code,
-                amount=amount,
+                amount=base_amount,
                 valid_from=valid_from,
                 valid_to=valid_to,
-                additional=additional if additional is not None else Decimal("0"),
+                additional=extra,
                 source=_source_text(source_value),
                 version=version,
                 status=status or "unverified",
+                amount_type=amount_type,
             )
         )
     return tuple(scales)
+
+
+def _normalise_amount_type(
+    value: str | None, path: str, errors: list[str]
+) -> str:
+    """Validate the B-02 scale kind: base salary vs conformed total."""
+    if value is None:
+        return "basico"
+    text = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", value.strip().casefold())
+        if not unicodedata.combining(char)
+    )
+    if text in {"basico", "básico"}:
+        return "basico"
+    if text == "conformado":
+        return "conformado"
+    errors.append(
+        f"{path}: amount_type {value!r} inválido; se esperaba 'basico' o 'conformado'"
+    )
+    return "basico"
 
 
 def _read_parameters(
@@ -1098,6 +1142,7 @@ def _scale_changed(row: SalaryScale, spec: CatalogScale, plan: _DocumentPlan | N
         row.base_salary != spec.amount
         or row.additional != spec.additional
         or row.valid_to != spec.valid_to
+        or row.amount_type != spec.amount_type
     ):
         return True
     if plan is not None and plan.action == "created":
@@ -1383,6 +1428,7 @@ def _apply_scales(session: Session, plans: Iterable[_AgreementPlan]) -> None:
                         valid_to=scale.valid_to,
                         base_salary=scale.amount,
                         additional=scale.additional,
+                        amount_type=scale.amount_type,
                         source_document_id=document_id,
                     )
                     session.add(row)
@@ -1391,6 +1437,7 @@ def _apply_scales(session: Session, plans: Iterable[_AgreementPlan]) -> None:
                     row = plan.existing
                     row.base_salary = scale.amount
                     row.additional = scale.additional
+                    row.amount_type = scale.amount_type
                     row.valid_to = scale.valid_to
                     if document_id is not None:
                         row.source_document_id = document_id
@@ -1423,6 +1470,52 @@ def _apply_parameters(session: Session, plans: Iterable[_ParameterPlan]) -> None
             if document_id is not None:
                 row.source_document_id = document_id
     session.flush()
+
+
+def cct_coverage_map(
+    catalog: Mapping[str, Any] | list[Any] | None,
+) -> dict[str, dict[str, str | None]]:
+    """Best-effort CCT coverage hook: ``{code: {"vigencia_hasta": ..., "status": ...}}``.
+
+    Reads ``vigencia_hasta``/``status`` from the catalog when present and
+    tolerates their absence (``None``). Never raises: garbage in, ``{}`` out.
+    """
+
+    def _pick(entry: Mapping[str, Any], *keys: str) -> str | None:
+        for key in keys:
+            value = entry.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return None
+
+    try:
+        if catalog is None:
+            return {}
+        if isinstance(catalog, Mapping):
+            raw_ccts = catalog.get("ccts", catalog.get("agreements", []))
+        elif isinstance(catalog, (list, tuple)):
+            raw_ccts = catalog
+        else:
+            return {}
+        coverage: dict[str, dict[str, str | None]] = {}
+        for entry in raw_ccts or []:
+            if not isinstance(entry, Mapping):
+                continue
+            code = _pick(entry, "code", "codigo", "cct")
+            if code is None:
+                continue
+            coverage[code] = {
+                "vigencia_hasta": _pick(
+                    entry, "vigencia_hasta", "valid_to", "latest_verified_to"
+                ),
+                "status": _pick(entry, "status", "estado", "pdf_status"),
+            }
+        return coverage
+    except Exception:
+        return {}
 
 
 def load_cct_catalog(

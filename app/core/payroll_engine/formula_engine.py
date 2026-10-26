@@ -307,12 +307,29 @@ def _concept_dependencies(expression: Any) -> set[str]:
     if isinstance(expression, dict):
         if set(expression) == {"concept"} and isinstance(expression["concept"], str):
             dependencies.add(expression["concept"])
+        # The calculator exposes every computed concept as a variable alias
+        # (concept_<code>/concepto_<code>), so a {"variable": "concept_X"}
+        # reference is a dependency on X and must order the calculation.
+        if set(expression) == {"variable"} and isinstance(expression["variable"], str):
+            alias_of = _concept_alias_target(expression["variable"])
+            if alias_of is not None:
+                dependencies.add(alias_of)
         for value in expression.values():
             dependencies.update(_concept_dependencies(value))
     elif isinstance(expression, list):
         for value in expression:
             dependencies.update(_concept_dependencies(value))
     return dependencies
+
+
+def _concept_alias_target(name: str) -> str | None:
+    """Return the concept code behind a ``concept_X`` variable alias, if any."""
+    lowered = name.lower()
+    for prefix in ("concept_", "concepto_"):
+        if lowered.startswith(prefix):
+            target = name[len(prefix):]
+            return target or None
+    return None
 
 
 def evaluate_expression(expression: dict, context: FormulaContext) -> FormulaResult:

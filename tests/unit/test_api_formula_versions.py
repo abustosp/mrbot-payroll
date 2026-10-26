@@ -239,3 +239,88 @@ def test_viewer_cannot_create_formula_version(
     response = create_version(client, formula_id)
 
     assert response.status_code == 403
+
+
+def test_version_with_unknown_variable_is_rejected(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    # B-08: sin contexto la referencia rota llegaba a APPROVED; con contexto
+    # la puerta la frena con el nombre de la variable.
+    client, _ = api
+    login(client)
+    formula_id = create_formula(client)["id"]
+
+    response = create_version(
+        client, formula_id, formula={"variable": "sueldo_inexistente"}
+    )
+
+    assert response.status_code == 422, response.text
+    assert "sueldo_inexistente" in response.text
+
+
+def test_version_with_unknown_concept_is_rejected(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    client, _ = api
+    login(client)
+    formula_id = create_formula(client)["id"]
+
+    response = create_version(
+        client, formula_id, formula={"concept": "FANTASMA"}
+    )
+
+    assert response.status_code == 422, response.text
+    assert "FANTASMA" in response.text
+
+
+def test_version_with_known_inputs_and_conditions_is_stored(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    # B-07/B-08: variables base + conditions válidas pasan y se persisten.
+    client, sessions = api
+    login(client)
+    formula_id = create_formula(client)["id"]
+    conditions = [{"field": "sueldo_basico", "operator": "greater_than", "value": 0}]
+
+    response = client.post(
+        f"/api/v1/formulas/{formula_id}/versions",
+        json={
+            "formula": {"variable": "sueldo_basico"},
+            "conditions": conditions,
+            "depends_on": [],
+            "rounding": {"decimals": 2, "mode": "HALF_UP"},
+            "valid_from": "2026-07-01",
+            "valid_to": "2026-12-31",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["conditions"] == conditions
+    assert payload["rounding"] == {"decimals": 2, "mode": "HALF_UP"}
+    with sessions() as db:
+        version = db.scalar(
+            select(FormulaVersion).where(
+                FormulaVersion.formula_id == formula_id,
+                FormulaVersion.version == 2,
+            )
+        )
+        assert version is not None
+        assert version.conditions == conditions
+
+
+def test_cross_formula_cycle_is_rejected(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    # B-08: el ciclo A<->B se detecta contra las vigentes de la organización.
+    client, _ = api
+    login(client)
+    formula_a = create_formula(client, code="CICLO_A", valid_to=None)["id"]
+    formula_b = create_formula(client, code="CICLO_B", valid_to=None)["id"]
+
+    first = create_version(client, formula_a, formula={"concept": "CICLO_B"})
+    assert first.status_code == 201, first.text
+    second = create_version(client, formula_b, formula={"concept": "CICLO_A"})
+
+    assert second.status_code == 422, second.text
+    assert "circular" in second.text

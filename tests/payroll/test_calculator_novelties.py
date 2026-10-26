@@ -167,3 +167,49 @@ def test_calculator_exposes_quantity_as_value_when_amount_absent() -> None:
 
     assert result.items[0].amount == Decimal("3.00")
     assert result.non_remunerative == Decimal("3.00")
+
+
+def test_calculator_lists_novelties_consumed_by_no_formula() -> None:
+    # B-11: la novedad importada sin efecto se lista en vez de ignorarse.
+    definitions = [
+        FormulaDefinition(
+            code="BASICO",
+            description="Basico",
+            formula={"variable": "sueldo_basico"},
+            nature=ConceptNature.REMUNERATIVE,
+        )
+    ]
+
+    result = calculate_payroll(
+        EMPLOYEE,
+        PERIOD,
+        definitions,
+        {},
+        [
+            {"code": "horas_extra", "quantity": "5", "amount": "10000"},
+            {"code": "presentismo", "quantity": "1"},
+        ],
+    )
+
+    assert result.unconsumed_novelties == ["horas_extra", "presentismo"]
+
+
+def test_consumed_novelty_is_not_listed() -> None:
+    definitions = [
+        FormulaDefinition(
+            code="HORAS_EXTRA",
+            description="Horas extra",
+            formula={"variable": "NOVEDAD_HORAS_EXTRA_CANTIDAD"},
+            nature=ConceptNature.REMUNERATIVE,
+        )
+    ]
+
+    result = calculate_payroll(
+        EMPLOYEE,
+        PERIOD,
+        definitions,
+        {},
+        [{"code": "horas_extra", "quantity": "5"}],
+    )
+
+    assert result.unconsumed_novelties == []

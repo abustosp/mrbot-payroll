@@ -39,7 +39,9 @@ def calculated_run(
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     try:
-        with factory.begin() as session:
+        # NOTE (B-13): calculate_payroll_run commits its VALIDATING state, so
+        # it cannot run inside an explicit transaction block.
+        with factory() as session:
             demo = seed(session)
             admin = demo["admin"]
             company = demo["company"]
@@ -58,6 +60,7 @@ def calculated_run(
             calculation = calculate_payroll_run(session, run)
             assert calculation["summary"]["calculated"] == 2
             run_id = run.id
+            session.commit()
 
         with factory() as session:
             run = session.get(PayrollRun, run_id)

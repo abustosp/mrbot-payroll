@@ -223,6 +223,39 @@ def quantize_base(amount: Decimal, policy: RoundingPolicy) -> Decimal:
     return quantize_value(amount, policy)
 
 
+def require_tax_base_limits(
+    parameters: Mapping[str, Any],
+    *,
+    code: str = "REMUNERATIVE",
+    minimum_parameter: str = "base_minima_remunerativa",
+    maximum_parameter: str = "base_maxima_remunerativa",
+) -> TaxBaseRule:
+    """Build the standard base rule, failing explicitly without approved limits.
+
+    Mechanism for B-03: legal caps/floors are pending sign-off (D-1), so no
+    value is invented here. Callers get a rule wired to the approved
+    parameters, or a ``TaxBaseError`` naming the missing ones.
+    """
+
+    missing = [
+        name
+        for name in (minimum_parameter, maximum_parameter)
+        if parameters.get(name) is None
+    ]
+    if missing:
+        raise TaxBaseError(
+            f"tax base {code!r}: faltan los parámetros aprobados "
+            + ", ".join(repr(name) for name in missing)
+            + " (valores pendientes D-1)"
+        )
+    return TaxBaseRule(
+        code=code,
+        natures=frozenset({ConceptNature.REMUNERATIVE}),
+        minimum_parameter=minimum_parameter,
+        maximum_parameter=maximum_parameter,
+    )
+
+
 def compute_tax_base(
     rule: TaxBaseRule,
     items: Iterable[ConceptResult | Mapping[str, Any]],
@@ -292,6 +325,7 @@ __all__ = [
     "filter_taxable_items",
     "item_matches_rule",
     "quantize_base",
+    "require_tax_base_limits",
     "taxable_codes",
 ]
 
