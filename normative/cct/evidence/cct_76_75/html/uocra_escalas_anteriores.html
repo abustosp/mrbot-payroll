@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<title>UOCRA | Sitio oficial de la Uni&oacute;n Obrera de la Construcci&oacute;n de la Rep&uacute;blica Argentina</title>
+		<meta name="language" content="es" />
+		<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+		<!--meta http-equiv="content-type" content="text/html; charset=iso-8859-1" /-->
+		<meta name="robots" content="index, follow" />
+		<meta http-equiv="Author" content="Estudio de dise&amp;ntilde;o digital UOCRA" />
+		<meta http-equiv="Distribution" content="global" />
+		<meta http-equiv="Title" content="UOCRA" />
+		<meta http-equiv="Description" content="La UOCRA es una organizacion sindical que ejerce la legitima representacion de los trabajadores constructores." />
+		<meta http-equiv="Category" content="" />
+		<meta name="copyright" content="UOCRA" />
+		<meta name="email" content="webmaster@uocra.org" />
+		<meta name="rating" content="general" />
+		<meta name="keywords" content="Gerardo Martinez, UOCRA, Union Obrera de la Construcci&oacute;n de la Rep&uacute;blica Argentina, Gremio Construccion, Trabajadores de la Construcci&oacute;n y la Madera" />
+		<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+		
+		<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+		<link type='text/css' rel='stylesheet' href='css/index3.2b.css' />
+		<link href='https://fonts.googleapis.com/css?family=Open+Sans:400,600,400italic,700,700italic' rel='stylesheet' type='text/css'>
+		<link type='text/css' rel='stylesheet' href='css/carousel.css' />
+		
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	
+		<meta http-equiv="Expires" content="0"><meta http-equiv="Last-Modified" content="0"><meta http-equiv="Cache-Control" content="no-cache, mustrevalidate"><meta http-equiv="Pragma" content="no-cache">		
+		<script type='text/javascript' src='scripts/jquery.min.js'></script>
+		<script type='text/javascript' src='scripts/jquery.easing.1.3.js'></script>
+		<script type='text/javascript'>
+			var abrir = function(i){
+				for(b=0;b<10;b++){
+					$('a.boton'+b).removeClass("selected");
+					$('ul#subBot'+b).css("display","none");
+				}
+				$('a.boton'+i).addClass("selected");
+				$('ul#subBot'+i).css("display","block");
+			};
+			var mobile = function(){
+				$('ul#menuMobile li').css("display","block");
+				$("a#botMobile").attr("href","javascript:cerrar()");
+			}
+			var cerrar = function(){
+				$('ul#menuMobile li').css("display","none");
+				$("a#botMobile").attr("href","javascript:mobile()");
+			}
+		</script>
+		
+		<!-- Google tag (gtag.js) -->
+		<script async src="https://www.googletagmanager.com/gtag/js?id=G-F1FVMPFBV6"></script>
+		<script>
+		  window.dataLayer = window.dataLayer || [];
+		  function gtag(){dataLayer.push(arguments);}
+		  gtag('js', new Date());
+
+		  gtag('config', 'G-F1FVMPFBV6');
+		</script>
+	</head>
+	<body>
+	    <style>
+  #popupOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.70);
+    box-sizing: border-box;
+  }
+
+  #popupBox {
+    position: relative;
+    width: 100%;
+    max-width: 760px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #333333;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+  }
+
+  #closePopup {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #f2e608;
+    color: #025790;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 32px;
+    cursor: pointer;
+  }
+
+  #popupBox .popupHeader {
+    padding: 30px 70px 26px 30px;
+    background: #025790;
+    border-bottom: 7px solid #f2e608;
+    color: #ffffff;
+  }
+
+  #popupBox h1 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  #popupBox .popupContent {
+    padding: 28px 30px 30px;
+  }
+
+  #popupBox p {
+    margin: 0 0 18px;
+    color: #333333;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  #popupBox p:last-child {
+    margin-bottom: 0;
+  }
+
+  #popupBox .popupNotice {
+    margin-top: 24px;
+    padding: 16px 18px;
+    border-left: 5px solid #f2e608;
+    background: #f4f7f9;
+    color: #025790;
+    font-weight: 600;
+  }
+
+  @media (max-width: 600px) {
+    #popupOverlay {
+      padding: 12px;
+    }
+
+    #popupBox .popupHeader {
+      padding: 24px 55px 22px 20px;
+    }
+
+    #popupBox h1 {
+      font-size: 22px;
+    }
+
+    #popupBox .popupContent {
+      padding: 22px 20px 24px;
+    }
+
+    #popupBox p {
+      font-size: 15px;
+    }
+  }
+  #popupBox .popupActions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+#popupBox .popupActions a {
+  display: inline-block;
+  min-width: 150px;
+  padding: 12px 18px;
+  box-sizing: border-box;
+  border: 2px solid #025790;
+  border-radius: 4px;
+  background: #025790;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+#popupBox .popupActions a:hover {
+  background: #f2e608;
+  border-color: #f2e608;
+  color: #025790;
+}
+
+@media (max-width: 600px) {
+  #popupBox .popupActions {
+    flex-direction: column;
+  }
+
+  #popupBox .popupActions a {
+    width: 100%;
+  }
+}
+</style>
+
+<div id="popupOverlay">
+  <div id="popupBox" role="dialog" aria-modal="true" aria-labelledby="popupTitle">
+    <button id="closePopup" type="button" aria-label="Cerrar aviso">X</button>
+
+    <div class="popupHeader">
+      <h1 id="popupTitle">
+        Contribución empresarial para la realización de acciones asistenciales
+      </h1>
+    </div>
+
+    <div class="popupContent">
+      <p>
+        La Secretaría de Trabajo, Empleo y Seguridad Social homologó con fecha
+        20/08/2026 una contribución del 2% sobre las remuneraciones mensuales
+        que perciba el trabajador en concepto de salarios básicos y adicionales
+        establecidos en el CCT a partir del 1 de junio de 2026.
+      </p>
+
+      <p>
+        En virtud de la fecha de homologación, el pago de las cuotas
+        correspondientes a los salarios de junio y julio vencerá el próximo
+        31 de agosto del corriente.
+      </p>
+
+      <p>
+        La misma deberá abonarse a través de la página de UOCRA, en forma
+        similar al de Pago de Cuota Sindical.
+      </p>
+
+      <p class="popupNotice">
+        Nota: En el caso que Ud. hubiera hecho algún ingreso por este concepto
+        en los meses anteriores, se podrá deducir en el monto a pagar de la
+        presente declaración.
+      </p>
+	  
+	  <div class="popupActions">
+		  <a
+			href="https://www.uocra.org/pdf/e09cba_Acuerdo_Contribuci%C3%B3n_Empresaria_76-75_y_577-10.pdf"
+			target="_blank"
+			rel="noopener noreferrer"
+		  >
+			Ver acuerdo
+		  </a>
+
+		  <a
+			href="pdf/6fc2e0_Homologación_Acuerdo_Constribución_Empresaria_76-75_y_577-10_DI-2026-80493724-APN-DNRYRT_MCH.pdf"
+			target="_blank"
+			rel="noopener noreferrer"
+		  >
+			Ver homologación
+		  </a>
+		</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const popupDelay = 60 * 60 * 1000;
+  const popupStorageKey = "uocra_popup_empresas_closed_at";
+
+  function shouldShowPopup() {
+    const lastCloseTime = localStorage.getItem(popupStorageKey);
+
+    if (!lastCloseTime) {
+      return true;
+    }
+
+    return (Date.now() - parseInt(lastCloseTime, 10)) > popupDelay;
+  }
+
+  function showPopup() {
+    document.getElementById("popupOverlay").style.display = "flex";
+  }
+
+  function closePopup() {
+    document.getElementById("popupOverlay").style.display = "none";
+    localStorage.setItem(popupStorageKey, Date.now());
+  }
+
+  window.addEventListener("load", function () {
+    if (shouldShowPopup()) {
+      showPopup();
+    }
+  });
+
+  document.getElementById("closePopup").onclick = closePopup;
+</script>		<div id='header' class="clearfix">
+			<div class='center'>
+				<div class="grilla_1 logoUOCRA">
+					<div class='logoPpal'>
+						<a href='index.php?lang=1'>
+							<img src='images/logoUOCRA_2019.svg' alt='Logo UOCRA' title='Logo UOCRA' class='web'/>
+							<img src='images/logoUOCRA_2019M.svg' alt='Logo UOCRA' title='Logo UOCRA' class='mobile'/>
+						</a>
+					</div>
+				</div>
+				<div class="grilla_2 iconitos">
+					<a href="https://www.uocra.net/intranet/intranet.asp" target="_blank"><img src="images/logoUN_2019.svg" alt="Acceso a UOCRA net" title="Acceso a UOCRA net"/></a>
+					<!--a href='https://www.facebook.com/uocra.medios/' target="_blank"><img src='images/logoFB_2019.svg' alt='Link a Facebook' title='Link a Facebook'/></a>
+					<a href='http://twitter.com/uocra' target="_blank"><img src='images/logoTW_2019.svg' alt='Link a Twitter' title='Link a Twitter'/></a>
+					<a href='http://www.youtube.com/user/uocramedios' target="_blank"><img src='images/logoYT_2019.svg' alt='Link a YouTube' title='Link a YouTube'/></a>
+					<a href='http://www.instagram.com/uocramedios' target="_blank"><img src='images/logoIG_2019.svg' alt='Link a Instagram' title='Link a Instagram'/></a-->
+					<a href='?s=contacto&amp;lang=1'><img src='images/logoCT_2019.svg' alt='Link a Contacto' title='Link a Contacto'/></a>
+					<a href='?lang=2'><img src='images/2.svg' alt='Change to english' title='Change to english'/></a>
+				</div>
+				<div id="buscador" class="floatr">
+					<form method="post" action="?s=buscar&amp;lang=1" class="clearfix">
+						<div class="input floatl"><input type="text" name="busqueda" placeholder="Buscar noticias" id="texto"/></div>
+						<div class="floatl buscar">
+							<input type="hidden" value="formOk" name="formOk" />
+							<input type="submit" value="&nbsp;" name="buscar" id="buscar"/>
+						</div>
+					</form>
+				</div>
+				<div class="grilla_2 mobile">
+					<a href="javascript:mobile()" id="botMobile"><img src="images/botMobile.png" alt="Botonera para dispositivos m&oacute;viles" title="Botonera para dispositivos m&oacute;viles"/></a>
+				</div>
+			</div>
+		</div>
+		<div class="botoneraSup">
+			<div class='center'>
+				<div class="grilla_3">		
+					<ul class='center botonera menu' id='menu'><li class='enLinea bot1'><div class='boton'><a href='javascript:abrir(1)' class='boton1'>el gremio</a></div></li><li class='enLinea bot2'><div class='boton'><a href='javascript:abrir(2)' class='boton2'>legislaci&oacute;n y tablas salariales</a></div></li><li class='enLinea bot3'><div class='boton'><a href='javascript:abrir(3)' class='boton3'>salud y seguridad</a></div></li><li class='enLinea bot4'><div class='boton'><a href='javascript:abrir(4)' class='boton4'>jubilaciones</a></div></li><li class='enLinea bot5'><div class='boton'><a href='javascript:abrir(5)' class='boton5'>noticias</a></div></li><li class='enLinea bot6'><div class='boton'><a href='javascript:abrir(6)' class='boton6'>preguntas frecuentes</a></div></li><li class='enLinea bot7'><div class='boton'><a href='javascript:abrir(7)' class='boton7'>multimedia</a></div></li><li class='enLinea bot8'><div class='boton'><a href='javascript:abrir(8)' class='boton8'>boleta de dep&oacute;sito y DJ</a></div></li></ul><ul id='menuMobile'><li class='secBotMob'><a href='?s=seccionales&amp;lang=1' >seccionales</a> | <a href='?s=turismo&amp;lang=1' >turismo</a> | <a href='?s=subsidios&amp;lang=1' >subsidios</a> | <a href='?s=seguros-de-vida&amp;lang=1' >seguros de vida</a> | <a href='?s=servicio-de-sepelio&amp;lang=1' >servicio de sepelio</a> | <a href='?s=formacion-sindical&amp;lang=1' target='_blank'>formacion sindical</a> | </li><li class='secBotMob'><a href='?s=nuevas-escalas-salariales&amp;lang=1' >nuevas escalas salariales</a> | </li><li class='secBotMob'><a href='?s=SST&amp;lang=1' >SST</a> | <a href='?s=gestion-y-relevamiento&amp;lang=1' >gesti&oacute;n y relevamiento</a> | <a href='?s=biblioteca-SST&amp;lang=1' >biblioteca SST</a> | <a href='?s=noticias-SST&amp;lang=1' >noticias SST</a> | </li><li class='secBotMob'><a href='?s=consultas&amp;lang=1' >consultas</a> | <a href='?s=seguro-de-desempleo&amp;lang=1' >seguro de desempleo</a> | <a href='?s=sistema-previsional&amp;lang=1' >sistema previsional</a> | </li><li class='secBotMob'><a href='?s=noticias-nacionales&amp;lang=1' >noticias nacionales</a> | <a href='?s=noticias-internacionales&amp;lang=1' >noticias internacionales</a> | <a href='?s=noticias-SST&amp;lang=1' >noticias SST</a> | </li><li class='secBotMob'><a href='?s=videoteca&amp;lang=1' >videoteca</a> | <a href='?s=transmisiones-en-vivo&amp;lang=1' target='_blank'>transmisiones en vivo</a> | </li><li class='secBotMob'><a href='?s=boletas&amp;lang=1' >boletas</a> | <a href='?s=instructivo&amp;lang=1' >instructivo</a> | <a href='?s=link-pagos&amp;lang=1' >link pagos</a> | <a href='?s=consulta-boleta-de-deposito-y-DJ&amp;lang=1' >consulta boleta de dep&oacute;sito y DJ</a> | </li></ul>				</div>
+			</div>
+		</div>
+		<div id="subBot">
+			<div class='center'>
+				<div class="grilla_3">
+					<ul id='subBot1' class='subBot'><li class='enLinea'><a href='?s=UOCRA&amp;lang=1' >UOCRA</a></li><li class='enLinea'><a href='?s=seccionales&amp;lang=1' >seccionales</a></li><li class='enLinea'><a href='?s=turismo&amp;lang=1' >turismo</a></li><li class='enLinea'><a href='?s=educacion-y-cultura&amp;lang=1' target='_blank'>educaci&oacute;n y cultura</a></li><li class='enLinea'><a href='?s=salud&amp;lang=1' target='_blank'>salud</a></li><li class='enLinea'><a href='?s=subsidios&amp;lang=1' >subsidios</a></li><li class='enLinea'><a href='?s=seguros-de-vida&amp;lang=1' >seguros de vida</a></li><li class='enLinea'><a href='?s=servicio-de-sepelio&amp;lang=1' >servicio de sepelio</a></li><li class='enLinea'><a href='?s=formacion-sindical&amp;lang=1' target='_blank'>formacion sindical</a></li><li class='enLinea'><a href='?s=protocolos&amp;lang=1' >protocolos</a></li><li class='enLinea'><a href='?s=consumos-problematicos&amp;lang=1' target='_blank'>consumos problem&aacute;ticos</a></li><li class='enLinea'><a href='?s=mujeres&amp;lang=1' target='_blank'>mujeres</a></li></ul><ul id='subBot2' class='subBot'><li class='enLinea'><a href='?s=nuevas-escalas-salariales&amp;lang=1' >nuevas escalas salariales</a></li><li class='enLinea'><a href='?s=escalas-salariales-anteriores&amp;lang=1' >escalas salariales anteriores</a></li><li class='enLinea'><a href='?s=convenio-colectivo-de-trabajo&amp;lang=1' >convenio colectivo de trabajo</a></li></ul><ul id='subBot3' class='subBot'><li class='enLinea'><a href='?s=SST&amp;lang=1' >SST</a></li><li class='enLinea'><a href='?s=institucional&amp;lang=1' >institucional</a></li><li class='enLinea'><a href='?s=gestion-y-relevamiento&amp;lang=1' >gesti&oacute;n y relevamiento</a></li><li class='enLinea'><a href='?s=asistencia-tecnica-y-capacitacion&amp;lang=1' >asistencia t&eacute;cnica y capacitaci&oacute;n</a></li><li class='enLinea'><a href='?s=ambiente-y-desarrollo-sustentable&amp;lang=1' >ambiente y desarrollo sustentable</a></li><li class='enLinea'><a href='?s=biblioteca-SST&amp;lang=1' >biblioteca SST</a></li><li class='enLinea'><a href='?s=videoteca-SST&amp;lang=1' >videoteca SST</a></li><li class='enLinea'><a href='?s=noticias-SST&amp;lang=1' >noticias SST</a></li></ul><ul id='subBot4' class='subBot'><li class='enLinea'><a href='?s=ULAT&amp;lang=1' >ULAT</a></li><li class='enLinea'><a href='?s=consultas&amp;lang=1' >consultas</a></li><li class='enLinea'><a href='?s=regularidad-de-aportes&amp;lang=1' >regularidad de aportes</a></li><li class='enLinea'><a href='?s=tarjeta-inteligente&amp;lang=1' >tarjeta inteligente</a></li><li class='enLinea'><a href='?s=seguro-de-desempleo&amp;lang=1' >seguro de desempleo</a></li><li class='enLinea'><a href='?s=sistema-previsional&amp;lang=1' >sistema previsional</a></li><li class='enLinea'><a href='?s=CUIL&amp;lang=1' >CUIL</a></li><li class='enLinea'><a href='?s=certificacion-de-servicios&amp;lang=1' >certificaci&oacute;n de servicios</a></li></ul><ul id='subBot5' class='subBot'><li class='enLinea'><a href='?s=nacionales&amp;lang=1' >nacionales</a></li><li class='enLinea'><a href='?s=internacionales&amp;lang=1' >internacionales</a></li><li class='enLinea'><a href='?s=noticias-SST&amp;lang=1' >noticias SST</a></li></ul><ul id='subBot6' class='subBot'><li class='enLinea'><a href='?s=area-social&amp;lang=1' >&aacute;rea social</a></li><li class='enLinea'><a href='?s=area-de-capacitacion&amp;lang=1' >&aacute;rea de capacitaci&oacute;n</a></li><li class='enLinea'><a href='?s=area-de-aportes&amp;lang=1' >&aacute;rea de aportes</a></li><li class='enLinea'><a href='?s=area-de-inscripcion-de-empresas-y-trabajadores&amp;lang=1' >&aacute;rea de inscripci&oacute;n de empresas y trabajadores</a></li><li class='enLinea'><a href='?s=area-de-legislacion-relacionadas&amp;lang=1' >&aacute;rea de legislaci&oacute;n relacionadas</a></li></ul><ul id='subBot7' class='subBot'><li class='enLinea'><a href='?s=videoteca&amp;lang=1' >videoteca</a></li><li class='enLinea'><a href='?s=diario-de-pie&amp;lang=1' >diario de pie</a></li><li class='enLinea'><a href='?s=transmisiones-en-vivo&amp;lang=1' >transmisiones en vivo</a></li></ul><ul id='subBot8' class='subBot'><li class='enLinea'><a href='?s=boletas&amp;lang=1' >boletas</a></li><li class='enLinea'><a href='?s=login&amp;lang=1' target='_blank'>login</a></li><li class='enLinea'><a href='?s=instructivo&amp;lang=1' target='_blank'>instructivo</a></li><li class='enLinea'><a href='?s=link-pagos&amp;lang=1' target='_blank'>link pagos</a></li><li class='enLinea'><a href='?s=ultimos-acuerdos-salariales&amp;lang=1' >&uacute;ltimos acuerdos salariales</a></li><li class='enLinea'><a href='?s=preguntas-frecuentes&amp;lang=1' target='_blank'>preguntas frecuentes</a></li><li class='enLinea'><a href='?s=anteriores-acuerdos-salariales&amp;lang=1' >anteriores acuerdos salariales</a></li><li class='enLinea'><a href='?s=consulta-boleta-de-deposito-y-DJ&amp;lang=1' >consulta boleta de dep&oacute;sito y DJ</a></li></ul>				</div>
+			</div>
+		</div>
+		<script type='text/javascript'>
+			jQuery('a.boton2').addClass('selected');
+			document.title = 'UOCRA | legislaci�n y tablas salariales - escalas salariales anteriores';
+			jQuery('meta[http-equiv=description]').attr('content', 'Acuerdo paritario y Convenio Colectivo de trabajo anteriores.');
+		</script><div class='center bodySecciones clearfix'><div class='grilla_3'><h1 class='fondoAmarillo'><span>escalas salariales anteriores</span></h1><div id='tablas' class='clearfix'><a href='?s=escalas-salariales-anteriores&amp;ano=2025' class='floatl activo'><span>2025</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2024' class='floatl '><span>2024</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2023' class='floatl '><span>2023</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2022' class='floatl '><span>2022</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2021' class='floatl '><span>2021</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2020' class='floatl '><span>2020</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2019' class='floatl '><span>2019</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2018' class='floatl '><span>2018</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2017' class='floatl '><span>2017</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2016' class='floatl '><span>2016</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2015' class='floatl '><span>2015</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2014' class='floatl '><span>2014</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2013' class='floatl '><span>2013</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2012' class='floatl '><span>2012</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2011' class='floatl '><span>2011</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2010' class='floatl '><span>2010</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2009' class='floatl '><span>2009</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2008' class='floatl '><span>2008</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2007' class='floatl '><span>2007</span></a><a href='?s=escalas-salariales-anteriores&amp;ano=2006' class='floatl '><span>2006</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 76/75 - noviembre 2025</p><a href='pdf/12c11d_HomologacionNOV.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 76/75 - noviembre 2025</p><a href='pdf/fed01b_AcuerdoNOV.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 445 - julio agosto 2025</p><a href='pdf/19e176_DI-2025-110370669-APN-DNRYRTMCH.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 445/06 - Julio Agosto 2025</p><a href='pdf/7664fc_445-09_julio_agosto_2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n  76/75 - octubre 2025</p><a href='pdf/34aab5_homologacion_oct2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 76/75 - octubre 2025</p><a href='pdf/9957aa_acuerdo_oct2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Rectificaci&oacute;n Convenio 545/08 - septiembre 2025</p><a href='pdf/268be3_Recctificacion545.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'> Homologaci&oacute;n Convenio 545/08 - septiembre 2025</p><a href='pdf/c37405_Convenio54508-sept2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n  76/75 - octubre 2025</p><a href='pdf/365c0b_homologacion_oct2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 545 - agosto 2025</p><a href='pdf/7e278e_Homologacion5458agosto025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 545 - agosto 2025</p><a href='pdf/ae5a6c_Acuerdo5458agosto2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 445 - junio 2025</p><a href='pdf/722d5c_DI-2025-79201949-APN-DNRYRT.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 445/06 - junio 2025</p><a href='pdf/bfd4bd_445mayojunio.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 76/75 &ndash; 577/10 - julio 2025</p><a href='pdf/729eae_RE-2025-76553617-APN-DGDTEYSS_23MCH.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 76/75 y 577/10 - EX-2025-76554032</p><a href='pdf/d518b0_DI-2025-77290117-APN-DNRYRT_MCH  uocra.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acta Complementaria Acuerdo 76/75 &ndash; 577/10 - mayo 2025</p><a href='pdf/9a2596_ACTA COMPLEMENTARIA RE-2025-59119625-APN-DTD_23JGM (1).pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 76/75 &ndash; 577/10  - mayo 2025</p><a href='pdf/bbcb28_NCO-043-25-ADJ-Ac-UOCRA-Mayo2025.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 76/75 y 577/10 - EX-2025-57737726</p><a href='pdf/27c1db_DI-2025-59635968-APN-DNRYRTMCH_UOCRA.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo 445/06 - marzo 2025</p><a href='pdf/5205ee_ACUERDO AAHE_000731_250404_132257.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologaci&oacute;n 445 - EX-2024-138416409</p><a href='pdf/a2c976_DI-2025-36656071-APN-DNRYRTMCH.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Homologacion CCT 76/75 y 577/10 - feb 2025</p><a href='pdf/4195f2_homologacionFEB.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div><div class='grilla_3'><div class='fondoAzulGrillas clearfix'><p class='tablas floatl'>Acuerdo CCT 76/75 y 577/10 - feb 2025</p><a href='pdf/5939c8_acuerdofeb.pdf' target='_blank' class='derechaBlancoTablas floatr'><span>VER PDF</span></a></div></div></div>		<div class="logosHome clearfix">															
+			<div class="center">
+				<div class="grilla_3 logosFooter uno">
+					<a href="https://www.uocra.org/amores/default.asp" target="_blank"><img src="images/amores.png" alt="logo de AMORES" title="logo de AMORES"/> </a>
+					<a href="https://construirfuturo.com.ar/" target="_blank"><img src="images/hogar.png" alt="logo de Hogar Peldaños" title="logo de Hogar Peldaños"/> </a>
+					<a href="https://ivtuocra.com.ar/" target="_blank"><img src="images/ivt.png" alt="logo de IVT" title="logo de IVT"/> </a>
+					<a href="https://construirtv.com/" target="_blank"><img src="images/ctv.png" alt="logo de Construir TV" title="logo de Construir TV"/> </a>
+					<a href="https://fundacion.uocra.org/" target="_blank"><img src="images/fundacion.png" alt="logo de Fundaci&oacute;n UOCRA" title="logo de Fundaci&oacute;n UOCRA "/> </a>
+					<a href="https://construirsalud.com.ar/" target="_blank"><img src="images/ospecon.png" alt="logo de Construir Salud" title="logo de Construir Salud "/> </a>
+					<a href="https://www.construircine.com" target="_blank"><img src="images/logoCine-chico.png" title="Construir Cine" alt="Construir Cine" class="vertical"/> </a>
+					<a href="https://www.construyendoarte.com.ar" target="_blank"><img src="images/logoArte-chico.png" title="Construyendo Arte" alt="Construyendo Arte" class="vertical"/> </a>
+				</div>
+				<div class="grilla_3 logosFooter dos">
+					<a href="https://construirsalud.com.ar/?sec=3" target="_blank"><img src="images/logoFranchin-chico.png" alt="Sanatorio Franchin" title="Sanatorio Franchin"/> </a>
+					<!--a href="https://www.uocracultura.org/" target="_blank"><img src="images/logoCultura-chico.png" alt="UOCRA Cultura" title="UOCRA Cultura "/> </a-->
+					<a href="https://www.instagram.com/uocracultura/" target="_blank"><img src="images/logoCultura-chico.png" alt="UOCRA Cultura" title="UOCRA Cultura "/> </a>
+					<!--a href="https://www.aulasyandamios.uocra.org/" target="_blank"><img src="images/aulas.png" alt="logo de Editorial Aulas y Andamios" title="logo de Editorial Aulas y Andamios "/> </a-->
+					<a href="https://fundacion.uocra.org/publicaciones/" target="_blank"><img src="images/aulas.png" alt="logo de Editorial Aulas y Andamios" title="logo de Editorial Aulas y Andamios "/> </a>
+					<a href="https://consumosproblematicos.uocra.org/" target="_blank"><img src="images/consumosproblematicos.png" alt="logo de UOCRA Consumos problematicos" title="logo de UOCRA Consumos problematicos " class=""/></a>
+					<a href="https://mujeres.uocra.org/" target="_blank"><img src="images/mujeres.png" alt="logo de UOCRA Mujeres" title="logo de UOCRA Mujeres "/></a>
+					<a href="https://www.facebook.com/FormacionSindicalJovenesUOCRA" target="_blank"><img src="images/logoJuventud-chico.png" title="Juventud UOCRA" alt="Juventud UOCRA" class="vertical"/> </a>
+					<a href="https://mutual.uocra.org/" target="_blank"><img src="images/moecra.png" alt="logo de MOECRA" title="logo de MOECRA"/></a>
+					<a href="https://www.uocra.org/ecu" target="_blank"><img src="images/logo-ECU.svg" title="ECU - Espacio Cultural UOCRA" alt="ECU - Espacio Cultural UOCRA" class=""/> </a>
+					<img src="images/logoTrabajoSocial-chico.png" title="Trabajo Social" alt="Trabajo Social" class="vertical"/>
+					<a href="?s=SST"><img src="images/logoSST-chico.png" title="Salud y Seguridad en el Trabajo" alt="Salud y Seguridad en el Trabajo" /> </a>
+					<a href="https://cgtrainternacional.com.ar/?s=emtd&sub=historia" target="_blank"><img src="images/emtd.png" title="Equipo Multidisciplinario de Trabajo Decente" alt="Equipo Multidisciplinario de Trabajo Decente" class=""/> </a>
+					<!--a href="http://www.cgtrainternacional.com.ar" target="_blank"><img src="images/logoCGTRA-chico.png" title="CGT-RA Internacional" alt="CGT-RA Internacional" class="vertical"/> </a-->
+					<!--a href="http://www.uocra.net/intranet/blog/uocrablog/default.asp" target="_blank"><img src="images/uocraBlog.png" alt="logo de UOCRA Blog " title="logo de UOCRA Blog "/> </a-->
+				</div>
+			</div>
+		</div>
+		<div class="footer">															
+			<div class="center">
+				<div class="grilla_2">
+					<p>Av. Belgrano 1870 - Ciudad Aut&oacute;noma de Buenos Aires<br/>2007 - 2026. Uni&oacute;n Obrera de la Construcci&oacute;n de la Rep&uacute;blica Argentina. Todos los derechos reservados. </p>
+				</div>
+				<div class="grilla_1">
+					<a href='https://www.facebook.com/uocra.medios/' target="_blank"><img src='images/logoFB_2019F.svg' alt='Link a Facebook' title='Link a Facebook'/></a>
+					<a href='https://twitter.com/uocra' target="_blank"><img src='images/logoTW_2019F.svg' alt='Link a Twitter' title='Link a Twitter'/></a>
+					<a href='https://www.youtube.com/user/uocramedios' target="_blank"><img src='images/logoYT_2019F.svg' alt='Link a YouTube' title='Link a YouTube'/></a>
+					<a href='https://www.instagram.com/uocramedios' target="_blank"><img src='images/logoIG_2019F.svg' alt='Link a Instagram' title='Link a Instagram'/></a>
+					<!--a href='?s=contacto'><img src='images/logoCT_2019F.svg' alt='Link a Contacto' title='Link a Contacto'/></a>
+					<a href='?lang=2'><img src='images/2F.svg' alt='Change to english' title='Change to english'/></a-->
+				</div>
+			</div>
+		</div>		
+		<script type='text/javascript' src='scripts/jquery.validate.min.js'></script>
+		<script type="text/javascript">
+			$().ready(function() {
+				$("#buscador form").validate({
+					rules: {
+						busqueda: {
+							required: true,
+							minlength: 3
+						}
+					}
+				});
+			});
+		</script>
+	</body>
+</html>

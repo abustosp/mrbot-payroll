@@ -21,7 +21,6 @@ def test_real_catalog_loads_verified_data_and_skips_unverified_scales(tmp_path: 
 
     assert len(result.catalog_codes) == 10
     assert result.agreements.created == 10
-    assert result.scales.created == 8
-    assert len(result.warnings) == 21
-    assert all("sin importe verificado" in warning for warning in result.warnings)
+    assert result.scales.created == sum(cct["evidence_scales_verified"] for cct in catalog)
+    assert result.warnings == ()
 

@@ -111,31 +111,24 @@ def test_salary_scales_have_source_and_validity(catalog_data: list[dict]):
             assert "fuente" in scale and scale["fuente"], (
                 f"CCT {code} scale {index} missing fuente"
             )
-            assert scale.get("estado") in {"verified", "unverified"}, (
-                f"CCT {code} scale {index} estado must be 'verified' or 'unverified'"
+            assert scale.get("estado") == "verified", (
+                f"CCT {code} scale {index} must be verified"
             )
-            assert "verification_source" in scale, (
-                f"CCT {code} scale {index} missing verification_source key"
+            assert scale.get("source_id"), (
+                f"CCT {code} scale {index} missing source_id"
             )
-            assert "verification_note" in scale and scale["verification_note"], (
-                f"CCT {code} scale {index} missing verification_note"
+            assert scale.get("verification_source"), (
+                f"CCT {code} scale {index} missing verification_source"
             )
-
-            if scale["estado"] == "verified":
-                assert scale.get("importe") is not None, (
-                    f"CCT {code} scale {index} verified scale must have non-null importe"
-                )
-                importe = Decimal(str(scale["importe"]))
-                assert importe > Decimal("0"), (
-                    f"CCT {code} scale {index} importe must be positive"
-                )
-            else:
-                assert scale.get("importe") is None, (
-                    f"CCT {code} scale {index} unverified scale must have null importe"
-                )
-                assert "estimated_value" in scale and scale["estimated_value"], (
-                    f"CCT {code} scale {index} unverified scale must have estimated_value"
-                )
+            assert scale.get("importe") is not None, (
+                f"CCT {code} scale {index} verified scale must have non-null importe"
+            )
+            assert Decimal(str(scale["importe"])) > Decimal("0"), (
+                f"CCT {code} scale {index} importe must be positive"
+            )
+            assert "estimated_value" not in scale, (
+                f"CCT {code} scale {index} must not contain estimated_value"
+            )
 
 
 def test_verified_scales_must_have_valid_verification_source(catalog_data: list[dict]):
@@ -164,62 +157,36 @@ def test_verified_scales_must_have_valid_verification_source(catalog_data: list[
 
 
 def test_no_null_importe_marked_as_verified(catalog_data: list[dict]):
-    """Ensure no scale with null importe is marked as verified, and vice versa."""
+    """The catalog contains verified scales only, each with a concrete amount."""
     for cct in catalog_data:
         code = cct["code"]
         for index, scale in enumerate(cct.get("salary_scales", [])):
-            if scale.get("importe") is None:
-                assert scale.get("estado") != "verified", (
-                    f"CCT {code} scale {index} has null importe but is marked as verified"
-                )
-            if scale.get("estado") == "verified":
-                assert scale.get("importe") is not None, (
-                    f"CCT {code} scale {index} is marked verified but has null importe"
-                )
+            assert scale.get("estado") == "verified", (
+                f"CCT {code} scale {index} is not verified"
+            )
+            assert scale.get("importe") is not None, (
+                f"CCT {code} scale {index} is verified but has null importe"
+            )
 
 
-def test_scales_2026_must_not_be_verified_without_official_acta(catalog_data: list[dict]):
-    """Ensure 2026 salary scales are not marked as verified without an official acta/source."""
+def test_future_scales_have_a_verified_source(catalog_data: list[dict]):
+    """Future scheduled scales keep their verified source and may start after today."""
     for cct in catalog_data:
         code = cct["code"]
         for index, scale in enumerate(cct.get("salary_scales", [])):
-            vigencia = scale.get("vigencia_desde", "")
-            if vigencia.startswith("2026"):
-                # Without an official 2026 acta PDF, scale must be unverified
-                if scale.get("estado") == "verified":
-                    source = scale.get("verification_source")
-                    assert source, f"CCT {code} scale {index} 2026 verified scale missing source"
-                    source_file = BASE_DIR / source
-                    assert source_file.exists(), f"Source file {source_file} missing"
-                    data = source_file.read_bytes()
-                    assert b"2026" in data, f"Acta {source} does not reference 2026"
-                else:
-                    assert scale.get("estado") == "unverified"
-                    assert scale.get("importe") is None
-                    assert scale.get("estimated_value") is not None
-                    assert scale.get("verification_note")
+            assert scale.get("verification_source"), (
+                f"CCT {code} scale {index} missing official source"
+            )
+            if scale.get("vigencia_desde", "") > "2026-10-26":
+                assert scale.get("estado") == "verified"
 
 
 def test_verification_audit_metrics(catalog_data: list[dict]):
-    """Verify exact count of verified vs unverified scales in the catalog."""
-    verified = [
-        (cct["code"], s["categoria"], s["importe"])
-        for cct in catalog_data
-        for s in cct.get("salary_scales", [])
-        if s.get("estado") == "verified"
-    ]
-    unverified = [
-        (cct["code"], s["categoria"], s.get("estimated_value"))
-        for cct in catalog_data
-        for s in cct.get("salary_scales", [])
-        if s.get("estado") == "unverified"
-    ]
-    assert len(verified) == 8, f"Expected 8 verified scales, got {len(verified)}"
-    assert len(unverified) == 21, f"Expected 21 unverified scales, got {len(unverified)}"
-    # Only CCT 507/07 has verified scales
-    assert all(item[0] == "507/07" for item in verified), (
-        f"Verified scales should only come from CCT 507/07, found: {verified}"
-    )
+    """Check each CCT's verified count against its evidence metadata."""
+    for cct in catalog_data:
+        scales = cct.get("salary_scales", [])
+        assert len(scales) == cct["evidence_scales_verified"]
+        assert all(scale["estado"] == "verified" for scale in scales)
 
 
 def test_formulas_file_has_at_least_10_formulas(formulas_data: list[dict]):

@@ -18,3 +18,4 @@ build/
 .DS_Store
 reports/
 .orchestration/
+normative/cct/evidence/*/pdfs/
