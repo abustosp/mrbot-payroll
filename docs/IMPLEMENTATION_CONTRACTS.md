@@ -16,14 +16,16 @@ Los workers de Orca trabajan en el mismo worktree: cada uno edita solo su territ
 | Worker | Puede editar | No puede editar |
 |---|---|---|
 | foundation | `app/main.py`, `app/config.py`, `app/database/**`, `app/auth/**`, `app/api/**`, `app/modules/companies/**`, `app/modules/employees/**`, `app/modules/agreements/**`, `alembic/**`, `alembic.ini`, `tests/unit/test_api_*.py`, `tests/unit/test_auth_*.py` | otros `app/modules`, `app/core`, `app/jurisdictions`, `app/ai`, `app/exporters`, `app/web` |
-| engine | `app/core/payroll_engine/formula_engine.py`, `dependency_resolver.py`, `rounding.py`, `validations.py`, `types.py`, `__init__.py`, `tests/payroll/test_formula_*.py`, `tests/payroll/test_dependency_*.py` | `calculator.py`, `tax_bases.py`, otras carpetas |
+| engine | `app/core/payroll_engine/formula_engine.py`, `dependency_resolver.py`, `rounding.py`, `validations.py`, `tests/payroll/test_formula_*.py`, `tests/payroll/test_dependency_*.py` | `types.py`, `__init__.py`, `calculator.py`, `tax_bases.py`, otras carpetas |
 | calculator | `app/core/payroll_engine/calculator.py`, `tax_bases.py`, `concepts.py`, `tests/payroll/test_calculator_*.py`, `tests/payroll/test_tax_bases_*.py` | `formula_engine.py`, `dependency_resolver.py`, `rounding.py`, `validations.py`, `types.py`, `__init__.py` |
 | argentina | `app/jurisdictions/**`, `app/core/normative/**`, `app/exporters/txt/**`, `tests/jurisdictions/**`, `tests/exporters/test_lsd_*.py` | `app/core/payroll_engine/**`, `app/exporters/pdf/**`, `app/web/**` |
 | ai | `app/ai/**`, `tests/ai/**` | resto de `app/**` |
 | web | `app/web/**`, `app/exporters/pdf/**`, `tests/unit/test_web_*.py`, `tests/exporters/test_pdf_*.py` | `app/api/**`, `app/database/**`, `app/jurisdictions/**`, `app/ai/**` |
+| imports | `app/importers/**`, `tests/importers/**` | `app/modules/**`, `app/api/**`, `app/web/**`, resto de `app/**` |
 | infra | `deployment/**`, `.github/**`, `desktop/**`, `README.md`, `docs/OPERATIONS.md` | `app/**`, `tests/**`, `pyproject.toml` |
 
-El coordinador es dueno de `pyproject.toml`, `tests/conftest.py`, `docs/IMPLEMENTATION_CONTRACTS.md` y de la integracion final.
+El coordinador es dueno de `pyproject.toml`, `tests/conftest.py`, `app/core/payroll_engine/types.py`,
+`app/core/payroll_engine/__init__.py`, `docs/IMPLEMENTATION_CONTRACTS.md` y de la integracion final.
 
 ## Contratos entre modulos
 
@@ -88,4 +90,3 @@ no constantes enterradas en el calculo. El CCT inicial es 130/75, alcance acotad
 - No usar red en tests. Todo test debe correr offline.
 - Cada cambio no trivial deja al menos un test o autochequeo.
 - Al terminar, ejecutar los tests propios y reportar archivos modificados y resultados.
-
