@@ -23,7 +23,16 @@ EMPLOYEE_FIELDS = (
     "convenio",
     "email",
 )
-NOVELTY_FIELDS = ("legajo", "periodo", "tipo", "cantidad", "importe", "observacion")
+NOVELTY_FIELDS = (
+    "legajo",
+    "periodo",
+    "tipo",
+    "cantidad",
+    "importe",
+    "observacion",
+    "naturaleza",
+    "quincena",
+)
 
 REQUIRED_FIELDS = {
     "employees": ("legajo", "apellido", "nombre", "cuil", "fecha_ingreso"),
@@ -147,6 +156,23 @@ _NOVELTY_ALIASES = {
         "comentarios",
         "descripcion",
         "nota",
+    ),
+    "naturaleza": (
+        "naturaleza",
+        "naturaleza novedad",
+        "caracter",
+        "caracter novedad",
+        "kind",
+        "tipo naturaleza",
+        "remunerativo",
+    ),
+    "quincena": (
+        "quincena",
+        "subperiodo",
+        "subperiodo quincena",
+        "q",
+        "dia",
+        "dia quincena",
     ),
 }
 

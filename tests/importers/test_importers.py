@@ -430,3 +430,80 @@ def test_tipo_de_importacion_invalido() -> None:
         assert "employees" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("Se esperaba ValueError")
+
+
+def test_naturaleza_y_quincena_por_novedad() -> None:
+    # B-43: naturaleza por novedad + periodo con quincena, sin migracion.
+    content = (
+        "Legajo;Periodo;Tipo;Cantidad;Naturaleza;Quincena\n"
+        "1;202609;Bonificacion;1;NR;2\n"
+        "2;202609;Horas extra;3,5;;\n"
+    )
+
+    preview = analyze_file(BytesIO(content.encode("utf-8")), "novelties")
+
+    assert preview.errors == []
+    assert preview.valid_rows[0].naturaleza == "NON_REMUNERATIVE"
+    assert preview.valid_rows[0].quincena == 2
+    assert preview.valid_rows[1].naturaleza == "REMUNERATIVE"
+    assert preview.valid_rows[1].quincena is None
+    assert any(w.code == "quincena_pendiente" for w in preview.warnings)
+
+
+def test_naturaleza_y_quincena_invalidas() -> None:
+    content = (
+        "Legajo;Periodo;Tipo;Naturaleza;Quincena\n"
+        "1;202609;Bono;XYZ;3\n"
+    )
+
+    preview = analyze_file(BytesIO(content.encode("utf-8")), "novelties")
+
+    assert preview.valid_rows == []
+    assert {e.code for e in preview.errors} == {"naturaleza_invalida", "quincena_invalida"}
+
+
+def test_columnas_extra_avisan_sin_bloquear() -> None:
+    # B-44: columnas fuera del ancho se truncan; el preview avisa con conteo.
+    content = (
+        "Legajo;Apellido;Nombre;CUIL;Fecha de ingreso\n"
+        "1;Pérez;Juan;20-12345678-6;15/03/2024;EXTRA1;EXTRA2\n"
+    )
+
+    preview = analyze_file(BytesIO(content.encode("utf-8")), "employees")
+
+    assert len(preview.valid_rows) == 1
+    assert preview.errors == []
+    assert [w.code for w in preview.warnings] == ["columnas_extra"]
+    assert "2" in preview.warnings[0].message
+
+
+def test_hojas_xlsx_ignoradas_avisan() -> None:
+    # B-76: solo se lee la hoja activa; las demas hojas con datos avisan.
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Hoja1"
+    worksheet.append(EMPLOYEE_HEADERS)
+    worksheet.append(["1", "Pérez", "Juan", "20-12345678-6", "15/03/2024", None, None, None])
+    otros = workbook.create_sheet("Otros")
+    otros.append(EMPLOYEE_HEADERS)
+    otros.append(["2", "Gómez", "Ana", "20-12345678-6", "15/03/2024", None, None, None])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    preview = analyze_file(BytesIO(buffer.getvalue()), "employees")
+
+    assert preview.total == 1
+    assert [w.code for w in preview.warnings] == ["hojas_ignoradas"]
+    assert "Otros" in preview.warnings[0].message
+
+
+def test_columna_faltante_incluye_ejemplo_de_cabecera() -> None:
+    # B-47: el error de columnas guia con una cabecera valida.
+    content = "Legajo;Apellido;Nombre;Fecha de ingreso\n1;Pérez;Juan;15/03/2024\n"
+
+    preview = analyze_file(BytesIO(content.encode("utf-8")), "employees")
+
+    assert preview.valid_rows == []
+    error = next(e for e in preview.errors if e.code == "columna_faltante")
+    assert "Cabecera valida" in error.message
+    assert "CUIL" in error.message

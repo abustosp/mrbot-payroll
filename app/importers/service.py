@@ -35,11 +35,13 @@ from app.importers.parsing import (
     is_valid_cuil,
     is_valid_email,
     normalize_cuil,
+    normalize_naturaleza,
     normalize_text,
     normalize_tipo,
     parse_date,
     parse_decimal,
     parse_periodo,
+    parse_quincena,
 )
 from app.importers.readers import Table, read_table
 
@@ -90,13 +92,18 @@ def _required_error(row: int, field: str) -> RowError:
     )
 
 
-def _missing_column_error(row: int, field: str) -> RowError:
-    return _row_error(
-        row,
-        field,
-        "columna_faltante",
-        f"Falta la columna obligatoria '{field}'.",
-    )
+_EXPECTED_HEADERS = {
+    # B-47: ejemplo de cabecera valida para guiar el primer intento.
+    "employees": "Legajo;Apellido;Nombre;CUIL;Fecha de ingreso",
+    "novelties": "Legajo;Periodo;Tipo;Cantidad;Importe;Observacion",
+}
+
+
+def _missing_column_error(row: int, field: str, kind: str | None = None) -> RowError:
+    message = f"Falta la columna obligatoria '{field}'."
+    if kind in _EXPECTED_HEADERS:
+        message += f" Cabecera valida: {_EXPECTED_HEADERS[kind]}."
+    return _row_error(row, field, "columna_faltante", message)
 
 
 def _get_value(raw: Mapping[str, Any], field: str, mapping: Mapping[str, str | None]) -> Any:
@@ -310,6 +317,38 @@ def _prepare_novelty(
     if observacion is not None:
         data["observacion"] = observacion
 
+    raw_naturaleza = _get_value(raw, "naturaleza", mapping)
+    if not is_blank(raw_naturaleza):
+        naturaleza = normalize_naturaleza(raw_naturaleza)
+        if naturaleza is None:
+            issues.append(
+                _row_error(
+                    row,
+                    "naturaleza",
+                    "naturaleza_invalida",
+                    "La naturaleza no es valida (R, NR, D, C o AUX).",
+                    raw_naturaleza,
+                )
+            )
+        else:
+            data["naturaleza"] = naturaleza
+
+    raw_quincena = _get_value(raw, "quincena", mapping)
+    if not is_blank(raw_quincena):
+        quincena = parse_quincena(raw_quincena)
+        if quincena is None:
+            issues.append(
+                _row_error(
+                    row,
+                    "quincena",
+                    "quincena_invalida",
+                    "La quincena debe ser 1 o 2.",
+                    raw_quincena,
+                )
+            )
+        else:
+            data["quincena"] = quincena
+
     if missing or issues:
         return None, issues
 
@@ -323,7 +362,11 @@ def _duplicate_key(kind: ImportKind, row: RowModel) -> str:
     legajo = str(row["legajo"]).strip().casefold()
     if kind == "employees":
         return f"legajo:{legajo}"
-    return f"legajo:{legajo}|periodo:{row['periodo']}|tipo:{row['tipo']}"
+    key = f"legajo:{legajo}|periodo:{row['periodo']}|tipo:{row['tipo']}"
+    quincena = row.get("quincena")
+    if quincena is not None:
+        key += f"|quincena:{quincena}"
+    return key
 
 
 def _duplicate_message(kind: ImportKind) -> str:
@@ -350,11 +393,11 @@ def _analyze_records(
 
     if total == 0 and missing:
         for field in missing:
-            errors.append(_missing_column_error(1, field))
+            errors.append(_missing_column_error(1, field, kind))
         return total, valid_rows, errors, duplicates
 
     for row_number, raw in records:
-        row_errors = [_missing_column_error(row_number, field) for field in missing]
+        row_errors = [_missing_column_error(row_number, field, kind) for field in missing]
         model: EmployeeRow | NoveltyRow | None
         if kind == "employees":
             model, field_errors = _prepare_employee(raw, mapping, row_number, missing_set)
@@ -497,6 +540,26 @@ def analyze_file(
                 message="El archivo no contiene filas de datos.",
             )
         )
+    warnings = _table_warnings(table)
+    if canonical_kind == "novelties" and any(
+        isinstance(row, NoveltyRow) and row.quincena is not None for row in valid_rows
+    ):
+        # B-43 sin migracion: la quincena se valida y distingue duplicados,
+        # pero el periodo se persiste mensual (String(6)) y el servicio
+        # calcula por mes. PENDING: subperiodo persistido + filtro quincenal
+        # (dueno: motor-calculo/migraciones).
+        warnings.append(
+            RowError(
+                row=0,
+                field="quincena",
+                code="quincena_pendiente",
+                message=(
+                    "La quincena se valida pero la liquidacion quincenal aun "
+                    "no parte novedades por subperiodo; el periodo se "
+                    "persiste mensual."
+                ),
+            )
+        )
     return ImportPreview(
         kind=canonical_kind,
         total=total,
@@ -506,7 +569,42 @@ def analyze_file(
         dry_run=True,
         mapping=resolved,
         missing_columns=missing,
+        warnings=warnings,
     )
+
+
+def _table_warnings(table: Table) -> list[RowError]:
+    """Avisos no bloqueantes sobre datos leidos pero no importados."""
+    warnings: list[RowError] = []
+    if table.extra_columns > 0:
+        # B-44: _pad_row trunca celdas fuera del ancho de los headers.
+        warnings.append(
+            RowError(
+                row=0,
+                field=None,
+                code="columnas_extra",
+                message=(
+                    f"Se ignoraron {table.extra_columns} columnas extra fuera "
+                    "de los encabezados; revise el archivo si esperaba "
+                    "importarlas."
+                ),
+            )
+        )
+    if table.ignored_sheets:
+        # B-76: parse_xlsx solo lee la hoja activa.
+        names = ", ".join(repr(name) for name in table.ignored_sheets)
+        warnings.append(
+            RowError(
+                row=0,
+                field=None,
+                code="hojas_ignoradas",
+                message=(
+                    "Solo se lee la hoja activa del XLSX; se ignoraron las "
+                    f"hojas con datos: {names}."
+                ),
+            )
+        )
+    return warnings
 
 
 def _coerce_records(

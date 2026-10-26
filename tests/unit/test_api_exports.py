@@ -52,6 +52,51 @@ def test_lsd_exports_require_auth_and_report_invalid_payloads(tmp_path: Path) ->
             assert concepts.status_code == 200, concepts.text
             assert concepts.headers["content-type"].startswith("text/plain")
             assert concepts.content.decode("latin-1").isascii()
+            # B-82: la descarga avisa que no tiene validez ante ARCA.
+            assert "sin-validez-arca" in concepts.headers["content-disposition"]
+
+            liquidation = client.post(
+                "/api/v1/exports/lsd/liquidations",
+                json={
+                    "employer_cuit": "30-12345678-1",
+                    "period": "202601",
+                    "liquidation_number": 1,
+                    "workers": [
+                        {
+                            "cuil": "20-12345678-6",
+                            "legajo": "A1",
+                            "pay_date": "2026-01-31",
+                            "rubric_date": "2026-01-31",
+                            "items": [{"concept_code": "BASICO", "quantity": 1, "amount": "100000.00"}],
+                            "record04": {},
+                        }
+                    ],
+                },
+            )
+            assert liquidation.status_code == 200, liquidation.text
+            assert "sin-validez-arca" in liquidation.headers["content-disposition"]
     finally:
         app.dependency_overrides.pop(get_db, None)
         engine.dispose()
+
+
+def test_lsd_descriptions_document_version_and_example() -> None:
+    # B-46/B-88: /docs muestra ejemplo de payload y version del layout.
+    from app.api.exports import router
+    from app.exporters.txt.lsd import LAYOUT_VERSION
+
+    descriptions = {
+        route.path: route.description
+        for route in router.routes
+        if "/lsd/" in getattr(route, "path", "")
+    }
+
+    assert set(descriptions) == {
+        "/exports/lsd/liquidations",
+        "/exports/lsd/concepts",
+    }
+    for path, description in descriptions.items():
+        assert LAYOUT_VERSION in description, path
+        assert "ARCA" in description, path
+    assert "employer_cuit" in descriptions["/exports/lsd/liquidations"]
+    assert "arca_code" in descriptions["/exports/lsd/concepts"]

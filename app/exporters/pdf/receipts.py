@@ -62,6 +62,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
+from app.importers.parsing import parse_decimal as _parse_decimal_ar
+
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 TEMPLATE_NAME = "receipt.html"
 
@@ -135,6 +137,8 @@ def _first(source: Mapping[str, Any], *keys: str, default: Any = None) -> Any:
 
 
 def _to_decimal(value: Any, field: str = "importe") -> Decimal:
+    # B-45: usa el parse_decimal compartido (convencion AR) para que "1.234"
+    # valga lo mismo que en importers.
     if isinstance(value, Decimal):
         return value
     if value is None or value == "":
@@ -142,9 +146,12 @@ def _to_decimal(value: Any, field: str = "importe") -> Decimal:
     if isinstance(value, bool):
         raise ReceiptContextError(f"El {field} no es un numero valido.")
     try:
-        return Decimal(str(value).replace(",", "."))
+        number = _parse_decimal_ar(value)
     except (InvalidOperation, ValueError) as exc:
         raise ReceiptContextError(f"El {field} no es un numero valido: {value!r}.") from exc
+    if number is None:
+        raise ReceiptContextError(f"El {field} no es un numero valido: {value!r}.")
+    return number
 
 
 def _optional_decimal(value: Any) -> Decimal | None:

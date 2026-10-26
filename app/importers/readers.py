@@ -29,6 +29,11 @@ class Table:
     headers: list[str] = field(default_factory=list)
     rows: list[tuple[int, list[Any]]] = field(default_factory=list)
     source: str = "csv"
+    # B-44: cantidad maxima de celdas por fila que excedieron el ancho de los
+    # headers (se truncaron). B-76: hojas XLSX con datos que no se leyeron
+    # (solo se lee la hoja activa).
+    extra_columns: int = 0
+    ignored_sheets: list[str] = field(default_factory=list)
 
 
 def _read_source(stream: Any) -> tuple[bytes | str, str]:
@@ -91,6 +96,11 @@ def _pad_row(values: list[Any], width: int) -> list[Any]:
     return values[:width]
 
 
+def _extra_width(values: list[Any], width: int) -> int:
+    """Celdas que ``_pad_row`` truncaria por exceder el ancho de headers."""
+    return max(0, len(values) - width)
+
+
 def parse_csv(data: bytes) -> Table:
     text = _decode_csv(data)
     if not text.strip():
@@ -100,6 +110,7 @@ def parse_csv(data: bytes) -> Table:
     reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
     headers: list[str] | None = None
     rows: list[tuple[int, list[Any]]] = []
+    extra_columns = 0
 
     for values in reader:
         if not values or all(is_blank(value) for value in values):
@@ -107,9 +118,10 @@ def parse_csv(data: bytes) -> Table:
         if headers is None:
             headers = _clean_headers(list(values))
             continue
+        extra_columns = max(extra_columns, _extra_width(list(values), len(headers)))
         rows.append((reader.line_num, _pad_row(list(values), len(headers))))
 
-    return Table(headers=headers or [], rows=rows, source="csv")
+    return Table(headers=headers or [], rows=rows, source="csv", extra_columns=extra_columns)
 
 
 def _clean_xlsx_headers(values: list[Any]) -> list[str]:
@@ -132,8 +144,10 @@ def parse_xlsx(data: bytes) -> Table:
 
     headers: list[str] | None = None
     rows: list[tuple[int, list[Any]]] = []
+    extra_columns = 0
     try:
         worksheet = workbook.active
+        active_title = worksheet.title
         for row_number, values in enumerate(worksheet.iter_rows(values_only=True), start=1):
             values = list(values)
             if not values or all(is_blank(value) for value in values):
@@ -141,11 +155,35 @@ def parse_xlsx(data: bytes) -> Table:
             if headers is None:
                 headers = _clean_xlsx_headers(values)
                 continue
+            extra_columns = max(extra_columns, _extra_width(values, len(headers)))
             rows.append((row_number, _pad_row(values, len(headers))))
+        # B-76: solo se lee la hoja activa; avisar las demas hojas con datos.
+        ignored_sheets = [
+            name
+            for name in workbook.sheetnames
+            if name != active_title and _sheet_has_data(workbook[name])
+        ]
     finally:
         workbook.close()
 
-    return Table(headers=headers or [], rows=rows, source="xlsx")
+    return Table(
+        headers=headers or [],
+        rows=rows,
+        source="xlsx",
+        extra_columns=extra_columns,
+        ignored_sheets=ignored_sheets,
+    )
+
+
+def _sheet_has_data(worksheet: Any) -> bool:
+    """Indica si una hoja XLSX tiene al menos una fila con datos."""
+    try:
+        for values in worksheet.iter_rows(values_only=True):
+            if values and not all(is_blank(value) for value in values):
+                return True
+    except Exception:  # pragma: no cover - hoja ilegible cuenta como ignorada
+        return True
+    return False
 
 
 def _looks_like_xlsx(data: bytes) -> bool:

@@ -418,6 +418,60 @@ def normalize_tipo(value: Any) -> str | None:
     return code
 
 
+# B-43: naturaleza de la novedad (gobierna el calculo); sin columna se asume
+# remunerativa como hasta ahora. Sin migracion: los valores coinciden con
+# PayrollNovelty.kind, ya persistible.
+_NATURALEZA_ALIASES = {
+    "remunerativo": "REMUNERATIVE",
+    "remunerativa": "REMUNERATIVE",
+    "remunerative": "REMUNERATIVE",
+    "r": "REMUNERATIVE",
+    "no remunerativo": "NON_REMUNERATIVE",
+    "no remunerativa": "NON_REMUNERATIVE",
+    "non remunerative": "NON_REMUNERATIVE",
+    "no_remunerativo": "NON_REMUNERATIVE",
+    "nr": "NON_REMUNERATIVE",
+    "descuento": "DEDUCTION",
+    "deduccion": "DEDUCTION",
+    "deduction": "DEDUCTION",
+    "d": "DEDUCTION",
+    "contribucion": "CONTRIBUTION",
+    "contribution": "CONTRIBUTION",
+    "c": "CONTRIBUTION",
+    "auxiliar": "AUXILIARY",
+    "auxiliary": "AUXILIARY",
+    "aux": "AUXILIARY",
+}
+
+
+def normalize_naturaleza(value: Any) -> str | None:
+    """Normaliza la naturaleza a los valores de ``PayrollNovelty.kind``."""
+    text = normalize_text(value)
+    if not text:
+        return None
+    return _NATURALEZA_ALIASES.get(text)
+
+
+def parse_quincena(value: Any) -> int | None:
+    """Valida la quincena (1 o 2); ``None`` si esta vacia o es invalida."""
+    if is_blank(value):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        if not value.is_integer():
+            return None
+        value = int(value)
+    if isinstance(value, int):
+        return value if value in (1, 2) else None
+    text = normalize_text(value)
+    if text in {"1", "q1", "primera", "primera quincena"}:
+        return 1
+    if text in {"2", "q2", "segunda", "segunda quincena"}:
+        return 2
+    return None
+
+
 def is_valid_email(value: Any) -> bool:
     """Valida de forma basica un email (sin dependencias externas)."""
     text = clean_text(value)

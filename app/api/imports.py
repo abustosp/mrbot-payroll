@@ -53,9 +53,9 @@ MAX_IMPORT_BYTES = 5 * 1024 * 1024
 ALLOWED_SUFFIXES = frozenset({".csv", ".xlsx", ".xlsm"})
 COMMIT_ROLES = frozenset({"admin", "editor"})
 NOVELTY_SOURCE = "import"
-# El importador CSV/XLSX no trae una columna de naturaleza: las novedades
-# importadas se guardan como remunerativas. La naturaleza del concepto (no este
-# dato) es la que gobierna el calculo.
+# B-43: la naturaleza llega por novedad (columna opcional Naturaleza, default
+# REMUNERATIVE). Sin migracion: la quincena no se persiste; el preview avisa
+# con quincena_pendiente.
 NOVELTY_KIND = "REMUNERATIVE"
 
 
@@ -350,7 +350,7 @@ def _commit_novelties(
             employee_id=employee.id,
             period=row.periodo,
             code=row.tipo,
-            kind=NOVELTY_KIND,
+            kind=row.naturaleza or NOVELTY_KIND,
             quantity=row.cantidad,
             unit=None,
             amount=row.importe,

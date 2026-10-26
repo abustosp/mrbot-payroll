@@ -26,7 +26,11 @@ from app.exporters.pdf.receipts import (
     ReceiptError,
     render_receipt_pdf,
 )
-from app.exporters.txt.lsd import generate_concepts_file, generate_liquidation_file
+from app.exporters.txt.lsd import (
+    LAYOUT_VERSION,
+    generate_concepts_file,
+    generate_liquidation_file,
+)
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -54,7 +58,21 @@ def _text_file(payload: bytes, filename: str) -> Response:
     )
 
 
-@router.post("/lsd/liquidations", response_class=Response)
+@router.post(
+    "/lsd/liquidations",
+    response_class=Response,
+    description=(
+        "Genera el archivo LSD de liquidaciones (layout fijo borrador "
+        f"version {LAYOUT_VERSION}; la version no viaja dentro del contenido). "
+        "Borrador interno sin validez ante ARCA. "
+        "Ejemplo de payload valido: "
+        '{"employer_cuit": "30-12345678-1", "period": "202601", '
+        '"liquidation_number": 1, "workers": [{"cuil": "20-12345678-6", '
+        '"legajo": "A1", "pay_date": "2026-01-31", "rubric_date": "2026-01-31", '
+        '"items": [{"concept_code": "BASICO", "quantity": 1, "amount": "100000.00"}], '
+        '"record04": {}}]}.'
+    ),
+)
 def export_lsd_liquidations(
     payload: LiquidationExportInput,
     _user: User = Depends(require_user),
@@ -68,10 +86,22 @@ def export_lsd_liquidations(
         )
     except (ArithmeticError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Liquidación LSD inválida: {exc}") from exc
-    return _text_file(content, "liquidaciones.txt")
+    return _text_file(content, "liquidaciones-borrador-sin-validez-arca.txt")
 
 
-@router.post("/lsd/concepts", response_class=Response)
+@router.post(
+    "/lsd/concepts",
+    response_class=Response,
+    description=(
+        "Genera el archivo LSD de conceptos (layout fijo borrador "
+        f"version {LAYOUT_VERSION}; la version no viaja dentro del contenido). "
+        "Borrador interno sin validez ante ARCA. "
+        "Ejemplo de payload valido: "
+        '{"concepts": [{"arca_code": "001", "employer_code": "BASICO", '
+        '"description": "Sueldo basico"}]} '
+        "(arca_code de 3 digitos, employer_code hasta 10, description hasta 50)."
+    ),
+)
 def export_lsd_concepts(
     payload: ConceptsExportInput,
     _user: User = Depends(require_user),
@@ -80,7 +110,7 @@ def export_lsd_concepts(
         content = generate_concepts_file(payload.concepts)
     except (ArithmeticError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Conceptos LSD inválidos: {exc}") from exc
-    return _text_file(content, "conceptos.txt")
+    return _text_file(content, "conceptos-borrador-sin-validez-arca.txt")
 
 
 @router.post("/receipts/{result_id}", response_class=Response)

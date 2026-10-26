@@ -340,6 +340,34 @@ def test_novelties_commit_reports_unknown_legajo_without_aborting(api) -> None:
         assert rows[0].employee_id == employee_id
 
 
+def test_novelties_commit_persists_naturaleza_per_row(api) -> None:
+    # B-43: la naturaleza por novedad se persiste en kind (default REMUNERATIVE).
+    client, factory, _ = api
+    employee_id = add_employee(factory, "E-32")
+    content = (
+        b"Legajo;Periodo;Tipo;Cantidad;Importe;Naturaleza\n"
+        b"E-32;202601;bonificacion;1;50000;NR\n"
+        b"E-32;202601;horas_extra;2;1000;\n"
+    )
+
+    response = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false"},
+        files={"file": ("novelties.csv", content, "text/csv")},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["created"] == 2
+    with factory() as session:
+        rows = session.scalars(
+            select(PayrollNovelty).order_by(PayrollNovelty.id)
+        ).all()
+        assert len(rows) == 2
+        assert rows[0].employee_id == employee_id
+        assert rows[0].kind == "NON_REMUNERATIVE"
+        assert rows[1].kind == "REMUNERATIVE"
+
+
 def test_novelties_commit_is_isolated_by_organization(api) -> None:
     client, factory, _ = api
     with factory.begin() as session:

@@ -20,10 +20,12 @@ from app.importers.parsing import (
     is_valid_cuil,
     is_valid_email,
     normalize_cuil,
+    normalize_naturaleza,
     normalize_tipo,
     parse_date,
     parse_decimal,
     parse_periodo,
+    parse_quincena,
 )
 
 ImportKind = Literal["employees", "novelties"]
@@ -121,6 +123,11 @@ class NoveltyRow(RowModel):
     cantidad: Decimal | None = None
     importe: Decimal | None = None
     observacion: str | None = None
+    # B-43: naturaleza por novedad (default remunerativa, como antes) y
+    # quincena opcional 1/2. Sin migracion: la naturaleza se persiste en
+    # PayrollNovelty.kind; la quincena solo se valida y distingue duplicados.
+    naturaleza: str = "REMUNERATIVE"
+    quincena: int | None = None
 
     @field_validator("legajo", mode="before")
     @classmethod
@@ -162,6 +169,26 @@ class NoveltyRow(RowModel):
     @classmethod
     def _normalize_observacion(cls, value: Any) -> str | None:
         return clean_text(value)
+
+    @field_validator("naturaleza", mode="before")
+    @classmethod
+    def _normalize_naturaleza(cls, value: Any) -> str:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return "REMUNERATIVE"
+        naturaleza = normalize_naturaleza(value)
+        if naturaleza is None:
+            raise ValueError("La naturaleza no es valida (R/NR/D/C/AUX).")
+        return naturaleza
+
+    @field_validator("quincena", mode="before")
+    @classmethod
+    def _normalize_quincena(cls, value: Any) -> int | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        quincena = parse_quincena(value)
+        if quincena is None:
+            raise ValueError("La quincena debe ser 1 o 2.")
+        return quincena
 
 
 class RowError(DictAccessMixin, BaseModel):
@@ -211,6 +238,8 @@ class ImportPreview(ImportOutcome):
 
     mapping: dict[str, str | None] = Field(default_factory=dict)
     missing_columns: list[str] = Field(default_factory=list)
+    # B-44/B-76: avisos que no bloquean (columnas extra, hojas ignoradas).
+    warnings: list[RowError] = Field(default_factory=list)
 
 
 class ImportResult(ImportOutcome):

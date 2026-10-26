@@ -250,6 +250,17 @@ def test_invalid_amount_is_rejected(context: dict) -> None:
         render_receipt_html(context)
 
 
+def test_to_decimal_uses_shared_ar_convention() -> None:
+    # B-45: "1.234" vale 1234 igual que en importers, no 1.234.
+    from decimal import Decimal
+
+    from app.exporters.pdf.receipts import _to_decimal
+    from app.importers.parsing import parse_decimal
+
+    assert _to_decimal("1.234") == Decimal("1234")
+    assert _to_decimal("1.234") == parse_decimal("1.234")
+
+
 def test_spanish_aliases_are_supported(context: dict) -> None:
     aliased = {
         "numero_recibo": context["receipt_number"],

@@ -114,7 +114,8 @@ def f931_filename(run: Any) -> str:
     period = _value(run, "period_end") or _value(run, "period_start")
     if isinstance(period, (date, datetime)):
         period = period.strftime("%Y%m%d")
-    return f"control-f931-{code}-{_slug(period, 'sin-periodo')}.xlsx"
+    # B-82: marca sin validez ante ARCA en el nombre de la descarga.
+    return f"control-f931-{code}-{_slug(period, 'sin-periodo')}-sin-validez-arca.xlsx"
 
 
 def _period_label(run: Any) -> str:

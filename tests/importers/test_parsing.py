@@ -9,11 +9,13 @@ from app.importers.parsing import (
     cuil_check_digit,
     is_valid_cuil,
     normalize_cuil,
+    normalize_naturaleza,
     normalize_text,
     normalize_tipo,
     parse_date,
     parse_decimal,
     parse_periodo,
+    parse_quincena,
 )
 
 
@@ -128,3 +130,37 @@ def test_normalize_text_quita_acentos_y_espacios() -> None:
     assert normalize_text("  Fecha   de Ingreso ") == "fecha de ingreso"
     assert normalize_text("Período") == "periodo"
     assert normalize_text("C.U.I.L.") == "c u i l"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Remunerativo", "REMUNERATIVE"),
+        ("NR", "NON_REMUNERATIVE"),
+        ("no remunerativa", "NON_REMUNERATIVE"),
+        ("Descuento", "DEDUCTION"),
+        ("Contribución", "CONTRIBUTION"),
+        ("AUX", "AUXILIARY"),
+        ("XYZ", None),
+        ("", None),
+    ],
+)
+def test_normalize_naturaleza(raw: str, expected: str | None) -> None:
+    assert normalize_naturaleza(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (1, 1),
+        ("2", 2),
+        ("Q1", 1),
+        ("segunda", 2),
+        (3, None),
+        ("0", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_parse_quincena(raw: object, expected: int | None) -> None:
+    assert parse_quincena(raw) == expected

@@ -22,6 +22,7 @@ from app.database.models import (
     PayrollRun,
 )
 from app.exporters.excel.f931 import (
+    DISCLAIMER,
     LEGEND,
     SHEET_TITLES,
     build_f931_workbook,
@@ -278,3 +279,6 @@ def test_f931_workbook_does_not_execute_user_formulas() -> None:
     assert filename.isascii()
     assert "/" not in filename and "\\" not in filename
     assert "\n" not in filename and '"' not in filename
+    # B-82: la descarga avisa que no tiene validez ante ARCA.
+    assert "sin-validez-arca" in filename
+    assert "ARCA" in DISCLAIMER
