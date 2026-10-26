@@ -11,6 +11,7 @@ from pydantic import (
 )
 
 from app.core.payroll_engine.types import RoundingPolicy
+from app.importers.parsing import is_valid_email
 from app.jurisdictions.argentina.validation import normalize_cuit_cuil
 
 
@@ -83,6 +84,16 @@ class EmployeeInput(BaseModel):
     @classmethod
     def valid_cuil(cls, value: str | None) -> str | None:
         return None if value is None else normalize_cuit_cuil(value)
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not is_valid_email(value):
+            raise ValueError("El email no tiene un formato válido")
+        return value
 
 
 class EmployeeRead(ORMModel):
@@ -217,6 +228,7 @@ class FormulaRead(BaseModel):
     status: str
     valid_from: date
     valid_to: date | None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AiProposalRead(ORMModel):

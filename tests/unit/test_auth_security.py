@@ -2,7 +2,6 @@ from app.auth.security import (
     LoginAttemptLimiter,
     dummy_password_hash,
     hash_password,
-    read_session,
     read_session_payload,
     read_session_version,
     sign_session,
@@ -21,10 +20,10 @@ def test_password_hash_and_signed_session() -> None:
     payload = read_session_payload(token, "unit-test-secret", 60)
     assert payload is not None
     assert payload["sv"] == 1
+    assert payload["user_id"] == 42
     assert read_session_version(payload) == 1
-    assert read_session(token, "unit-test-secret", 60) == 42
-    assert read_session(token, "different-secret", 60) is None
-    assert read_session("malformed", "unit-test-secret", 60) is None
+    assert read_session_payload(token, "different-secret", 60) is None
+    assert read_session_payload("malformed", "unit-test-secret", 60) is None
 
 
 def test_signed_session_token_rotates_between_emissions() -> None:
@@ -32,8 +31,10 @@ def test_signed_session_token_rotates_between_emissions() -> None:
     second = sign_session(42, "unit-test-secret", session_version=2)
 
     assert first != second
-    assert read_session(first, "unit-test-secret", 60) == 42
-    assert read_session(second, "unit-test-secret", 60) == 42
+    first_payload = read_session_payload(first, "unit-test-secret", 60)
+    second_payload = read_session_payload(second, "unit-test-secret", 60)
+    assert first_payload is not None and first_payload["user_id"] == 42
+    assert second_payload is not None and second_payload["user_id"] == 42
     payload = read_session_payload(first, "unit-test-secret", 60)
     assert payload is not None
     assert read_session_version(payload) == 2
@@ -71,3 +72,23 @@ def test_login_attempt_limiter_reset_clears_failures() -> None:
 
     limiter.reset("127.0.0.1", "user@example.test")
     assert limiter.retry_after_seconds("127.0.0.1", "user@example.test") == 0
+
+
+def test_login_attempt_limiter_blocks_ip_rotation() -> None:
+    limiter = LoginAttemptLimiter()
+    ip = "9.9.9.9"
+    for i in range(15):
+        limiter.record_failure(ip, f"victim{i}@example.test")
+
+    assert limiter.retry_after_seconds(ip, "fresco@example.test") > 0
+
+
+def test_login_attempt_limiter_pair_level_unchanged() -> None:
+    now = [1_000.0]
+    limiter = LoginAttemptLimiter(max_failures=5, window_seconds=60, clock=lambda: now[0])
+    for _ in range(5):
+        limiter.record_failure("10.0.0.1", "user@example.test")
+
+    assert limiter.retry_after_seconds("10.0.0.1", "user@example.test") > 0
+    assert limiter.retry_after_seconds("10.0.0.1", "other@example.test") == 0
+    assert limiter.retry_after_seconds("10.0.0.2", "user@example.test") == 0

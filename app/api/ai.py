@@ -61,7 +61,22 @@ _MOCK_EFFECTIVE_FROM = "2026-10-01"
 class PersistProposalRequest(BaseModel):
     """Optional wrapper for clients that post ``{"analysis": {...}}``."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "analysis": {
+                    "document": {
+                        "document_id": "CCT-130-75",
+                        "version": "1",
+                        "content_hash": "sha256:…",
+                    },
+                    "summary": "Pegue aquí el JSON íntegro devuelto por analyze-agreement.",
+                    "analyzed_at": "2026-10-26T12:00:00+00:00",
+                }
+            }
+        },
+    )
 
     analysis: AgreementAnalysis
 
@@ -74,7 +89,18 @@ class AnalyzeAgreementRequest(BaseModel):
     document version to anchor every source reference.
     """
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "text": "Artículo 15: adicional por antigüedad del 1% por año de servicio.",
+                "document_id": "CCT-130-75",
+                "title": "Empleados de Comercio",
+                "version": "1",
+            }
+        },
+    )
 
     text: str
     document_id: str = Field(min_length=1, max_length=200)
@@ -300,9 +326,12 @@ def create_ai_proposal(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "editor")),
 ):
-    """Persist a validated analysis as a draft proposal.
+    """Persist a validated analysis as a draft proposal (paso 2 de 3).
 
-    The body may be the analysis itself or ``{"analysis": {...}}``.
+    Flujo supervisado: 1) ``POST /ai/analyze-agreement`` con
+    ``{"text", "document_id"}``; 2) este endpoint con el JSON íntegro del
+    análisis (o ``{"analysis": {...}}``, ver ejemplo); 3)
+    ``POST /ai/proposals/{id}/approve`` y luego ``publish`` (solo admin).
     Persistence is not an approval: the stored status is always ``draft`` and
     no formula definition is created.
     """
@@ -332,10 +361,12 @@ def approve_persisted_ai_proposal(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "editor")),
 ):
-    """Approve a persisted, valid draft/validated proposal.
+    """Approve a persisted, valid draft/validated proposal (paso 3 de 3).
 
     The approval is recorded with the authenticated user's identity. It does
-    not publish anything or create a formula.
+    not publish anything or create a formula: publishing is a separate
+    ``POST /ai/proposals/{id}/publish`` (solo admin) that creates DRAFT
+    formula versions, never production rules.
     """
 
     row = get_scoped(db, AiProposal, proposal_id, user.organization_id)
@@ -477,7 +508,12 @@ def analyze_agreement_endpoint(
     provider: LLMProvider = Depends(get_ai_provider),
     _user: User = Depends(require_user),
 ) -> AgreementAnalysis:
-    """Analyze agreement text and return draft proposals. Never publishes."""
+    """Analyze agreement text and return draft proposals (paso 1 de 3).
+
+    Send ``{"text", "document_id"}`` (ver ejemplo). Copy the returned JSON
+    unchanged into ``POST /ai/proposals`` (paso 2) and then approve it
+    (paso 3). Never publishes.
+    """
 
     if len(payload.text) > MAX_AGREEMENT_TEXT_CHARS:
         raise HTTPException(

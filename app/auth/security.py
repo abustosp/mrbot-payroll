@@ -50,7 +50,8 @@ def dummy_password_hash() -> str:
 
 
 class LoginAttemptLimiter:
-    """Ventana deslizante de intentos fallidos de login por IP + email.
+    """Ventana deslizante de intentos fallidos de login por par IP + email,
+    con segundo umbral por IP para frenar la rotación de emails.
 
     shortcut: el estado vive en memoria y por proceso. No se comparte entre
     workers ni sobrevive reinicios, y la IP es la del socket directo (detrás de
@@ -65,56 +66,80 @@ class LoginAttemptLimiter:
         *,
         clock: Callable[[], float] = time.monotonic,
         max_tracked_keys: int = LOGIN_MAX_TRACKED_KEYS,
+        ip_max_failures: int | None = None,
     ) -> None:
         self._max_failures = max_failures
+        self._ip_max_failures = ip_max_failures if ip_max_failures is not None else max_failures * 3
         self._window_seconds = window_seconds
         self._clock = clock
         self._max_tracked_keys = max_tracked_keys
         self._failures: dict[tuple[str, str], deque[float]] = {}
+        self._ip_failures: dict[str, deque[float]] = {}
         self._lock = Lock()
 
     @staticmethod
     def _key(ip: str, email: str) -> tuple[str, str]:
         return (ip.strip() or "unknown", email.strip().lower())
 
-    def _live_failures(self, key: tuple[str, str], now: float) -> deque[float] | None:
+    @staticmethod
+    def _ip_key(ip: str) -> str:
+        return ip.strip() or "unknown"
+
+    def _live_failures(
+        self, store: dict[Any, deque[float]], key: Any, now: float
+    ) -> deque[float] | None:
         """Devuelve la ventana vigente; sólo se llama con ``_lock`` tomado."""
 
-        failures = self._failures.get(key)
+        failures = store.get(key)
         if failures is None:
             return None
         cutoff = now - self._window_seconds
         while failures and failures[0] <= cutoff:
             failures.popleft()
         if not failures:
-            del self._failures[key]
+            del store[key]
             return None
         return failures
 
     def _trim(self) -> None:
         while len(self._failures) > self._max_tracked_keys:
             self._failures.pop(next(iter(self._failures)))
+        while len(self._ip_failures) > self._max_tracked_keys:
+            self._ip_failures.pop(next(iter(self._ip_failures)))
 
     def retry_after_seconds(self, ip: str, email: str) -> int:
         """Segundos restantes de bloqueo, o ``0`` si el intento está permitido."""
 
         now = self._clock()
         key = self._key(ip, email)
+        ip_key = self._ip_key(ip)
         with self._lock:
-            failures = self._live_failures(key, now)
-            if failures is None or len(failures) < self._max_failures:
-                return 0
-            return max(1, math.ceil(failures[0] + self._window_seconds - now))
+            failures = self._live_failures(self._failures, key, now)
+            ip_failures = self._live_failures(self._ip_failures, ip_key, now)
+            remaining = 0
+            if failures is not None and len(failures) >= self._max_failures:
+                remaining = max(remaining, max(1, math.ceil(failures[0] + self._window_seconds - now)))
+            if ip_failures is not None and len(ip_failures) >= self._ip_max_failures:
+                remaining = max(
+                    remaining, max(1, math.ceil(ip_failures[0] + self._window_seconds - now))
+                )
+            return remaining
 
     def record_failure(self, ip: str, email: str) -> None:
         now = self._clock()
         key = self._key(ip, email)
+        ip_key = self._ip_key(ip)
         with self._lock:
-            failures = self._live_failures(key, now)
+            failures = self._live_failures(self._failures, key, now)
             if failures is None:
                 failures = deque()
                 self._failures[key] = failures
             failures.append(now)
+            ip_failures = self._live_failures(self._ip_failures, ip_key, now)
+            if ip_failures is None:
+                ip_failures = deque()
+                self._ip_failures[ip_key] = ip_failures
+            ip_failures.append(now)
             self._trim()
 
     def reset(self, ip: str, email: str) -> None:
@@ -126,6 +151,7 @@ class LoginAttemptLimiter:
 
         with self._lock:
             self._failures.clear()
+            self._ip_failures.clear()
 
 
 login_attempts = LoginAttemptLimiter()
@@ -152,9 +178,3 @@ def read_session_payload(token: str, secret_key: str, max_age: int) -> dict[str,
 def read_session_version(payload: dict[str, Any]) -> int | None:
     version = payload.get("sv", 1)
     return version if isinstance(version, int) and not isinstance(version, bool) and version >= 1 else None
-
-
-def read_session(token: str, secret_key: str, max_age: int) -> int | None:
-    payload = read_session_payload(token, secret_key, max_age)
-    user_id = payload.get("user_id") if payload is not None else None
-    return user_id if isinstance(user_id, int) else None
