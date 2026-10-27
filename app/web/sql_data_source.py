@@ -208,6 +208,74 @@ def _matches(query: str, *values: Any) -> bool:
     return not needle or any(needle in str(value or "").casefold() for value in values)
 
 
+def _like_pattern(query: str) -> str:
+    """Patrón LIKE literal para búsqueda por texto (B-53/K-05)."""
+
+    cleaned = query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{cleaned}%"
+
+
+def _use_sql_text_search(query: str) -> bool:
+    """Indica si el texto libre puede filtrarse en SQL (B-53/K-05).
+
+    SQLite aplica ``LIKE``/``ILIKE`` case-insensitive solo en ASCII; para
+    no perder resultados con mayúsculas no-ASCII (p. ej. ``Ú`` vs ``ú``),
+    esas búsquedas usan el filtro Python histórico con recall exacto.
+    """
+
+    return bool(query.strip()) and query.strip().isascii()
+
+
+def _employee_text_filter(query: str, organization_id: int):
+    """Filtro ILIKE por nombre/CUIL/legajo/categoría/empresa en SQL."""
+
+    pattern = _like_pattern(query)
+    full_name = Employee.first_name + " " + Employee.last_name
+    company_match = (
+        select(EmploymentContract.id)
+        .join(Company, Company.id == EmploymentContract.company_id)
+        .where(
+            EmploymentContract.employee_id == Employee.id,
+            Company.organization_id == organization_id,
+            Company.legal_name.ilike(pattern, escape="\\"),
+        )
+        .exists()
+    )
+    category_match = (
+        select(EmploymentContract.id)
+        .join(AgreementCategory, AgreementCategory.id == EmploymentContract.category_id)
+        .where(
+            EmploymentContract.employee_id == Employee.id,
+            AgreementCategory.name.ilike(pattern, escape="\\"),
+        )
+        .exists()
+    )
+    return or_(
+        Employee.first_name.ilike(pattern, escape="\\"),
+        Employee.last_name.ilike(pattern, escape="\\"),
+        full_name.ilike(pattern, escape="\\"),
+        Employee.cuil.ilike(pattern, escape="\\"),
+        Employee.employee_code.ilike(pattern, escape="\\"),
+        company_match,
+        category_match,
+    )
+
+
+def _receipt_text_filter(query: str):
+    """Filtro ILIKE por código de corrida / empleado en SQL."""
+
+    pattern = _like_pattern(query)
+    full_name = Employee.first_name + " " + Employee.last_name
+    return or_(
+        PayrollRun.code.ilike(pattern, escape="\\"),
+        Employee.first_name.ilike(pattern, escape="\\"),
+        Employee.last_name.ilike(pattern, escape="\\"),
+        full_name.ilike(pattern, escape="\\"),
+        Employee.cuil.ilike(pattern, escape="\\"),
+        Employee.employee_code.ilike(pattern, escape="\\"),
+    )
+
+
 def _status(value: str | None) -> str:
     return _RUN_STATUSES.get((value or "").upper(), (value or "").casefold())
 
@@ -318,11 +386,24 @@ class SqlAlchemyDataSource:
         if organization_id is None:
             return []
         with self._session_factory() as session:
-            rows = session.scalars(
+            statement = (
                 select(Company)
                 .where(Company.organization_id == organization_id)
                 .order_by(Company.legal_name)
-            ).all()
+            )
+            if _use_sql_text_search(query):
+                # B-53/K-05: texto libre en SQL (razón social, CUIT,
+                # domicilio o actividad) en vez de full-scan en Python.
+                pattern = _like_pattern(query)
+                statement = statement.where(
+                    or_(
+                        Company.legal_name.ilike(pattern, escape="\\"),
+                        Company.cuit.ilike(pattern, escape="\\"),
+                        Company.address.ilike(pattern, escape="\\"),
+                        Company.tax_activity.ilike(pattern, escape="\\"),
+                    )
+                )
+            rows = session.scalars(statement).all()
             return [
                 company for company in self._companies(session, rows)
                 if _matches(query, company.name, company.cuit, company.city, company.activity)
@@ -449,8 +530,8 @@ class SqlAlchemyDataSource:
         organization_id = self._scope()
         if (company_id and requested_company is None) or organization_id is None:
             return []
-        # B-53: filtros estructurados en SQL; el texto libre sigue en Python
-        # (cubre categoría/empresa por join) y entonces pagina en Python.
+        # B-53/K-05: filtros estructurados y texto libre en SQL; la
+        # paginación siempre se aplica en SQL.
         today = date.today()
         wanted = status.casefold() if status else ""
         if wanted and wanted not in {"active", "inactive"}:
@@ -484,11 +565,30 @@ class SqlAlchemyDataSource:
                         Employee.termination_date < today,
                     )
                 )
-            if not query and limit is not None:
+            if _use_sql_text_search(query):
+                statement = statement.where(_employee_text_filter(query, organization_id))
+            elif query.strip():
+                # Consulta no-ASCII: filtro y paginación en Python con recall
+                # exacto (ver `_use_sql_text_search`).
+                rows = session.scalars(statement).all()
+                matched = [
+                    employee for employee in self._employees(session, rows, requested_company)
+                    if _matches(
+                        query,
+                        employee.name,
+                        employee.cuil,
+                        employee.file_number,
+                        employee.category,
+                        employee.company_name,
+                    )
+                ]
+                return matched if limit is None else matched[offset:offset + limit]
+            if limit is not None:
                 statement = statement.limit(limit).offset(offset)
             rows = session.scalars(statement).all()
             employees = self._employees(session, rows, requested_company)
-            matched = [
+            # Refinamiento en Python con la misma semántica histórica.
+            return [
                 employee for employee in employees
                 if _matches(
                     query,
@@ -499,9 +599,6 @@ class SqlAlchemyDataSource:
                     employee.company_name,
                 )
             ]
-            if query and limit is not None:
-                matched = matched[offset:offset + limit]
-            return matched
 
     def get_employee(self, employee_id: str) -> WebEmployee | None:
         row_id = _id(employee_id)
@@ -898,8 +995,9 @@ class SqlAlchemyDataSource:
         organization_id = self._scope()
         if (company_id and requested_company is None) or organization_id is None:
             return []
-        # B-53: filtros estructurados en SQL (rango de mes por período, sin
-        # funciones de dialecto); el texto libre sigue en Python y pagina ahí.
+        # B-53/K-05: filtros estructurados y texto libre en SQL (rango de mes
+        # por período, sin funciones de dialecto); la paginación siempre se
+        # aplica en SQL.
         wanted = status.casefold() if status else ""
         if wanted and wanted not in {"issued", "pending"}:
             return []
@@ -933,17 +1031,30 @@ class SqlAlchemyDataSource:
                 statement = statement.where(func.upper(PayrollRun.status).in_(("APPROVED", "CLOSED")))
             elif wanted == "pending":
                 statement = statement.where(func.upper(PayrollRun.status).not_in(("APPROVED", "CLOSED")))
-            if not query and limit is not None:
+            if _use_sql_text_search(query):
+                statement = (
+                    statement
+                    .join(Employee, Employee.id == PayrollResult.employee_id)
+                    .where(_receipt_text_filter(query))
+                )
+            elif query.strip():
+                # Consulta no-ASCII: filtro y paginación en Python con recall
+                # exacto (ver `_use_sql_text_search`).
+                rows = session.execute(statement).all()
+                matched = [
+                    receipt for receipt in self._receipts(session, rows)
+                    if _matches(query, receipt.number, receipt.employee.get("name"), receipt.employee_id)
+                ]
+                return matched if limit is None else matched[offset:offset + limit]
+            if limit is not None:
                 statement = statement.limit(limit).offset(offset)
             rows = session.execute(statement).all()
             receipts = self._receipts(session, rows)
-            matched = [
+            # Refinamiento en Python con la misma semántica histórica.
+            return [
                 receipt for receipt in receipts
                 if _matches(query, receipt.number, receipt.employee.get("name"), receipt.employee_id)
             ]
-            if query and limit is not None:
-                matched = matched[offset:offset + limit]
-            return matched
 
     def get_receipt(self, receipt_id: str) -> WebReceipt | None:
         result_id = _id(receipt_id)
@@ -962,8 +1073,21 @@ class SqlAlchemyDataSource:
             return self._receipts(session, [row])[0] if row else None
 
     def receipt_periods(self) -> list[tuple[str, str]]:
-        receipts = self.list_receipts()
-        return sorted({(receipt.period, receipt.period_label) for receipt in receipts}, reverse=True)
+        # B-53/K-05: DISTINCT en SQL en vez de volcar todos los recibos.
+        organization_id = self._scope()
+        if organization_id is None:
+            return []
+        with self._session_factory() as session:
+            starts = session.scalars(
+                select(PayrollRun.period_start)
+                .where(PayrollRun.organization_id == organization_id)
+                .distinct()
+                .order_by(PayrollRun.period_start.desc())
+            ).all()
+        return sorted(
+            {(_period(start), _period_label(start)) for start in starts},
+            reverse=True,
+        )
 
     def dashboard_metrics(self) -> dict[str, Any]:
         today = date.today()

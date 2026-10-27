@@ -19,6 +19,7 @@ import re
 import secrets
 from dataclasses import dataclass
 from functools import lru_cache
+from threading import Lock
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -47,6 +48,34 @@ CSRF_SALT = "payroll-web-csrf-v1"
 # El modo demo no tiene filas en ``users``: la sesión firmada usa este id
 # reservado y sólo se acepta cuando la fuente de datos es el store demo.
 DEMO_USER_ID = -1
+
+# V2-01: revocación en memoria de sesiones demo. El logout web registra el
+# token firmado para que una cookie copiada deje de aceptarse aunque su firma
+# siga vigente (vive hasta ``session_max_age``). Acotado para no crecer sin
+# límite en procesos de larga vida.
+_REVOKED_DEMO_TOKENS: set[str] = set()
+_REVOKED_DEMO_LOCK = Lock()
+_MAX_REVOKED_DEMO_TOKENS = 4096
+
+
+def revoke_demo_session(token: str | None) -> None:
+    """Revoca un token de sesión demo (V2-01)."""
+
+    if not token:
+        return
+    with _REVOKED_DEMO_LOCK:
+        while len(_REVOKED_DEMO_TOKENS) >= _MAX_REVOKED_DEMO_TOKENS:
+            _REVOKED_DEMO_TOKENS.pop()
+        _REVOKED_DEMO_TOKENS.add(token)
+
+
+def is_demo_session_revoked(token: str | None) -> bool:
+    """Indica si un token demo fue revocado por logout."""
+
+    if not token:
+        return False
+    with _REVOKED_DEMO_LOCK:
+        return token in _REVOKED_DEMO_TOKENS
 
 ROLE_LABELS = {
     "admin": "Administrador",
@@ -135,6 +164,9 @@ def resolve_web_user(
 
     if _is_demo_source(data):
         if user_id == DEMO_USER_ID and session_version == 1:
+            token = request.cookies.get(settings.session_cookie)
+            if is_demo_session_revoked(token):
+                return None
             return _demo_user(settings)
         return None
 
@@ -370,8 +402,10 @@ __all__ = [
     "csrf_token_for",
     "current_web_user",
     "enforce_csrf",
+    "is_demo_session_revoked",
     "require_web_user",
     "resolve_web_user",
+    "revoke_demo_session",
     "safe_next_url",
     "set_csrf_cookie",
     "start_web_session",

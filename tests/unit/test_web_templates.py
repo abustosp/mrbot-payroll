@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.web.routes import TEMPLATES_DIR, templates
 
 
@@ -70,3 +72,21 @@ def test_templates_do_not_contain_secret_placeholders() -> None:
         content = path.read_text(encoding="utf-8")
         for needle in forbidden:
             assert needle not in content, f"{needle} encontrado en {path}"
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "companies/_table.html",
+        "companies/detail.html",
+        "employees/detail.html",
+    ],
+)
+def test_demo_copy_only_renders_in_demo_mode(relative: str) -> None:
+    """B-52: ningún literal demo incondicional en plantillas compartidas."""
+
+    content = (TEMPLATES_DIR / relative).read_text(encoding="utf-8")
+    assert "{% if demo_mode %}" in content
+    for line in content.splitlines():
+        if "demostra" in line.lower():
+            assert "demo_mode" in line, f"literal demo sin guarda en {relative}: {line.strip()}"

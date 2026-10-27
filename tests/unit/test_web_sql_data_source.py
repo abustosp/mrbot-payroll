@@ -254,6 +254,93 @@ def test_sql_lists_filter_in_sql_and_paginate(tmp_path: Path) -> None:
         engine.dispose()
 
 
+def test_sql_text_search_applies_like_and_limit_in_sql(tmp_path: Path) -> None:
+    """B-53/K-05: texto libre con ILIKE y paginación siempre en SQL."""
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-text-search.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        org = _seed_organization(
+            session,
+            slug="busqueda",
+            name="Busqueda",
+            cuit="30733333339",
+            employee_code="B-001",
+            cuil="20333333334",
+            agreement_code="CCT-B",
+            run_code="run-busqueda",
+            net="100000.00",
+        )
+    statements: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(conn, cursor, statement, parameters, context, executemany) -> None:
+        statements.append(statement)
+
+    source = SqlAlchemyDataSource(factory, org["organization_id"])
+    try:
+        # Mayúsculas distintas a las almacenadas: prueba ILIKE.
+        statements.clear()
+        employees = source.list_employees(query="BUSQUEDA", limit=2)
+        assert [employee.id for employee in employees] == [str(org["employee_id"])]
+        assert any("LIKE" in statement.upper() for statement in statements)
+        assert any("LIMIT" in statement.upper() for statement in statements)
+        # Nombre compuesto y legajo.
+        assert source.list_employees(query="empleado busqueda") != []
+        assert source.list_employees(query="b-001") != []
+        assert source.list_employees(company_id="999999", query="busqueda") == []
+        # Recibos: código de corrida y empleado con LIKE + LIMIT en SQL.
+        statements.clear()
+        receipts = source.list_receipts(query="run-busqueda", limit=2)
+        assert len(receipts) == 1
+        assert any("LIKE" in statement.upper() for statement in statements)
+        assert any("LIMIT" in statement.upper() for statement in statements)
+        assert source.list_receipts(query="empleado busqueda") != []
+        # Empresas: razón social en SQL.
+        statements.clear()
+        companies = source.list_companies(query="busqueda")
+        assert [company.id for company in companies] == [str(org["company_id"])]
+        assert any("LIKE" in statement.upper() for statement in statements)
+        # Períodos con DISTINCT en una sola query.
+        statements.clear()
+        assert source.receipt_periods() == [("2026-09", "Septiembre 2026")]
+        assert len(statements) == 1
+        assert "DISTINCT" in statements[0].upper()
+    finally:
+        engine.dispose()
+
+
+def test_sql_text_search_keeps_recall_for_non_ascii_query(tmp_path: Path) -> None:
+    """B-53/K-05: queries no-ASCII mantienen recall exacto vía Python."""
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-text-search-unicode.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        org = _seed_organization(
+            session,
+            slug="unicode",
+            name="Búsqueda",
+            cuit="30733333340",
+            employee_code="U-001",
+            cuil="20333333335",
+            agreement_code="CCT-U",
+            run_code="run-unicode",
+            net="100000.00",
+        )
+    source = SqlAlchemyDataSource(factory, org["organization_id"])
+    try:
+        # SQLite ILIKE es ASCII-only: mayúsculas no-ASCII igual encuentran.
+        assert [employee.id for employee in source.list_employees(query="BÚSQUEDA")] == [
+            str(org["employee_id"])
+        ]
+        assert source.list_employees(query="búsqueda") != []
+        assert source.list_receipts(query="BÚSQUEDA") != []
+    finally:
+        engine.dispose()
+
+
 def test_sql_data_source_isolates_organizations(tmp_path: Path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'web-isolation.sqlite'}")
     Base.metadata.create_all(engine)

@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -44,6 +44,7 @@ from app.web.auth import (
     enforce_csrf,
     require_web_user,
     resolve_web_user,
+    revoke_demo_session,
     safe_next_url,
     set_csrf_cookie,
     start_web_session,
@@ -366,9 +367,22 @@ def logout(
     request: Request,
     user: WebUserDep,
     settings: SettingsDep,
+    db: SessionDep,
+    data: PublicDataSource,
     csrf_token: Annotated[str, Form()] = "",
 ) -> Response:
     enforce_csrf(request, csrf_token, settings, user.id)
+    # V2-01: invalidar la sesión en el servidor para que la cookie copiada
+    # deje de aceptarse. En SQL se rota ``session_version`` (igual que el
+    # logout de la API); en demo se revoca el token en memoria.
+    if user.is_demo or bool(getattr(data, "is_demo", False)):
+        revoke_demo_session(request.cookies.get(settings.session_cookie))
+    else:
+        row = db.get(User, user.id)
+        if row is not None:
+            row.session_version += 1
+            db.add(row)
+            db.commit()
     response = RedirectResponse(url=request.url_for("login_page").path, status_code=303)
     clear_web_session(response, settings)
     return response
@@ -397,8 +411,28 @@ def dashboard(request: Request, data: DataSource) -> HTMLResponse:
 
 
 @router.get("/salud", name="health_page")
-def health_page(request: Request, data: PublicDataSource) -> HTMLResponse:
+def health_page(
+    request: Request,
+    data: PublicDataSource,
+    db: SessionDep,
+) -> HTMLResponse:
     pdf_ok, pdf_detail = pdf_backend_status()
+    if data.is_demo:
+        db_status, db_detail = (
+            "demo",
+            "Sin sesión SQL en modo demo; el endpoint técnico /health de la "
+            "aplicación principal sigue disponible.",
+        )
+    else:
+        # PW-1: probar la conexión real en modo SQL en vez de declararla.
+        try:
+            db.scalar(select(func.count()).select_from(User))
+            db_status, db_detail = "ok", "Base de datos SQL conectada; tabla users legible."
+        except Exception:
+            db_status, db_detail = (
+                "error",
+                "Base de datos SQL no disponible; revise DATABASE_URL y migraciones.",
+            )
     checks = [
         {
             "name": "Aplicación web",
@@ -426,13 +460,8 @@ def health_page(request: Request, data: PublicDataSource) -> HTMLResponse:
         },
         {
             "name": "Base de datos",
-            "status": "demo" if data.is_demo else "ok",
-            "detail": (
-                "Sin sesión SQL en modo demo; el endpoint técnico /health de la "
-                "aplicación principal sigue disponible."
-                if data.is_demo
-                else "Repositorio SQLAlchemy conectado."
-            ),
+            "status": db_status,
+            "detail": db_detail,
             "hint": "La interfaz consume un repositorio de lectura, nunca reglas de cálculo.",
         },
     ]
@@ -449,10 +478,10 @@ def health_page(request: Request, data: PublicDataSource) -> HTMLResponse:
 
 
 @router.get("/health/visual", name="health_visual", include_in_schema=False)
-def health_visual(request: Request, data: PublicDataSource) -> HTMLResponse:
+def health_visual(request: Request, data: PublicDataSource, db: SessionDep) -> HTMLResponse:
     """Alias en inglés del health visual; no colisiona con ``GET /health``."""
 
-    return health_page(request, data)
+    return health_page(request, data, db)
 
 
 # ---------------------------------------------------------------------------

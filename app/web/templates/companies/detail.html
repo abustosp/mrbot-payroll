@@ -20,7 +20,7 @@
         <div class="card-header">
           <div>
             <h2 class="card-title">Datos del empleador</h2>
-            <p class="card-subtitle">Información registral de demostración.</p>
+            <p class="card-subtitle">{% if demo_mode %}Información registral de demostración.{% else %}Información registral.{% endif %}</p>
           </div>
           <span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span>
         </div>

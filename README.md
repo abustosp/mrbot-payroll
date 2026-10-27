@@ -18,7 +18,7 @@ demo y no constituye una implementación lista para producción.
 
 | Área | Estado | Alcance real |
 |---|---|---|
-| FastAPI y `/health` | Implementado | Responde JSON; no comprueba la base de datos |
+| FastAPI y `/health` | Implementado | Responde JSON; 503 si la base no responde (prueba `alembic_version`) |
 | Autenticación API y UI | Implementado | Cookie firmada, PBKDF2, roles y CSRF en la UI web |
 | Persistencia | Implementado | SQLAlchemy 2.x, Alembic, SQLite local y PostgreSQL por URL |
 | API de negocio | Implementado | Empresas, empleados, convenios, conceptos, fórmulas, liquidaciones, importación y reportes |
@@ -31,7 +31,7 @@ demo y no constituye una implementación lista para producción.
 | Recibos PDF | Implementado | HTML, PDF individual y ZIP; sin validación legal |
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
 | Importadores CSV/XLSX | Implementado | API con dry-run; alta idempotente de empleados y novedades |
-| Paquetes normativos CCT | Implementado | 10 CCT, 191 documentos y 235 escalas verificadas (227 desde 2020 y 8 históricas) |
+| Paquetes normativos CCT | Implementado | 11 CCT, 254 documentos y 786 escalas verificadas (778 desde 2020 y 8 históricas) |
 | Liquidaciones especiales | Implementado como módulo y API | SAC, vacaciones y final; todavía no se eligen desde el tipo de corrida |
 | Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
@@ -58,7 +58,7 @@ Desde la raíz del repositorio:
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 mkdir -p data
 .venv/bin/python -m alembic upgrade head
 .venv/bin/python -m scripts.seed_demo
@@ -91,8 +91,9 @@ Las credenciales del seed son deliberadamente débiles. Cambiar la contraseña y
 `PAYROLL_SECRET_KEY` antes de cualquier uso compartido. El `.env.example` deja
 `PAYROLL_SECRET_KEY` vacío, así que hay que completar un valor propio. El seed
 también restablece la contraseña de `admin@example.com` a `admin` si encuentra
-otra. Hoy no existe un endpoint para cambiar contraseñas ni un bootstrap de
-usuarios para producción.
+otra. Para rotar la contraseña existe `POST /api/v1/auth/change-password`
+(exige la actual, rota `session_version` e invalida las sesiones anteriores);
+no hay un bootstrap de usuarios para producción.
 
 La interfaz arranca en modo demo por defecto. Para que muestre los datos
 cargados en SQLite, agregar `PAYROLL_WEB_DATA_SOURCE=sql` a `.env` y reiniciar la
@@ -108,13 +109,15 @@ submit. Para operar el modo SQL hay que sembrar primero un usuario con
 ## Tests y estilo
 
 ```sh
-.venv/bin/python -m pytest
+.venv/bin/python -m pytest --cov=app --cov-fail-under=80
 .venv/bin/ruff check .
 ```
 
-La suite no usa red ni una base externa. Cubre el motor de fórmulas, cálculo,
-bases imponibles, proveedor argentino, API, autenticación, web, importadores,
-exportadores y un flujo de integración con seed, cálculo, recálculo y salidas.
+El gate de cobertura exige al menos 80 % (`make gates` ejecuta pytest con
+cobertura, ruff y mypy). La suite no usa red ni una base externa. Cubre el
+motor de fórmulas, cálculo, bases imponibles, proveedor argentino, API,
+autenticación, web, importadores, exportadores y un flujo de integración con
+seed, cálculo, recálculo y salidas.
 
 Para ejecutar solo una parte:
 
@@ -230,9 +233,9 @@ Tiene dos fuentes de datos:
   bandeja de propuestas de la UI lista las propuestas persistidas en
   `ai_proposals`, que requieren revisión humana antes de aprobarse.
 
-La UI exige login en ambos modos y protege los POST con CSRF. El modo SQL sigue
-sin separación por organización en la capa web: cualquier usuario autenticado
-puede ver la proyección completa. No exponer la UI a Internet.
+La UI exige login en ambos modos y protege los POST con CSRF. En modo SQL la
+proyección se filtra por la organización del usuario autenticado (sin
+organización no se devuelve ninguna fila). No exponer la UI a Internet.
 
 | Ruta | Pantalla |
 |---|---|
@@ -241,19 +244,22 @@ puede ver la proyección completa. No exponer la UI a Internet.
 | `/empleados` y `/empleados/{id}` | Legajos |
 | `/convenios` y `/convenios/{id}` | Convenios y propuestas |
 | `/liquidaciones` y `/liquidaciones/{id}` | Historial y detalle |
-| `/propuestas-ia` y `/propuestas-ia/{id}` | Bandeja de revisión demo |
+| `/propuestas-ia` y `/propuestas-ia/{id}` | Bandeja de revisión (demo y SQL) |
 | `/recibos` y `/recibos/{id}` | Recibos |
 | `/recibos/{id}/vista` | HTML del recibo |
 | `/recibos/{id}/pdf` | PDF individual |
 | `/recibos/lote.zip` | ZIP de recibos filtrados |
 | `/salud` y `/health/visual` | Estado visual de componentes |
 
-La UI exige login y CSRF, pero sus acciones de propuestas solo funcionan en el
-store demo. No debe exponerse a Internet sin completar el aislamiento por
-organización ni usarse con datos personales reales, ni siquiera en modo SQL.
+La UI exige login y CSRF. Las acciones de estado de una propuesta funcionan en
+ambos modos (demo y SQL); la publicación real de reglas sigue haciéndose en el
+servicio de IA con permisos y auditoría. No debe exponerse a Internet ni usarse
+con datos personales reales.
 
-`GET /health` sigue siendo el health técnico en JSON. El health visual no
-comprueba la base ni el estado real de una liquidación.
+`GET /health` sigue siendo el health técnico en JSON (prueba `alembic_version`;
+503 si la base no responde). El health visual `/salud` comprueba la conexión
+SQL en modo SQL (tabla `users` legible); no comprueba el estado real de una
+liquidación.
 
 ## Docker
 
@@ -262,7 +268,7 @@ al iniciar. El seed demo es opcional y se habilita con
 `PAYROLL_SEED_DEMO=true`; nunca se ejecuta por defecto.
 
 ```sh
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 mkdir -p data
 docker compose --env-file .env -f deployment/docker-compose.yml config
 docker compose --env-file .env -f deployment/docker-compose.yml up --build -d
@@ -390,8 +396,8 @@ docs/                    Arquitectura, datos normativos y operaciones
 ## Datos normativos y límites
 
 Los parámetros del seed y del proveedor Argentina siguen siendo demo. El
-catálogo `normative/cct/` reúne 10 CCT, 191 documentos oficiales y **235 escalas
-verificadas**: 227 con vigencia desde 2020 y 8 históricas de 2007, incluidas
+catálogo `normative/cct/` reúne 11 CCT, 254 documentos oficiales y **786 escalas
+verificadas**: 778 con vigencia desde 2020 y 8 históricas de 2007, incluidas
 escalas programadas para noviembre y diciembre de 2026. Las fuentes, hashes y notas están en
 `normative/cct/evidence/`. Los PDFs crudos de evidencia quedan en el working
 tree pero no se versionan por tamaño; las URLs y hashes sí.

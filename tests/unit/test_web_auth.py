@@ -225,6 +225,142 @@ def test_logout_requires_csrf(client: TestClient) -> None:
     assert valid.status_code == 303
 
 
+def test_demo_logout_revokes_copied_session_cookie(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    """V2-01: la cookie demo copiada antes del logout deja de aceptarse."""
+
+    assert _login(client).status_code == 303
+    copied = client.cookies.get("payroll_session")
+    assert copied
+
+    logout = client.post(
+        "/logout",
+        data={"csrf_token": _csrf_cookie(client)},
+        follow_redirects=False,
+    )
+    assert logout.status_code == 303
+
+    with TestClient(app) as attacker:
+        attacker.cookies.set("payroll_session", copied)
+        replay = attacker.get("/", follow_redirects=False)
+    assert replay.status_code == 303
+    assert "/login?next=" in replay.headers["location"]
+
+
+def test_sql_logout_bumps_session_version_and_rejects_old_cookie(tmp_path: Path) -> None:
+    """V2-01: el logout web en SQL rota session_version como el de la API."""
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'web-logout.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory.begin() as session:
+        organization = Organization(name="Test", slug="default")
+        session.add(organization)
+        session.flush()
+        session.add(
+            User(
+                organization_id=organization.id,
+                email="logout@example.test",
+                password_hash=hash_password("secret"),
+                role="admin",
+            )
+        )
+
+    application = FastAPI()
+    application.include_router(router)
+    application.state.payroll_data_source = SqlAlchemyDataSource(factory)
+
+    def override_db() -> Generator[Session, None, None]:
+        with factory() as session:
+            yield session
+
+    application.dependency_overrides[get_db] = override_db
+    application.dependency_overrides[get_settings] = _test_settings
+    try:
+        with TestClient(application) as client:
+            assert _login(client, email="logout@example.test", password="secret").status_code == 303
+            copied = client.cookies.get("payroll_session")
+            assert copied
+            with factory() as session:
+                before = session.scalar(
+                    select(User).where(User.email == "logout@example.test")
+                ).session_version
+            logout = client.post(
+                "/logout",
+                data={"csrf_token": _csrf_cookie(client)},
+                follow_redirects=False,
+            )
+            assert logout.status_code == 303
+            with factory() as session:
+                after = session.scalar(
+                    select(User).where(User.email == "logout@example.test")
+                ).session_version
+            assert after == before + 1
+
+        with TestClient(application) as attacker:
+            attacker.cookies.set("payroll_session", copied)
+            replay = attacker.get("/", follow_redirects=False)
+        assert replay.status_code == 303
+        assert "/login?next=" in replay.headers["location"]
+    finally:
+        application.dependency_overrides.clear()
+        engine.dispose()
+
+
+def _sql_salud_app(tmp_path: Path, name: str, *, create_tables: bool):
+    engine = create_engine(f"sqlite:///{tmp_path / name}")
+    if create_tables:
+        Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    if create_tables:
+        with factory.begin() as session:
+            organization = Organization(name="Test", slug="default")
+            session.add(organization)
+
+    application = FastAPI()
+    application.include_router(router)
+    application.state.payroll_data_source = SqlAlchemyDataSource(factory)
+
+    def override_db() -> Generator[Session, None, None]:
+        with factory() as session:
+            yield session
+
+    application.dependency_overrides[get_db] = override_db
+    application.dependency_overrides[get_settings] = _test_settings
+    return application, engine
+
+
+def test_salud_sql_probes_real_connection(tmp_path: Path) -> None:
+    """PW-1: /salud en modo SQL informa la conexión real (tabla users)."""
+
+    application, engine = _sql_salud_app(tmp_path, "web-salud-ok.sqlite", create_tables=True)
+    try:
+        with TestClient(application) as client:
+            response = client.get("/salud")
+        assert response.status_code == 200
+        assert "conectada" in response.text
+        assert "users" in response.text
+    finally:
+        application.dependency_overrides.clear()
+        engine.dispose()
+
+
+def test_salud_sql_reports_degraded_when_db_unavailable(tmp_path: Path) -> None:
+    """PW-1: /salud en modo SQL degrada si la base no responde."""
+
+    application, engine = _sql_salud_app(tmp_path, "web-salud-broken.sqlite", create_tables=False)
+    try:
+        with TestClient(application) as client:
+            response = client.get("/salud")
+        assert response.status_code == 200
+        assert "no disponible" in response.text
+    finally:
+        application.dependency_overrides.clear()
+        engine.dispose()
+
+
 def test_auth_can_be_disabled_with_explicit_override(tmp_path: Path) -> None:
     application = FastAPI()
     application.include_router(router)

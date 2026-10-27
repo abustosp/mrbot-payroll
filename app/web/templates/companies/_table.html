@@ -1,7 +1,7 @@
 <div id="companies-results">
   <div class="filter-summary">
     <span><strong>{{ companies | length }}</strong> empresas encontradas{% if query %} para “{{ query }}”{% endif %}</span>
-    <span class="muted">Los datos son de demostración.</span>
+    {% if demo_mode %}<span class="muted">Los datos son de demostración.</span>{% endif %}
   </div>
 
   {% if companies %}

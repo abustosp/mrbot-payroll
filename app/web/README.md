@@ -38,7 +38,7 @@ visual está en `GET /salud` y en el alias `GET /health/visual`.
 | `/convenios/{id}` | Detalle normativo y propuestas IA |
 | `/liquidaciones` | Historial filtrable |
 | `/liquidaciones/{id}` | Resultados, conceptos y recibos |
-| `/propuestas-ia` | Bandeja de revisión IA |
+| `/propuestas-ia` | Bandeja de revisión (demo y SQL) |
 | `/propuestas-ia/{id}` | Detalle y acciones de estado |
 | `/recibos` | Listado filtrable de recibos |
 | `/recibos/{id}` | Detalle con vista previa |
@@ -48,8 +48,8 @@ visual está en `GET /salud` y en el alias `GET /health/visual`.
 | `/salud` | Health visual |
 | `/health/visual` | Alias del health visual |
 
-Las acciones de estado de propuestas solo se ejecutan en el store demo. La
-publicación real de reglas debe hacerse en el servicio de IA con permisos y
+Las acciones de estado de propuestas funcionan en ambos modos (demo y SQL).
+La publicación real de reglas debe hacerse en el servicio de IA con permisos y
 auditoría; la capa web no duplica esas reglas.
 
 ## Autenticación y CSRF
@@ -58,10 +58,12 @@ auditoría; la capa web no duplica esas reglas.
 `require_web_user` y redirigen a `/login?next=...`; si la petición es HTMX
 devuelven `401` con `HX-Redirect`. `/login`, `/salud` y `/static/*` son públicas.
 
-La UI reutiliza `sign_session`, `read_session` y `verify_password` de
-`app.auth.security` y la misma cookie que la API. En modo demo las credenciales
-se comparan con `PAYROLL_ADMIN_EMAIL` y `PAYROLL_ADMIN_PASSWORD`; en modo SQL se
-consulta la tabla `users` (rol `viewer` sólo lectura).
+La UI reutiliza `sign_session`, `read_session_payload`,
+`read_session_version` y `verify_password` de `app.auth.security` y la misma
+cookie que la API. En modo demo las credenciales se comparan con
+`PAYROLL_ADMIN_EMAIL` y `PAYROLL_ADMIN_PASSWORD` (el logout revoca el token en
+memoria); en modo SQL se consulta la tabla `users` y el logout rota
+`session_version` (rol `viewer` sólo lectura).
 
 Cada POST valida un token CSRF firmado con `itsdangerous`. El token viaja en la
 cookie `payroll_csrf` y en el campo oculto `csrf_token`; ambos deben coincidir y
