@@ -32,15 +32,15 @@ demo y no constituye una implementación lista para producción.
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
 | Importadores CSV/XLSX | Implementado | API con dry-run; alta idempotente de empleados y novedades |
 | Paquetes normativos CCT | Implementado | 11 CCT, 254 documentos y 786 escalas verificadas (778 desde 2020 y 8 históricas) |
-| Liquidaciones especiales | Implementado como módulo y API | SAC, vacaciones y final; todavía no se eligen desde el tipo de corrida |
+| Liquidaciones especiales | Implementado como módulo, API y `run_type` | SAC por historial, vacaciones/final por novedades `AUXILIARY`; sin aportes ni contribuciones |
 | Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
 
 La autenticación, la API, el motor de fórmulas, el cálculo, el flujo de IA, la
 importación, la evidencia CCT y los reportes internos existen. Lo que sigue
-pendiente es filtrar fórmulas y parámetros por convenio/categoría, integrar
-SAC/vacaciones/final al tipo de corrida, validar los formatos contra ARCA y
-completar el endurecimiento para producción.
+pendiente es filtrar parámetros por convenio/categoría, llevar
+SAC/vacaciones/final a la UI (ya son `run_type` liquidables), validar los
+formatos contra ARCA y completar el endurecimiento para producción.
 
 ## Requisitos
 
@@ -419,8 +419,9 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
   pero el proveedor real se inyecta en código.
 - La publicación de una propuesta crea una fórmula en `DRAFT`; no la aprueba
   ni la activa.
-- SAC, vacaciones y liquidación final tienen API de simulación, pero todavía no
-  se eligen automáticamente desde el tipo de corrida ni desde la UI.
+- SAC, vacaciones y liquidación final se eligen desde el tipo de corrida
+  (`SAC`/`VACATIONS`/`FINAL`) además de la API de simulación; todavía no
+  desde la UI.
 - El reporte F.931 es una planilla interna de control, no el formato oficial.
 - El cálculo cubre una corrida mensual básica. No incluye retroactivos
   complejos ni asientos contables.
