@@ -1,0 +1,58 @@
+{
+  "spec": "Diseños oficiales de interfaz TXT del Libro de Sueldos Digital (ARCA, ex AFIP)",
+  "retrieved_at": "2026-10-27",
+  "designs_page": "https://www.afip.gob.ar/LibrodeSueldosDigital/ayuda/disenios.asp",
+  "tools_page": "https://www.afip.gob.ar/LibrodeSueldosDigital/ayuda/planillas-de-calculo.asp",
+  "note": "Los binarios no se versionan (misma convención que normative/cct/evidence: URL + SHA-256). Para verificar: descargar cada source_url y contrastar el sha256.",
+  "documents": [
+    {
+      "id": "lsd-liq-pdf",
+      "title": "Diseño de interfaz – liquidación",
+      "doc_type": "disenio_pdf",
+      "source_url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSDiseInterfazLiquidacion.pdf",
+      "local_path": null,
+      "sha256": "09006c128f5d797ce5fecc317e58924ac0a753adcf6e89a535be74e7ea03f7e7",
+      "records": ["01:35", "02:115", "03:51", "04:370", "05:65", "06:93"]
+    },
+    {
+      "id": "lsd-con-pdf",
+      "title": "Diseño de interfaz – conceptos",
+      "doc_type": "disenio_pdf",
+      "source_url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSDiseInterfazConceptos.pdf",
+      "local_path": null,
+      "sha256": "a93c65b4da08f9f582165670e4a7da3a8d0d705fc7e5e2e4e0ce753d90731137",
+      "records": ["concept:195"]
+    },
+    {
+      "id": "lsd-det-pdf",
+      "title": "Detalle de conceptos",
+      "doc_type": "detalle_pdf",
+      "source_url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSDetalleConceptos.pdf",
+      "local_path": null,
+      "sha256": "cd3d268bb517c88588727bfd6aa24005a40f58b90f92bbf1b1dbf5576896dfb7",
+      "records": []
+    },
+    {
+      "id": "lsd-tool-liq",
+      "title": "Generación de archivo de liquidación (herramienta oficial .xlsx)",
+      "doc_type": "herramienta_xlsx",
+      "source_url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSD-ARMADO-TXT-Liquidaciones.zip",
+      "local_path": null,
+      "sha256": "0965e03c1e455b2ba306371b3bc2d56fa387fa0beed9cdd3ae70fb36f3848aac",
+      "inner_file": "LSD-ARMADO-TXT-Liquidaciones.xlsx",
+      "inner_date": "2025-09-22",
+      "records": ["01:35", "02:115", "03:51", "04:370", "05:65", "06:93"]
+    },
+    {
+      "id": "lsd-tool-con",
+      "title": "Conceptos (herramienta oficial .xlsx)",
+      "doc_type": "herramienta_xlsx",
+      "source_url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSD-ARMADO-TXT-Conceptos.zip",
+      "local_path": null,
+      "sha256": "3e7fa0831228263173edaf9f02adb1e8f386d78f1cbb2e7e7bc1899b7c1c7428",
+      "inner_file": "LSD-ARMADO-TXT-Conceptos.xlsx",
+      "inner_date": "2024-12-16",
+      "records": ["concept:195"]
+    }
+  ]
+}
