@@ -31,7 +31,9 @@ from app.importers.models import (
 from app.importers.parsing import (
     clean_legajo,
     clean_text,
+    contains_html_chars,
     is_blank,
+    is_formula_riesgosa,
     is_valid_cuil,
     is_valid_email,
     normalize_cuil,
@@ -106,6 +108,24 @@ def _missing_column_error(row: int, field: str, kind: str | None = None) -> RowE
     return _row_error(row, field, "columna_faltante", message)
 
 
+def _html_error(row: int, field: str, value: Any) -> RowError:
+    # V2-13: rechazar < > en campos libres al importar (el autoescape al
+    # renderizar no basta: el dato crudo queda en DB/API/JSON).
+    return _row_error(
+        row,
+        field,
+        "caracteres_no_permitidos",
+        f"El campo '{field}' contiene caracteres no permitidos (< >).",
+        value,
+    )
+
+
+def _check_html(value: str | None, row: int, field: str) -> RowError | None:
+    if value is not None and contains_html_chars(value):
+        return _html_error(row, field, value)
+    return None
+
+
 def _get_value(raw: Mapping[str, Any], field: str, mapping: Mapping[str, str | None]) -> Any:
     source = mapping.get(field)
     if source is not None:
@@ -137,7 +157,11 @@ def _prepare_employee(
         if legajo is None:
             issues.append(_required_error(row, "legajo"))
         else:
-            data["legajo"] = legajo
+            html_issue = _check_html(legajo, row, "legajo")
+            if html_issue is not None:
+                issues.append(html_issue)
+            else:
+                data["legajo"] = legajo
 
     for field in ("apellido", "nombre"):
         raw_value = _get_value(raw, field, mapping)
@@ -149,7 +173,11 @@ def _prepare_employee(
         if value is None:
             issues.append(_required_error(row, field))
         else:
-            data[field] = value
+            html_issue = _check_html(value, row, field)
+            if html_issue is not None:
+                issues.append(html_issue)
+            else:
+                data[field] = value
 
     raw_cuil = _get_value(raw, "cuil", mapping)
     if is_blank(raw_cuil):
@@ -163,7 +191,8 @@ def _prepare_employee(
                     row,
                     "cuil",
                     "cuil_invalido",
-                    "El CUIL no es valido o no coincide su digito verificador.",
+                    "El CUIL no es valido o no coincide su digito verificador. "
+                    "Se esperan 11 digitos (p. ej. 20-12345678-6).",
                     raw_cuil,
                 )
             )
@@ -192,7 +221,11 @@ def _prepare_employee(
     for field in ("categoria", "convenio"):
         value = clean_text(_get_value(raw, field, mapping))
         if value is not None:
-            data[field] = value
+            html_issue = _check_html(value, row, field)
+            if html_issue is not None:
+                issues.append(html_issue)
+            else:
+                data[field] = value
 
     raw_email = _get_value(raw, "email", mapping)
     if not is_blank(raw_email):
@@ -208,7 +241,11 @@ def _prepare_employee(
                 )
             )
         else:
-            data["email"] = email
+            html_issue = _check_html(email, row, "email")
+            if html_issue is not None:
+                issues.append(html_issue)
+            else:
+                data["email"] = email
 
     if missing or issues:
         return None, issues
@@ -237,7 +274,11 @@ def _prepare_novelty(
         if legajo is None:
             issues.append(_required_error(row, "legajo"))
         else:
-            data["legajo"] = legajo
+            html_issue = _check_html(legajo, row, "legajo")
+            if html_issue is not None:
+                issues.append(html_issue)
+            else:
+                data["legajo"] = legajo
 
     raw_periodo = _get_value(raw, "periodo", mapping)
     if is_blank(raw_periodo):
@@ -315,7 +356,11 @@ def _prepare_novelty(
 
     observacion = clean_text(_get_value(raw, "observacion", mapping))
     if observacion is not None:
-        data["observacion"] = observacion
+        html_issue = _check_html(observacion, row, "observacion")
+        if html_issue is not None:
+            issues.append(html_issue)
+        else:
+            data["observacion"] = observacion
 
     raw_naturaleza = _get_value(raw, "naturaleza", mapping)
     if not is_blank(raw_naturaleza):
@@ -573,6 +618,21 @@ def analyze_file(
     )
 
 
+def _has_formula_riesgosa(table: Table) -> bool:
+    # V2-12: avisar si alguna celda de texto empieza con = + - @ (Excel los
+    # evalua al abrir el F931; el exportador los neutraliza con ' inicial).
+    # Los numeros puros ("-1500,50", "+5") se excluyen: Excel los muestra
+    # como numeros, no como formulas.
+    for _, values in table.rows:
+        for value in values:
+            if not is_formula_riesgosa(value):
+                continue
+            if isinstance(value, str) and parse_decimal(value) is not None:
+                continue
+            return True
+    return False
+
+
 def _table_warnings(table: Table) -> list[RowError]:
     """Avisos no bloqueantes sobre datos leidos pero no importados."""
     warnings: list[RowError] = []
@@ -601,6 +661,19 @@ def _table_warnings(table: Table) -> list[RowError]:
                 message=(
                     "Solo se lee la hoja activa del XLSX; se ignoraron las "
                     f"hojas con datos: {names}."
+                ),
+            )
+        )
+    if _has_formula_riesgosa(table):
+        warnings.append(
+            RowError(
+                row=0,
+                field=None,
+                code="formula_riesgosa",
+                message=(
+                    "Hay celdas que comienzan con = + - @; al abrir el Excel "
+                    "podrian interpretarse como formulas. El F931 las exporta "
+                    "con ' inicial para neutralizarlas."
                 ),
             )
         )

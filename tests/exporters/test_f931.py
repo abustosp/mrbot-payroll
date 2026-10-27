@@ -262,8 +262,9 @@ def test_f931_workbook_does_not_execute_user_formulas() -> None:
     try:
         assert workbook.sheetnames == list(SHEET_TITLES)
         assert workbook["Trabajadores"]["C5"].value == 'Perez", =1+1'
-        assert workbook["Conceptos"]["E5"].value == item.description
-        assert workbook["Conceptos"]["D5"].value == item.code
+        # V2-12: celdas que empiezan con = + - @ se exportan con ' inicial.
+        assert workbook["Conceptos"]["E5"].value == f"'{item.description}"
+        assert workbook["Conceptos"]["D5"].value == f"'{item.code}"
         assert all(
             cell.data_type != "f"
             for worksheet in workbook.worksheets

@@ -10,6 +10,9 @@
 </head>
 <body>
   <main class="receipt-sheet">
+    {% if receipt.is_demo %}
+    <div class="demo-banner">{{ receipt.demo_seal }} · {{ receipt.demo_note }}</div>
+    {% endif %}
     <header class="receipt-header">
       <div class="employer-block">
         <h1 class="employer-name">{{ receipt.employer.name }}</h1>

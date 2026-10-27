@@ -42,6 +42,19 @@ body {
   padding: 4mm 0;
 }
 
+/* V2-10: sello DEMO sin validez (datos seed, no presentable). */
+.demo-banner {
+  margin: 0 0 3mm;
+  padding: 2.2mm 3mm;
+  border: 1.2pt solid #b91c1c;
+  border-radius: 1.6mm;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 9pt;
+  font-weight: 700;
+  text-align: center;
+}
+
 .receipt-header {
   display: flex;
   align-items: flex-start;

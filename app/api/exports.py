@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -21,6 +21,8 @@ from app.database.models import (
 )
 from app.database.session import get_db
 from app.exporters.pdf.receipts import (
+    DEMO_NOTE,
+    DEMO_SEAL,
     PdfRendererUnavailable,
     ReceiptContextError,
     ReceiptError,
@@ -47,6 +49,8 @@ class ConceptsExportInput(BaseModel):
 
 
 def _text_file(payload: bytes, filename: str) -> Response:
+    # B-82P: la descarga LSD lleva la marca sin-validez en nombre + headers
+    # (el contenido fijo no puede llevarla sin romper el layout ARCA).
     return Response(
         content=payload,
         media_type="text/plain; charset=latin-1",
@@ -54,6 +58,8 @@ def _text_file(payload: bytes, filename: str) -> Response:
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
+            "X-Sin-Validez-ARCA": "borrador-sin-validez-arca",
+            "X-LSD-Layout-Version": LAYOUT_VERSION,
         },
     )
 
@@ -64,7 +70,8 @@ def _text_file(payload: bytes, filename: str) -> Response:
     description=(
         "Genera el archivo LSD de liquidaciones (layout fijo borrador "
         f"version {LAYOUT_VERSION}; la version no viaja dentro del contenido). "
-        "Borrador interno sin validez ante ARCA. "
+        "Borrador interno sin validez ante ARCA (descarga "
+        "*-borrador-sin-validez-arca.txt + header X-Sin-Validez-ARCA). "
         "Ejemplo de payload valido: "
         '{"employer_cuit": "30-12345678-1", "period": "202601", '
         '"liquidation_number": 1, "workers": [{"cuil": "20-12345678-6", '
@@ -95,7 +102,8 @@ def export_lsd_liquidations(
     description=(
         "Genera el archivo LSD de conceptos (layout fijo borrador "
         f"version {LAYOUT_VERSION}; la version no viaja dentro del contenido). "
-        "Borrador interno sin validez ante ARCA. "
+        "Borrador interno sin validez ante ARCA (descarga "
+        "*-borrador-sin-validez-arca.txt + header X-Sin-Validez-ARCA). "
         "Ejemplo de payload valido: "
         '{"concepts": [{"arca_code": "001", "employer_code": "BASICO", '
         '"description": "Sueldo basico"}]} '
@@ -113,12 +121,10 @@ def export_lsd_concepts(
     return _text_file(content, "conceptos-borrador-sin-validez-arca.txt")
 
 
-@router.post("/receipts/{result_id}", response_class=Response)
-def export_receipt(
-    result_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-) -> Response:
+def _build_receipt_context(
+    db: Session, user: User, result_id: int, *, demo: bool = False
+) -> dict[str, Any]:
+    """Arma el contexto canonico del recibo (PDF y JSON comparten builder)."""
     result = db.scalar(
         select(PayrollResult)
         .join(PayrollRun, PayrollRun.id == PayrollResult.payroll_run_id)
@@ -199,6 +205,31 @@ def export_receipt(
         "contributions_total": str(result.contributions),
         "net": str(result.net),
     }
+    if demo:
+        # V2-10: el llamante marca datos demo/seed; el sello viaja en PDF y JSON.
+        context["is_demo"] = True
+    return context
+
+
+@router.post(
+    "/receipts/{result_id}",
+    response_class=Response,
+    description=(
+        "Genera el PDF del recibo. V2-10: con ?demo=true antepone el sello "
+        f"'{DEMO_SEAL}' (datos seed sin validez) y marca la descarga "
+        "(*-demo-sin-validez.pdf + header X-Recibo-Demo)."
+    ),
+)
+def export_receipt(
+    result_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    demo: bool = Query(
+        default=False,
+        description="Marca el recibo como demo (sello sin validez en PDF/JSON).",
+    ),
+) -> Response:
+    context = _build_receipt_context(db, user, result_id, demo=demo)
     try:
         content = render_receipt_pdf(context)
     except ReceiptContextError as exc:
@@ -207,15 +238,53 @@ def export_receipt(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ReceiptError as exc:
         raise HTTPException(status_code=500, detail="No se pudo generar el PDF del recibo") from exc
-    return Response(
-        content=content,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="recibo-{result.id}.pdf"',
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "private, no-store",
-        },
+    is_demo = bool(context.get("is_demo"))
+    filename = (
+        f"recibo-{result_id}-demo-sin-validez.pdf"
+        if is_demo
+        else f"recibo-{result_id}.pdf"
     )
+    headers: dict[str, str] = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+    }
+    if is_demo:
+        # Header ASCII (el sello con — va en el PDF/JSON, no en headers).
+        headers["X-Recibo-Demo"] = "DEMO - Documento sin validez"
+    return Response(content=content, media_type="application/pdf", headers=headers)
+
+
+@router.get(
+    "/receipts/{result_id}/json",
+    description=(
+        "Devuelve el JSON canonico del recibo. V2-10: con ?demo=true incluye "
+        f"is_demo=true + demo_seal '{DEMO_SEAL}' + demo_note (mismo sello del PDF)."
+    ),
+)
+def export_receipt_json(
+    result_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    demo: bool = Query(
+        default=False,
+        description="Marca el recibo como demo (sello sin validez en PDF/JSON).",
+    ),
+) -> dict[str, Any]:
+    context = _build_receipt_context(db, user, result_id, demo=demo)
+    is_demo = bool(context.get("is_demo"))
+    # JSON-serializable: fechas a ISO, resto ya es str/list/dict.
+    issue = context.get("issue_date")
+    employee_block = context.get("employee")
+    hire = employee_block.get("hire_date") if isinstance(employee_block, dict) else None
+    if hasattr(issue, "isoformat"):
+        context["issue_date"] = issue.isoformat()  # type: ignore[union-attr]
+    if hasattr(hire, "isoformat") and isinstance(employee_block, dict):
+        employee_block["hire_date"] = hire.isoformat()  # type: ignore[union-attr]
+    context["is_demo"] = is_demo
+    context["demo_seal"] = DEMO_SEAL if is_demo else ""
+    context["demo_note"] = DEMO_NOTE if is_demo else ""
+    return context
 
 
 __all__ = ["router"]

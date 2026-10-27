@@ -1,6 +1,8 @@
 """Exportadores PDF (recibos de sueldo)."""
 
 from app.exporters.pdf.receipts import (
+    DEMO_NOTE,
+    DEMO_SEAL,
     PdfRendererUnavailable,
     ReceiptContextError,
     ReceiptError,
@@ -10,6 +12,8 @@ from app.exporters.pdf.receipts import (
 )
 
 __all__ = [
+    "DEMO_NOTE",
+    "DEMO_SEAL",
     "PdfRendererUnavailable",
     "ReceiptContextError",
     "ReceiptError",

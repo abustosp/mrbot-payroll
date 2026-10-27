@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from app.importers.parsing import (
     clean_legajo,
     clean_text,
+    contains_html_chars,
     is_valid_cuil,
     is_valid_email,
     normalize_cuil,
@@ -54,6 +55,17 @@ def _required_text(value: Any, field_name: str) -> str:
     text = clean_text(value)
     if text is None:
         raise ValueError(f"El campo '{field_name}' es obligatorio.")
+    if contains_html_chars(text):
+        raise ValueError(f"El campo '{field_name}' contiene caracteres no permitidos (< >).")
+    return text
+
+
+def _reject_html_optional(value: Any, field_name: str) -> str | None:
+    text = clean_text(value)
+    if text is None:
+        return None
+    if contains_html_chars(text):
+        raise ValueError(f"El campo '{field_name}' contiene caracteres no permitidos (< >).")
     return text
 
 
@@ -75,6 +87,8 @@ class EmployeeRow(RowModel):
         legajo = clean_legajo(value)
         if legajo is None:
             raise ValueError("El campo 'legajo' es obligatorio.")
+        if contains_html_chars(legajo):
+            raise ValueError("El campo 'legajo' contiene caracteres no permitidos (< >).")
         return legajo
 
     @field_validator("apellido", "nombre", mode="before")
@@ -87,7 +101,10 @@ class EmployeeRow(RowModel):
     def _normalize_cuil(cls, value: Any) -> str:
         cuil = normalize_cuil(value)
         if cuil is None or not is_valid_cuil(cuil):
-            raise ValueError("El CUIL no es valido.")
+            raise ValueError(
+                "El CUIL no es valido o no coincide su digito verificador. "
+                "Se esperan 11 digitos (p. ej. 20-12345678-6)."
+            )
         return cuil
 
     @field_validator("fecha_ingreso", mode="before")
@@ -100,8 +117,8 @@ class EmployeeRow(RowModel):
 
     @field_validator("categoria", "convenio", mode="before")
     @classmethod
-    def _normalize_optional_text(cls, value: Any) -> str | None:
-        return clean_text(value)
+    def _normalize_optional_text(cls, value: Any, info: Any) -> str | None:
+        return _reject_html_optional(value, info.field_name)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -109,6 +126,8 @@ class EmployeeRow(RowModel):
         email = clean_text(value)
         if email is None:
             return None
+        if contains_html_chars(email):
+            raise ValueError("El campo 'email' contiene caracteres no permitidos (< >).")
         if not is_valid_email(email):
             raise ValueError("El email no es valido.")
         return email
@@ -135,6 +154,8 @@ class NoveltyRow(RowModel):
         legajo = clean_legajo(value)
         if legajo is None:
             raise ValueError("El campo 'legajo' es obligatorio.")
+        if contains_html_chars(legajo):
+            raise ValueError("El campo 'legajo' contiene caracteres no permitidos (< >).")
         return legajo
 
     @field_validator("periodo", mode="before")
@@ -168,7 +189,7 @@ class NoveltyRow(RowModel):
     @field_validator("observacion", mode="before")
     @classmethod
     def _normalize_observacion(cls, value: Any) -> str | None:
-        return clean_text(value)
+        return _reject_html_optional(value, "observacion")
 
     @field_validator("naturaleza", mode="before")
     @classmethod

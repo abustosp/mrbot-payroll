@@ -44,6 +44,16 @@ Se aceptan alias en espanol para facilitar la integracion
 claves desconocidas se ignoran deliberadamente: nunca se vuelca el contexto
 completo en el documento, de modo que un secreto o dato interno no puede
 filtrarse por accidente.
+
+V2-10 (sello DEMO): si el contexto trae ``is_demo``/``demo``/``demo_mode`` en
+``True``, el HTML/PDF muestra el sello ``DEMO — Documento sin validez`` y la
+vista normalizada expone ``is_demo=True`` + ``demo_seal`` para que el JSON que
+la envuelve lo replique. Los datos demo (p. ej. basico seed ~34 % debajo del
+verificado) nunca deben parecer reales.
+
+Presupuesto documentado (V2-31): PDF unitario <= 50 KB (medido ~24 KB sin
+coverage; pin estricto x2) y tiempo <= 2,0 s bajo coverage (medido ~0,31 s
+sin coverage). Ver ``tests/exporters/test_export_budgets.py``.
 """
 
 from __future__ import annotations
@@ -105,6 +115,24 @@ _DEFAULT_EMPLOYER_NOTE = (
     "ilustrativo. Los importes definitivos surgen de la declaración jurada "
     "y de los parámetros vigentes del período."
 )
+# V2-10: sello visible para recibos demo (datos seed sin validez real).
+DEMO_SEAL = "DEMO — Documento sin validez"
+DEMO_NOTE = (
+    "Datos de demostración: importes seed sin validez legal ni laboral. "
+    "No presentable como recibo real."
+)
+
+
+def _is_demo_context(source: Mapping[str, Any]) -> bool:
+    for key in ("is_demo", "demo", "demo_mode", "es_demo"):
+        if key in source and source[key] is not None:
+            value = source[key]
+            if isinstance(value, str):
+                if value.strip().lower() in {"1", "true", "si", "sí", "demo"}:
+                    return True
+            elif bool(value):
+                return True
+    return False
 
 
 class ReceiptError(ValueError):
@@ -368,8 +396,12 @@ def _normalize_context(context: Mapping[str, Any] | Any) -> dict[str, Any]:
     issue_date = _format_date(_first(source, "issue_date", "fecha_emision", "fecha"))
     period_start = _format_date(_first(source, "period_start", "periodo_desde"))
     period_end = _format_date(_first(source, "period_end", "periodo_hasta"))
+    is_demo = _is_demo_context(source)
 
     return {
+        "is_demo": is_demo,
+        "demo_seal": DEMO_SEAL if is_demo else "",
+        "demo_note": DEMO_NOTE if is_demo else "",
         "receipt_number": receipt_number,
         "issue_date": issue_date,
         "period": period,
@@ -492,6 +524,8 @@ def pdf_backend_status() -> tuple[bool, str]:
 
 
 __all__ = [
+    "DEMO_NOTE",
+    "DEMO_SEAL",
     "KIND_LABELS",
     "PdfRendererUnavailable",
     "ReceiptContextError",

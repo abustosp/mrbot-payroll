@@ -476,3 +476,40 @@ def is_valid_email(value: Any) -> bool:
     """Valida de forma basica un email (sin dependencias externas)."""
     text = clean_text(value)
     return bool(text and _EMAIL_RE.fullmatch(text))
+
+
+# V2-12: prefijos que Excel/LibreOffice interpretan como formula al abrir.
+FORMULA_RISK_PREFIXES = ("=", "+", "-", "@")
+
+
+def is_formula_riesgosa(value: Any) -> bool:
+    """Indica si un valor de planilla puede interpretarse como formula.
+
+    Se considera riesgoso todo texto no vacio cuyo primer caracter no
+    espacio sea ``=``, ``+``, ``-`` o ``@`` (OWASP CSV Formula Injection).
+    """
+
+    if value is None or isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float, Decimal)):
+        return False
+    if isinstance(value, (datetime, date)):
+        return False
+    text = str(value).lstrip()
+    # Un apóstrofe inicial ya neutraliza la fórmula en Excel.
+    if text.startswith("'") and len(text) > 1 and text[1] in FORMULA_RISK_PREFIXES:
+        return False
+    return text.startswith(FORMULA_RISK_PREFIXES)
+
+
+def contains_html_chars(value: Any) -> bool:
+    """Indica si un texto libre contiene ``<`` o ``>`` (V2-13 XSS)."""
+
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (datetime, date)):
+        return False
+    text = str(value)
+    return "<" in text or ">" in text

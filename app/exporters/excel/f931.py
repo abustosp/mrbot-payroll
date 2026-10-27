@@ -6,6 +6,12 @@ genera la declaracion jurada y no afirma aceptacion por parte de ARCA.
 
 Solo se escriben valores calculados en Python. Ningun texto proveniente de la
 base se interpreta como formula de Excel.
+
+Presupuesto documentado (V2-31, N=300 empleados sinteticos, 900 items):
+F931 <= 110 KB (medido ~54 KB sin coverage; pin estricto x2) y tiempo
+<= 2,5 s bajo coverage (medido ~0,38 s sin coverage). Ver
+``tests/exporters/test_export_budgets.py``. A 3000 empleados el workbook en
+memoria puede decuplicarse: paginar o generar por lotes fuera de este MVP.
 """
 
 from __future__ import annotations
@@ -55,6 +61,16 @@ _NATURE_LABELS = {
     "AUXILIARY": "Auxiliar",
 }
 _ILLEGAL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+# V2-12: prefijos que Excel evalua como formula al abrir (OWASP).
+_FORMULA_RISK_PREFIXES = ("=", "+", "-", "@")
+
+
+def _neutralize_formula(text: str) -> str:
+    """Antepone ``'`` si el texto podria interpretarse como formula."""
+
+    if text.startswith(_FORMULA_RISK_PREFIXES):
+        return "'" + text
+    return text
 
 
 def _value(source: Any, name: str, default: Any = None) -> Any:
@@ -186,9 +202,13 @@ def _write_text(
     align: str = "left",
 ) -> None:
     cell = worksheet.cell(row=row, column=column)
-    cell.value = _text(value)
+    cell.value = _neutralize_formula(_text(value))
     if cell.data_type == "f":
         # openpyxl marks strings starting with "=" as formulas. Force plain text.
+        cell.data_type = "s"
+    elif isinstance(cell.value, str) and cell.value.startswith("'"):
+        # El apóstrofe inicial ya neutraliza = + - @ en Excel/LibreOffice;
+        # se fuerza tipo texto para que no se reinterprete al guardar.
         cell.data_type = "s"
     if font is not None:
         cell.font = font

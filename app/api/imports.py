@@ -7,6 +7,16 @@ revalidan las filas con ``import_rows`` antes de persistirlas. El ``dry_run``
 es el modo por defecto, por lo que un pedido sin ``dry_run=false`` nunca
 modifica la base de datos.
 
+Contrato HTTP (B-47P): preview y commit responden **HTTP 200** con
+``valid_rows`` + ``errors[]`` + ``duplicates[]`` + ``warnings[]`` (incluye
+``formula_riesgosa``); **no** usan 422 por fila. Los 400/413/422 quedan para
+archivo invalido (extension, vacio, binario, limite 5 MB, XLSX corrupto). Cada
+``errors[]`` trae ``row/field/code/message``; ``cuil_invalido`` exige 11
+digitos (p. ej. 20-12345678-6) y ``columna_faltante`` cita la cabecera valida
+(``Legajo;Apellido;Nombre;CUIL;Fecha de ingreso`` o
+``Legajo;Periodo;Tipo;Cantidad;Importe;Observacion``). ``<``/``>`` en campos
+libres se rechazan con ``caracteres_no_permitidos`` (V2-13).
+
 El commit de **novedades** persiste las filas validas en
 ``payroll_novelties`` y es idempotente por la clave natural
 ``(employee_id, period, code, source)``. Los legajos se resuelven dentro de la
@@ -391,7 +401,14 @@ def _commit_novelties(
     )
 
 
-@router.post("/employees")
+@router.post(
+    "/employees",
+    description=(
+        "Importa empleados (HTTP 200 con valid_rows/errors[]/duplicates[]/warnings[]; "
+        "no 422 por fila. CUIL: 11 digitos p. ej. 20-12345678-6; "
+        "cabecera valida: Legajo;Apellido;Nombre;CUIL;Fecha de ingreso)."
+    ),
+)
 def import_employees(
     file: UploadFile = File(...),
     dry_run: bool = Query(default=True),
@@ -406,6 +423,11 @@ def import_employees(
     commit junto con los conteos de creados y omitidos. Los errores de fila y
     los duplicados no interrumpen el resto del lote. ``company_id`` es opcional
     y solo se usa para crear contratos minimos de los empleados nuevos.
+
+    Contrato B-47P: siempre HTTP 200 con ``errors[]`` por fila (incluye
+    ``cuil_invalido`` con formato 11 digitos y ``columna_faltante`` con
+    cabecera valida); ``<``/``>`` se rechazan (V2-13) y ``= + - @``
+    avisan ``formula_riesgosa`` (V2-12).
     """
     if not dry_run:
         _ensure_commit_role(user)
@@ -417,7 +439,14 @@ def import_employees(
     return _commit_employees(db, user, preview, company_id)
 
 
-@router.post("/novelties")
+@router.post(
+    "/novelties",
+    description=(
+        "Importa novedades (HTTP 200 con valid_rows/errors[]/duplicates[]/warnings[]; "
+        "no 422 por fila. Cabecera valida: "
+        "Legajo;Periodo;Tipo;Cantidad;Importe;Observacion)."
+    ),
+)
 def import_novelties(
     file: UploadFile = File(...),
     dry_run: bool = Query(default=True),
@@ -433,6 +462,9 @@ def import_novelties(
     omitidas. Las novedades ya importadas se informan como duplicadas y no
     interrumpen el resto del lote. ``company_id`` es opcional: si se informa,
     se valida que la empresa pertenezca a la organizacion del usuario.
+
+    Contrato B-47P: siempre HTTP 200 con ``errors[]`` por fila; ``<``/``>``
+    en observacion/legajo se rechazan (V2-13).
     """
     if not dry_run:
         _ensure_commit_role(user)

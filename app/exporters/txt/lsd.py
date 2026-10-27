@@ -32,7 +32,7 @@ class FieldSpec:
         if not self.name or self.width < 1:
             raise ValueError("field name and positive width are required")
         if self.kind not in {"text", "integer", "amount", "date", "period", "cuit", "cuil", "flag"}:
-            raise ValueError(f"unsupported field kind: {self.kind}")
+            raise ValueError(f"Tipo de campo no soportado: {self.kind}")
         if self.align not in {"left", "right"}:
             raise ValueError("align must be 'left' or 'right'")
         if len(self.fill) != 1 or not self.fill.isascii():
