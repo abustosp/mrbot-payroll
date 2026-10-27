@@ -84,5 +84,16 @@ Todos los archivos se encuentran descargados en `normative/cct/evidence/cct_264_
 
 1. **Escala Gráfica Mayo/Octubre 2026**:
    El PDF oficial publicado por el Sindicato del Seguro (`escala_mayo_octubre_2026.pdf`) contiene la diagramación visual en una sola página con imágenes raster de 300 ppi, sin capa de texto para las grillas numéricas. Re-tecleo B-38 (2026-10-26, lectura visual directa a 200 dpi con doble cotejo): los adicionales mensualizados de almuerzo/refrigerio (mayo, junio, agosto y octubre 2026) quedaron cargados como `verified` (8 escalas, `src-264-006`). Los básicos 2026 NO se cargan: las columnas mensuales de la grilla son totales con adicional por jornada (verificado: total − adicional difiere entre la versión con almuerzo y con refrigerio, sin mínimo garantizado 2026 publicado para descomponer ni computar falla de caja), de modo que transcribir un básico requeriría un supuesto. Los 2 placeholders 2026-05 (GRUPO_I/II, `amount: null`) se conservan como `unverified`.
+
+1bis. **Confirmación de imposibilidad B-38R (2026-10-26, sin inventar)**:
+   Se confirma que los básicos 2026 **no pueden cargarse** sin supuesto: la grilla publica totales
+   conformados con adicional por jornada (almuerzo vs refrigerio dan totales distintos para la misma
+   celda) y no publica el mínimo garantizado 2026 necesario para descomponer básico ni la base de
+   falla de caja (Cláusula 10: 20% sobre Básico Grupo I + Mínimo Garantizado). Por regla del contrato
+   (`EVIDENCE_CONTRACT.md`: solo `verified` si importe y vigencia aparecen en documento oficial sin
+   estimación) los 2 placeholders GRUPO_I/II 2026-05 a 2026-10 (`amount: null`, `unverified`,
+   `src-264-006`) **no entran al catálogo** (el catálogo conserva 30 `verified`, 0 nulos). Ninguna
+   categoría 264/95 con básico ausente debe liquidarse como básico: bloquear o advertir "sin básico
+   verificado" hasta publicar la planilla con básicos desagregados o el mínimo garantizado 2026.
 2. **Vacíos de consolidación 2025 en portal gremial**:
    En la web gremial las planillas 2025 fueron retiradas tras la publicación de las escalas 2026; la constancia oficial del período se localizó a través de la DI-2025-539 en Boletín Oficial.

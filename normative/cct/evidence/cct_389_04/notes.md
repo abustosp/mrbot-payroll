@@ -136,3 +136,20 @@ en el entorno; `pdftotext` devuelve solo form-feeds). `amount` = básico (modelo
 NR en `notes`). Gaps: resto de roles del modelo (AYUDANTE_COCINA, MUCAMA, RECEPCIONISTA,
 PEON_GENERAL, complementos), niveles Cat. 1-3/6-7, establecimientos 4★/5★ y segundo tramo
 2026 (acuerdo complementario II local pero sin transcripción).
+
+## 6bis. Profundización B-20P (2026-10-26, sin inventar: documentar, no cargar)
+
+Referencia `05_Textos_Ordenados/CCT_389_04_Gastronómicos_Texto_Ordenado_y_Serie_2020_2026.md` §3
++ `por_convenio/escalas_CCT_389_04_Gastronómicos.csv` (12 filas, vigencia 202607) traen el primer
+tramo Jul–Sep 2026 completo 3★: Cat.1 $1.038.120 + NR $71.000; Cat.2 $1.102.324 + $75.000;
+Cat.3 $1.180.295 + $81.000; Cat.4 $1.217.642 + $83.000 (ya cargado como MOZO); Cat.5 $1.271.299
++ $87.000 (ya cargado como COCINERO); Cat.6 $1.384.689 + $95.000; Cat.7 $1.538.297 + $105.000;
+más variantes 4★/5★ (Cat.6 4★ $1.429.981, Cat.7 4★ $1.840.959, Cat.6 5★ $1.524.806, Cat.7 5★
+$1.970.475). **No se cargan**: el mapeo Cat.1-3/6-7 a los códigos del repo
+(PEON_GENERAL, AYUDANTE_COCINA, MUCAMA, RECEPCIONISTA) no es unívoco (la referencia agrupa por
+número de categoría y el repo por función/Est. 3★ B) y cargarlo sería un supuesto.
+Segundo tramo Oct–Dic 2026: **sin correlato en la referencia** (serie §2 llega a `202607`
+Jul 2026–Abr 2027 pero la tabla §3 cubre solo Jul–Sep 2026); el acuerdo complementario II local
+(`pdfs/cct_389_04_2026_acuerdo_complementario_II.pdf`, RE-2026-34749263, 5 páginas, vigencia
+2026-04-01 a 2026-05-31) es previo al primer tramo y no es el segundo tramo. Bache restante:
+resto de roles, niveles Cat. 1-3/6-7, establecimientos 4★/5★ y segundo tramo Oct–Dic 2026.

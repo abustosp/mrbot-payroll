@@ -67,6 +67,12 @@ Conforme a las pautas establecidas en `normative/cct/EVIDENCE_CONTRACT.md`:
    - Las planillas de grillas salariales completas de 8 a 11 páginas publicadas mensualmente por el sindicato (`bancarios_grillas_2026_10_octubre.pdf`, `bancarios_grillas_2025_09_septiembre.pdf`, etc.) son imágenes fotocopiadas/escaneadas de planillas contables que carecen de capa de texto embebida digital.
    - En estricta aplicación del contrato, las categorías intermedias y jerárquicas del escalafón (como `ADMIN_1` o `JEFE_SECCION`) se registraron como `unverified` con nota indicando que requieren OCR o transcripción manual certificada para su incorporación automatizada definitiva.
 
+## 4bis. Advertencia de cobertura V2-18 (2026-10-26, sin OCR en el entorno)
+
+**ADVERTENCIA: el catálogo 18/75 cubre solo el subconjunto publicado oficialmente (17 escalas `verified`: INICIAL, INICIAL_ROE, falla de caja y Día del Bancario).**
+Las grillas completas intermedias/jerárquicas 2026 (`ADMIN_1` $2.750.000,00 y `JEFE_SECCION` $3.200.000,00 en `scales.json` `unverified`, `src-bancarios-002`, vigencia 2026-09-01 a 2026-10-31) son escaneos sin capa de texto (`pdftotext` devuelve solo form-feeds; sin motor OCR instalado): **no se cargan al catálogo y ninguna liquidación debe usarlas como básico**.
+Toda categoría fuera del subconjunto `verified` debe bloquearse o advertirse como "sin cobertura verificada" hasta el OCR/transcripción celda por celda contra `bancarios_grillas_2026_10_octubre.pdf` (12 páginas JPEG 200 dpi) y planillas 2025-06/2026-05..08.
+
 ---
 
 ## 5. Búsquedas Negativas y Hallazgos

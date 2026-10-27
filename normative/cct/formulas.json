@@ -65,7 +65,7 @@
   },
   {
     "code": "CCT_130_75_PRESENTISMO",
-    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual",
+    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual; se abona con hasta 1 ausencia injustificada en el mes (no computan enfermedad, accidente, vacaciones o licencia legal/convencional)",
     "formula": {
       "operator": "divide",
       "arguments": [
@@ -87,8 +87,8 @@
     },
     "conditions": [
       {
-        "field": "asistencia_perfecta",
-        "operator": "equal",
+        "field": "dias_ausentes",
+        "operator": "less_than_or_equal",
         "value": 1
       }
     ],
@@ -103,13 +103,13 @@
     "nature": "REMUNERATIVE",
     "valid_from": "1975-06-01",
     "valid_to": null,
-    "source": "documento: CCT 130/75; articulo: Art. 40; url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9",
-    "version": 1,
+    "source": "documento: CCT 130/75; articulo: Art. 40 (no mas de una ausencia en el mes; no computan enfermedad, accidente, vacaciones o licencia legal/convencional); url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9; referencia: 05_Textos_Ordenados_Completos_y_Actas_Oficiales/CCT_130_75_Comercio_Texto_Ordenado_y_Serie_2020_2026.md Art. 40 (hasta una ausencia injustificada)",
+    "version": 2,
     "status": "APPROVED",
     "tests": [
       {
         "variables": {
-          "asistencia_perfecta": 1
+          "dias_ausentes": 0
         },
         "parameters": {},
         "concepts": {
@@ -120,7 +120,18 @@
       },
       {
         "variables": {
-          "asistencia_perfecta": 0
+          "dias_ausentes": 1
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1200000.00",
+          "CCT_130_75_ANTIGUEDAD": "0.00"
+        },
+        "expected": "100000.00"
+      },
+      {
+        "variables": {
+          "dias_ausentes": 2
         },
         "parameters": {},
         "concepts": {
@@ -467,7 +478,7 @@
   },
   {
     "code": "CCT_389_04_ASISTENCIA",
-    "description": "Adicional por asistencia perfecta CCT 389/04 (Punto 11.5): 10% sobre el salario básico sin inasistencias",
+    "description": "Adicional por asistencia perfecta CCT 389/04 (Punto 11.5 texto oficial; 11.4 en compilación secundaria): 10% sobre el salario básico sin inasistencias ni tardanzas en el mes",
     "formula": {
       "operator": "multiply",
       "arguments": [
@@ -496,8 +507,8 @@
     "nature": "REMUNERATIVE",
     "valid_from": "2004-08-12",
     "valid_to": null,
-    "source": "documento: CCT 389/04; articulo: Punto 11.5; url: http://cabogadosbv.org.ar/wp/wp-content/uploads/2010/08/389-04-hoteleros-y-gastronomicos1.pdf; sha256: 302a2d1f94a3d72489992dac8276247e5ccaf041a8e444836bc749f4d4ef8d61",
-    "version": 1,
+    "source": "documento: CCT 389/04; articulo: Punto 11.5 Adicional por Asistencia Perfecta 10% (texto oficial 50 paginas; 11.4 en compilacion secundaria 05_Textos_Ordenados/CCT_389_04_Gastronomicos_Texto_Ordenado_y_Serie_2020_2026.md:21); url: http://cabogadosbv.org.ar/wp/wp-content/uploads/2010/08/389-04-hoteleros-y-gastronomicos1.pdf; sha256: 302a2d1f94a3d72489992dac8276247e5ccaf041a8e444836bc749f4d4ef8d61",
+    "version": 2,
     "status": "APPROVED",
     "tests": [
       {
@@ -511,6 +522,59 @@
           "SUELDO_BASICO": "700000.00"
         },
         "expected": "70000.00"
+      },
+      {
+        "variables": {
+          "asistencia_perfecta_mes": 0
+        },
+        "parameters": {
+          "cct38904_porcentaje_asistencia": "0.10"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "700000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_389_04_COMPLEMENTO_SERVICIO",
+    "description": "Complemento de Servicio CCT 389/04 (Punto 11.6 texto oficial; 11.5 en compilación secundaria): 12% remunerativo obligatorio sobre el básico de la categoría de revista, sustitutivo del laudo/propina",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "SUELDO_BASICO"
+        },
+        {
+          "parameter": "cct38904_porcentaje_complemento"
+        }
+      ]
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "2004-08-12",
+    "valid_to": null,
+    "source": "documento: CCT 389/04; articulo: Punto 11.6 Complemento de Servicio 12% (texto oficial; 11.5 en compilacion secundaria 05_Textos_Ordenados/CCT_389_04_Gastronomicos_Texto_Ordenado_y_Serie_2020_2026.md:21); url: http://cabogadosbv.org.ar/wp/wp-content/uploads/2010/08/389-04-hoteleros-y-gastronomicos1.pdf; sha256: 302a2d1f94a3d72489992dac8276247e5ccaf041a8e444836bc749f4d4ef8d61",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {},
+        "parameters": {
+          "cct38904_porcentaje_complemento": "0.12"
+        },
+        "concepts": {
+          "SUELDO_BASICO": "700000.00"
+        },
+        "expected": "84000.00"
       }
     ]
   },
@@ -1083,8 +1147,221 @@
     ]
   },
   {
+    "code": "CCT_244_94_SUMA_EXTRAORDINARIA_NR",
+    "description": "Suma fija NR por única vez CCT 244/94 (Acuerdo 22/10/2026 cláusula SEGUNDO): $150.000 categoría inicial en 2 cuotas ($75.000 antes del 30/10/2026 + $75.000 con 1ra quincena de noviembre), proporcional por categoría y jornada",
+    "formula": {
+      "parameter": "cct24494_suma_extraordinaria_nr"
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "NON_REMUNERATIVE",
+    "valid_from": "2026-10-22",
+    "valid_to": "2026-11-15",
+    "source": "documento: Acta Acuerdo Salarial CCT 244/94 22/10/2026 (EX-2026-46512333-APN-DGDTEYSS#MCH), clausula SEGUNDO $150.000 NR por unica vez en 2 cuotas $75.000 (30/10/2026 + 1ra quincena noviembre), categoria inicial proporcional por categoria/jornada, solo devenga contribucion empresaria OS; local: normative/cct/evidence/cct_244_94/pdfs/cct_244_94_acuerdo_sep_dic_2026.pdf (src-244-002, vigencia 2026-09-01 a 2026-12-31)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {},
+        "parameters": {
+          "cct24494_suma_extraordinaria_nr": "150000.00"
+        },
+        "concepts": {},
+        "expected": "150000.00"
+      },
+      {
+        "variables": {},
+        "parameters": {
+          "cct24494_suma_extraordinaria_nr": "75000.00"
+        },
+        "concepts": {},
+        "expected": "75000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_122_75_SUMA_NR_MENSUAL",
+    "description": "Asignación NR mensual CCT 122/75 (Acuerdo 15/10/2026 cláusula 8): $80.000 sep-oct 2026, $70.000 nov-dic 2026, $60.000 desde ene-2027",
+    "formula": {
+      "parameter": "cct12275_suma_nr_mensual"
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "NON_REMUNERATIVE",
+    "valid_from": "2026-09-01",
+    "valid_to": "2027-01-31",
+    "source": "documento: Acta Acuerdo Paritaria CCT 122/75 15/10/2026 (EX-2026-25687052-APN-DGDTEYSS#MCH), clausula 8 suma NR mensual $80.000 sep-oct 2026 / $70.000 nov-dic 2026 / $60.000 ene-2027; homologa DI-2026-956-APN-DNRYRT#MCH; local: normative/cct/evidence/cct_122_75/pdfs/acuerdo_octubre_2026.pdf (src-122-001, vigencia 2026-09-01 a 2027-01-31)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {},
+        "parameters": {
+          "cct12275_suma_nr_mensual": "80000.00"
+        },
+        "concepts": {},
+        "expected": "80000.00"
+      },
+      {
+        "variables": {},
+        "parameters": {
+          "cct12275_suma_nr_mensual": "70000.00"
+        },
+        "concepts": {},
+        "expected": "70000.00"
+      },
+      {
+        "variables": {},
+        "parameters": {
+          "cct12275_suma_nr_mensual": "60000.00"
+        },
+        "concepts": {},
+        "expected": "60000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_122_75_DIA_SANIDAD",
+    "description": "Día del Trabajador de la Sanidad 21/09 CCT 122/75 (Acuerdo 15/10/2026 cláusula 9 y Art. 45): asignación NR de pago único $70.304,21 a todo el personal, a abonar en septiembre antes del día 20",
+    "formula": {
+      "parameter": "cct12275_dia_sanidad"
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "NON_REMUNERATIVE",
+    "valid_from": "2026-09-01",
+    "valid_to": "2026-09-20",
+    "source": "documento: Acta Acuerdo Paritaria CCT 122/75 15/10/2026 (EX-2026-25687052-APN-DGDTEYSS#MCH), clausula 9 Dia de la Sanidad 21/09/2026 pago unico NR $70.304,21 antes del 20/09 a todo el personal sin distincion de categoria/antiguedad; local: normative/cct/evidence/cct_122_75/pdfs/acuerdo_octubre_2026.pdf (src-122-001)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {},
+        "parameters": {
+          "cct12275_dia_sanidad": "70304.21"
+        },
+        "concepts": {},
+        "expected": "70304.21"
+      }
+    ]
+  },
+  {
+    "code": "CCT_507_07_PRESENTISMO",
+    "description": "Adicional por presentismo CCT 507/07 (Art. 32; Acta Anexo X 06/07/2026 cláusula NOVENA): valores fijos mensuales por categoría jul-dic 2026 (Vigilador General $180.000; Bombero/Monitoreo $195.100; Administrativo $203.000; Principal $210.700)",
+    "formula": {
+      "parameter": "cct50707_presentismo_mensual"
+    },
+    "conditions": [
+      {
+        "field": "asistencia_perfecta_mes",
+        "operator": "equal",
+        "value": 1
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "REMUNERATIVE",
+    "valid_from": "2026-07-01",
+    "valid_to": "2026-12-31",
+    "source": "documento: Acta Acuerdo Anexo X CCT 507/07 06/07/2026 (RE-2026-66453610-APN-CGDTEYS#MCH), clausula NOVENA presentismo mensual por categoria 2do semestre 2026 (Vigilador General $180.000; Bombero/Monitoreo $195.100; Administrativo $203.000; Principal $210.700); homologa DI-2026-897-APN-DNRYRT#MCH 17/07/2026; local: normative/cct/evidence/cct_507_07/pdfs/cct_507_07_acta_salarial_jul_dic_2026.pdf (src-507-001, vigencia 2026-07-01 a 2026-12-31)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "asistencia_perfecta_mes": 1
+        },
+        "parameters": {
+          "cct50707_presentismo_mensual": "180000.00"
+        },
+        "concepts": {},
+        "expected": "180000.00"
+      },
+      {
+        "variables": {
+          "asistencia_perfecta_mes": 0
+        },
+        "parameters": {
+          "cct50707_presentismo_mensual": "180000.00"
+        },
+        "concepts": {},
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_507_07_VIATICO",
+    "description": "Viático CCT 507/07 (Acta Anexo X 06/07/2026 cláusula DÉCIMA): NR por día efectivamente trabajado ($20.220 jul; $20.580 ago; $20.960 sep; $21.360 oct; $21.800 nov-dic 2026)",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "parameter": "cct50707_viatico_diario"
+        },
+        {
+          "variable": "dias_trabajados"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "dias_trabajados",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "NON_REMUNERATIVE",
+    "valid_from": "2026-07-01",
+    "valid_to": "2026-12-31",
+    "source": "documento: Acta Acuerdo Anexo X CCT 507/07 06/07/2026 (RE-2026-66453610-APN-CGDTEYS#MCH), clausula DECIMA viatico NR por dia efectivamente trabajado jul $20.220/dia, ago $20.580, sep $20.960, oct $21.360, nov-dic $21.800 (mensual tabla jul $505.500 = $20.220 x 25 dias); homologa DI-2026-897; local: normative/cct/evidence/cct_507_07/pdfs/cct_507_07_acta_salarial_jul_dic_2026.pdf (src-507-001)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "dias_trabajados": 25
+        },
+        "parameters": {
+          "cct50707_viatico_diario": "20220.00"
+        },
+        "concepts": {},
+        "expected": "505500.00"
+      },
+      {
+        "variables": {
+          "dias_trabajados": 0
+        },
+        "parameters": {
+          "cct50707_viatico_diario": "20220.00"
+        },
+        "concepts": {},
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
     "code": "STD_HORAS_EXTRA_50",
-    "description": "Horas extra al 50% (dias habiles, LCT Art. 201): valor hora = base conformada SUELDO_BASICO / 200 x 1.5 por cada hora de la novedad",
+    "description": "Horas extra al 50% (dias habiles, LCT Art. 201): valor hora = base conformada SUELDO_BASICO / 200 (divisor 200 = jornada mensual completa 200 h por 48 h semanales) x 1.5 por cada hora de la novedad",
     "formula": {
       "operator": "multiply",
       "arguments": [
@@ -1124,8 +1401,8 @@
     "nature": "REMUNERATIVE",
     "valid_from": null,
     "valid_to": null,
-    "source": "ley: Ley 20744 (LCT), Art. 201 (recargo 50% dias habiles / 100% sabado desde 13h, domingo y feriados); diseno: 07_conceptos_formulas_unificado.csv filas 17-18 (base conformada, novedades horas_extra / horas_extra_100)",
-    "version": 1,
+    "source": "ley: Ley 20744 (LCT), Art. 201 (recargo 50% dias habiles / 100% sabado desde 13h, domingo y feriados); divisor: 200 h mensuales = jornada mensual completa por 48 h semanales (48 x 4,333); evidencia: normative/cct/evidence/cct_244_94/notes.md §4 (base mensual convencional estandar de 200 horas mensuales; Operario $7.303/h x 200 h = $1.460.600); diseno: 07_conceptos_formulas_unificado.csv filas 17-18 (base conformada / P_HORAS_MES x factor; P_HORAS_MES=200 en jornada completa)",
+    "version": 2,
     "status": "APPROVED",
     "tests": [
       {
@@ -1152,7 +1429,7 @@
   },
   {
     "code": "STD_HORAS_EXTRA_100",
-    "description": "Horas extra al 100% (sabado desde 13h, domingo y feriados, LCT Art. 201): valor hora = base conformada SUELDO_BASICO / 200 x 2 por cada hora",
+    "description": "Horas extra al 100% (sabado desde 13h, domingo y feriados, LCT Art. 201): valor hora = base conformada SUELDO_BASICO / 200 (divisor 200 = jornada mensual completa 200 h por 48 h semanales) x 2 por cada hora",
     "formula": {
       "operator": "multiply",
       "arguments": [
@@ -1192,8 +1469,8 @@
     "nature": "REMUNERATIVE",
     "valid_from": null,
     "valid_to": null,
-    "source": "ley: Ley 20744 (LCT), Art. 201 (recargo 50% dias habiles / 100% sabado desde 13h, domingo y feriados); diseno: 07_conceptos_formulas_unificado.csv filas 17-18 (base conformada, novedades horas_extra / horas_extra_100)",
-    "version": 1,
+    "source": "ley: Ley 20744 (LCT), Art. 201 (recargo 50% dias habiles / 100% sabado desde 13h, domingo y feriados); divisor: 200 h mensuales = jornada mensual completa por 48 h semanales (48 x 4,333); evidencia: normative/cct/evidence/cct_244_94/notes.md §4 (base mensual convencional estandar de 200 horas mensuales; Operario $7.303/h x 200 h = $1.460.600); diseno: 07_conceptos_formulas_unificado.csv filas 17-18 (base conformada / P_HORAS_MES x factor; P_HORAS_MES=200 en jornada completa)",
+    "version": 2,
     "status": "APPROVED",
     "tests": [
       {

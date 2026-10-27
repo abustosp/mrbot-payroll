@@ -7163,6 +7163,7 @@
     ],
     "formula_codes": [
       "CCT_389_04_ASISTENCIA",
+      "CCT_389_04_COMPLEMENTO_SERVICIO",
       "STD_HORAS_EXTRA_50",
       "STD_HORAS_EXTRA_100"
     ],
@@ -8407,6 +8408,8 @@
     ],
     "formula_codes": [
       "CCT_122_75_ESCALAFON",
+      "CCT_122_75_SUMA_NR_MENSUAL",
+      "CCT_122_75_DIA_SANIDAD",
       "STD_HORAS_EXTRA_50",
       "STD_HORAS_EXTRA_100"
     ],
@@ -9477,6 +9480,7 @@
     ],
     "formula_codes": [
       "CCT_244_94_ANTIGUEDAD",
+      "CCT_244_94_SUMA_EXTRAORDINARIA_NR",
       "STD_HORAS_EXTRA_50",
       "STD_HORAS_EXTRA_100"
     ],
@@ -9931,6 +9935,8 @@
     ],
     "formula_codes": [
       "CCT_507_07_ANTIGUEDAD",
+      "CCT_507_07_PRESENTISMO",
+      "CCT_507_07_VIATICO",
       "STD_HORAS_EXTRA_50",
       "STD_HORAS_EXTRA_100"
     ],

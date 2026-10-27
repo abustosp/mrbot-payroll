@@ -33,6 +33,15 @@ pseudo-categorías `HISTORICO_*` que duplican valores) y
 ## 4. Gaps (ver reporte fix-convenios.md)
 - G1. Cotejo directo celda por celda contra planilla homologada 2026 pendiente (sin OCR local:
   no hay motor OCR instalado; los PDF oficiales 2026 son escaneos).
+  Profundización B-19P (2026-10-26, solo referencia de lectura, sin inventar):
+  `03_escalas_historicas_2020_2026.csv` trae 88 filas CCT 589/10 = 48 funcionales cargadas
+  (`verified`, `confidence: medium`, `src-589-002`) + 40 `HISTORICO_*` excluidas por duplicar
+  valores (pseudo-categorías, no funciones del Art. 7); `por_convenio/escalas_CCT_589_10_Edificios_SUTERH.csv`
+  trae 11 filas vigencia 202606 (básicos 4ª categoría) consistentes con la ventana adoptada
+  2026-07-01 a 2026-09-30 (D3). No hay planilla homologada 2026 local con capa de texto para
+  cotejar: `src-589-001` es texto ordenado sin importes y `src-589-002` es compilación secundaria
+  (`official: false`). Por tanto el cotejo G1 sigue pendiente y las 48 escalas conservan
+  `confidence: medium` con la advertencia de defensa probatoria limitada (ver 02-legal §B-19).
 - G2. Escalas por categoría de edificio (1ª a 4ª) solo testigos en la referencia (4ª categoría);
   el catálogo cubre funciones con valores 4ª categoría.
 - G3. Adicionales (retiro residuos, jardín, pileta, presentismo 8,33%, bonificación anual 20%)
