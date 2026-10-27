@@ -171,6 +171,14 @@ class SalaryScale(Base):
 
 
 class PayrollConcept(Base):
+    """Un concepto es inmutable cuando tiene fórmulas o ítems (V2-24).
+
+    La referencia concepto↔fórmula vive en JSON sin FK en DB; el único
+    guard es el 409 de ``DELETE /concepts`` (solo fórmulas APPROVED).
+    No borrar por ORM/SQL directo: la corrida cae al canal de error por
+    empleado en vez de fallar al borrar. Ver test pin V2-24.
+    """
+
     __tablename__ = "payroll_concepts"
     __table_args__ = (
         UniqueConstraint("organization_id", "code"),
@@ -337,6 +345,7 @@ class PayrollResult(Base):
     __table_args__ = (
         UniqueConstraint("payroll_run_id", "employee_id"),
         CheckConstraint("remunerative >= 0 AND non_remunerative >= 0 AND deductions >= 0 AND contributions >= 0 AND gross >= 0 AND net >= 0 AND employer_cost >= 0", name="nonnegative_totals"),
+        Index("ix_payroll_results_employee_id", "employee_id"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     payroll_run_id: Mapped[int] = mapped_column(ForeignKey("payroll_runs.id", ondelete="CASCADE"), nullable=False)
@@ -354,6 +363,10 @@ class PayrollResult(Base):
 
 class PayrollItem(Base):
     __tablename__ = "payroll_items"
+    __table_args__ = (
+        Index("ix_payroll_items_result_id", "payroll_result_id"),
+        Index("ix_payroll_items_concept_id", "concept_id"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     payroll_result_id: Mapped[int] = mapped_column(ForeignKey("payroll_results.id", ondelete="CASCADE"), nullable=False)
     concept_id: Mapped[int | None] = mapped_column(ForeignKey("payroll_concepts.id"))
@@ -449,6 +462,7 @@ class PayrollApproval(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_logs_organization_id", "organization_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))

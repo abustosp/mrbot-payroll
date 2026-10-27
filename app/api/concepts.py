@@ -82,7 +82,10 @@ def _concept_in_use(db: Session, organization_id: int, code: str) -> bool:
     versions = db.scalars(
         select(FormulaVersion)
         .join(FormulaDefinition, FormulaVersion.formula_id == FormulaDefinition.id)
-        .where(FormulaDefinition.organization_id == organization_id)
+        .where(
+            FormulaDefinition.organization_id == organization_id,
+            FormulaVersion.status == "APPROVED",
+        )
     ).all()
     return any(
         code in (version.depends_on or [])
@@ -100,7 +103,7 @@ def delete_concept(
     if _concept_in_use(db, user.organization_id, row.code):
         raise HTTPException(
             status_code=409,
-            detail=f"El concepto {row.code!r} está referenciado por una fórmula y no puede borrarse",
+            detail=f"El concepto {row.code!r} está referenciado por una fórmula APROBADA y no puede borrarse",
         )
     db.delete(row)
     commit_or_conflict(db)
