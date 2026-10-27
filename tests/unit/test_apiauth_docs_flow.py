@@ -23,3 +23,17 @@ def test_ai_requests_carry_visible_examples() -> None:
     assert "text" in analyze["example"]
     persist = spec["components"]["schemas"]["PersistProposalRequest"]
     assert "analysis" in persist["example"]
+
+
+def test_b41p_persist_example_is_valid_verbatim() -> None:
+    """B-41P: el ejemplo del paso 2 se puede copiar tal cual (hash null o 64hex)."""
+
+    import re
+
+    from app.api.ai import PersistProposalRequest
+
+    spec = TestClient(app).get("/openapi.json").json()
+    example = spec["components"]["schemas"]["PersistProposalRequest"]["example"]
+    content_hash = example["analysis"]["document"].get("content_hash")
+    assert content_hash is None or re.fullmatch(r"sha256:[0-9a-f]{64}", content_hash)
+    PersistProposalRequest.model_validate(example)

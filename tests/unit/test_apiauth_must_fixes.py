@@ -191,6 +191,30 @@ def api(tmp_path) -> Generator[tuple[TestClient, sessionmaker[Session]], None, N
     engine.dispose()
 
 
+def test_v203_login_rejects_unbounded_password_before_hashing(api) -> None:
+    """V2-03: password gigante da 422 sin llegar a PBKDF2; el login normal sigue 200."""
+
+    from pydantic import ValidationError
+
+    from app.api.schemas import LoginInput
+
+    client, _ = api
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.test", "password": PASSWORD},
+        ).status_code
+        == 200
+    )
+    oversized = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.test", "password": "x" * 300},
+    )
+    assert oversized.status_code == 422, oversized.text
+    with pytest.raises(ValidationError):
+        LoginInput.model_validate({"email": "a@b.c", "password": "x" * 1000000})
+
+
 def test_b15_logout_requires_auth_and_invalidates_old_token(api) -> None:
     client, sessions = api
     assert (

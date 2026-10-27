@@ -20,8 +20,8 @@ class ORMModel(BaseModel):
 
 
 class LoginInput(BaseModel):
-    email: str
-    password: str
+    email: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=256)
 
 
 class ChangePasswordInput(BaseModel):

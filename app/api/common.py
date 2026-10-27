@@ -15,7 +15,7 @@ def page(db: Session, statement, limit: int, offset: int) -> dict[str, Any]:
 def get_scoped(db: Session, model: Any, resource_id: int, organization_id: int):
     row = db.scalar(select(model).where(model.id == resource_id, model.organization_id == organization_id))
     if row is None:
-        raise HTTPException(status_code=404, detail="Recurso no encontrado")
+        raise HTTPException(status_code=404, detail=f"Recurso {resource_id} no encontrado")
     return row
 
 

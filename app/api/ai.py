@@ -69,7 +69,7 @@ class PersistProposalRequest(BaseModel):
                     "document": {
                         "document_id": "CCT-130-75",
                         "version": "1",
-                        "content_hash": "sha256:…",
+                        "content_hash": None,
                     },
                     "summary": "Pegue aquí el JSON íntegro devuelto por analyze-agreement.",
                     "analyzed_at": "2026-10-26T12:00:00+00:00",
