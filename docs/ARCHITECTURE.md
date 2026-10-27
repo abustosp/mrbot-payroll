@@ -297,8 +297,12 @@ liquidar.
 
 1. La publicación de IA crea fórmulas `DRAFT`; falta un flujo de UI para
    revisarlas y aprobarlas.
-2. El cálculo elige fórmulas por organización y fecha, pero todavía no por
-   convenio, categoría o `ruleset_id`. Falta ese filtro para multi-CCT estricto.
+2. El cálculo filtra fórmulas por convenio y categoría por empleado (B-26,
+   fail-closed) y sella el paquete en `ruleset_id` (B-27), pero la selección
+   sigue siendo por organización y fecha: en corridas multi-CCT las fórmulas
+   sin alcance aplican a todos los convenios y solo generan el aviso
+   `multi_cct_no_scope` con los códigos. Falta el modo estricto para
+   multi-CCT (bloquear en vez de avisar).
 3. SAC, vacaciones y liquidación final tienen API de simulación, pero no se
    eligen automáticamente desde el tipo de corrida.
 4. Las novedades importadas se guardan como remunerativas y el período es

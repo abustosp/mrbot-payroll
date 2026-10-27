@@ -126,6 +126,34 @@ def test_b26_multi_cct_without_scope_warns(env: tuple[TestClient, sessionmaker[S
     )
 
 
+def test_b26_multi_cct_warning_names_unscoped_formulas(env: tuple[TestClient, sessionmaker[Session], dict[str, Any]]) -> None:
+    """B-26R: el aviso multi-CCT identifica las fórmulas sin alcance."""
+    client, factory, context = env
+    company_id = context["company"].id
+    second_employee_id = context["employees"][1].id
+    with factory.begin() as session:
+        other = CollectiveAgreement(code="40/89", year=1989, name="Second agreement")
+        session.add(other)
+        session.flush()
+        contract = session.scalar(
+            select(EmploymentContract)
+            .where(EmploymentContract.employee_id == second_employee_id)
+        )
+        assert contract is not None
+        contract.agreement_id = other.id
+    run_id = _create_run(client, company_id, "b26-multi-cct-codes")
+
+    response = client.post(f"/api/v1/payroll-runs/{run_id}/calculate")
+    assert response.status_code == 200, response.text
+    scoped_warnings = [
+        warning for warning in response.json()["warnings"]
+        if warning["type"] == "multi_cct_no_scope"
+    ]
+    assert scoped_warnings, "se esperaba el aviso multi_cct_no_scope"
+    assert "BASICO" in scoped_warnings[0]["codes"]
+    assert "scope" in scoped_warnings[0]["message"]
+
+
 def test_b36_calculate_defaults_to_limit_50() -> None:
     """B-36P: el detalle default pagina a 50 sin recortar el resumen."""
     spec = TestClient(app).get("/openapi.json").json()

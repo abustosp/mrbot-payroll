@@ -781,19 +781,26 @@ def _run_calculation(
     })
     run.inputs_hash = inputs_hash
     # B-26: la corrida abarca varios CCT y alguna fórmula no tiene scope, así
-    # que puede aplicarse donde no corresponde; se avisa sin bloquear.
-    if len(run_agreement_codes) > 1 and any(
-        formula.agreement_code is None for formula, _version in formulas
-    ):
-        warnings.append({
-            "type": "multi_cct_no_scope",
-            "message": (
-                "La corrida liquida varios CCT "
-                f"({', '.join(sorted(run_agreement_codes))}) y alguna fórmula "
-                "no tiene convenio asignado: verificar el alcance en "
-                "/formulas/{id}/scope."
-            ),
+    # que puede aplicarse donde no corresponde; se avisa sin bloquear y se
+    # nombran las fórmulas para que el alcance se asigne en el acto.
+    if len(run_agreement_codes) > 1:
+        unscoped = sorted({
+            formula.code
+            for formula, _version in formulas
+            if not (formula.agreement_code or "").strip()
         })
+        if unscoped:
+            warnings.append({
+                "type": "multi_cct_no_scope",
+                "codes": ", ".join(unscoped),
+                "message": (
+                    "La corrida liquida varios CCT "
+                    f"({', '.join(sorted(run_agreement_codes))}) y estas "
+                    f"fórmulas no tienen convenio asignado ({', '.join(unscoped)}): "
+                    "se aplican a todos los convenios; asignar alcance en "
+                    "PATCH /api/v1/formulas/{id}/scope."
+                ),
+            })
     # Gancho de cobertura por CCT: avisa (sin bloquear) cuando el período
     # excede la vigencia del catálogo o el estado no está vigente.
     if agreement_ids:
