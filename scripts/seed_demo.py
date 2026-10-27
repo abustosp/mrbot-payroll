@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.auth.security import hash_password, verify_password
+from app.auth.security import hash_password
 from app.database import Base
 from app.database.models import (
     AgreementCategory,
@@ -51,6 +51,8 @@ def seed(session: Session) -> dict[str, object]:
         session.add(organization)
         session.flush()
 
+    # V2-02: solo crear el admin si no existe; jamas re-escribir una fila
+    # existente (rotar la contrasena debe sobrevivir a un re-seed).
     admin = session.scalar(select(User).where(User.email == "admin@example.com"))
     if admin is None:
         admin = User(
@@ -61,12 +63,6 @@ def seed(session: Session) -> dict[str, object]:
         )
         session.add(admin)
         session.flush()
-    else:
-        admin.organization_id = organization.id
-        admin.role = "admin"
-        admin.active = True
-        if not verify_password("admin", admin.password_hash):
-            admin.password_hash = hash_password("admin")
 
     employer_cuit = _tax_id("30", 71234567)
     company = session.scalar(select(Company).where(Company.cuit == employer_cuit))

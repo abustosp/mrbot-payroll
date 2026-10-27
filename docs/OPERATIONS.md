@@ -2,7 +2,7 @@
 
 ## Salud y logs
 
-La API y el contenedor consultan `GET /health`. Este endpoint confirma que FastAPI responde; actualmente no comprueba conexión a la base de datos.
+La API y el contenedor consultan `GET /health`. Este endpoint prueba una tabla real (`alembic_version`) y responde `{"status": "ok"}` solo si la base migrada responde; si no, responde 503 `{"status": "error"}`. La UI visual equivalente es `GET /salud`.
 
 ```sh
 docker compose -f deployment/docker-compose.yml ps
@@ -32,7 +32,31 @@ cp backups/payroll-AAAA-MM-DD-HHMMSS.db data/payroll.db
 docker compose -f deployment/docker-compose.yml start app
 ```
 
-Si el proceso local está fuera de Docker, detenerlo y aplicar los mismos pasos sobre `data/payroll.db`. Probar periódicamente la restauración en una copia de trabajo.
+Si el proceso local está fuera de Docker, detenerlo y aplicar los mismos pasos sobre `data/payroll.db`.
+
+## Checklist trimestral de restore (V2-22)
+
+Probar la restauración cada trimestre en una copia de trabajo y registrar fecha, responsable y resultado antes de darlo por válido:
+
+```sh
+mkdir -p /tmp/restore-check && cp "backups/payroll-<fecha>.db" /tmp/restore-check/payroll.db
+PAYROLL_DATABASE_URL="sqlite:////tmp/restore-check/payroll.db" .venv/bin/python -m alembic check || true
+PAYROLL_DATABASE_URL="sqlite:////tmp/restore-check/payroll.db" .venv/bin/python -c \
+  "from sqlalchemy import create_engine, text; e=create_engine('sqlite:////tmp/restore-check/payroll.db'); print(e.connect().execute(text('SELECT count(*) FROM alembic_version')).scalar())"
+curl --fail http://127.0.0.1:8000/health
+```
+
+Checklist: backup elegido, copia restaurada en directorio temporal, `alembic check` sin pendientes inesperados, lectura de `alembic_version` OK, `/health` en 200 contra la copia (o 503 con causa identificada), registro del ensayo con fecha y responsable.
+
+## Backup en Postgres (V2-22, cuando se active D-2)
+
+El `cp` de SQLite no aplica a Postgres. Con el perfil `postgres`, respaldo lógico programado:
+
+```sh
+docker compose -f deployment/docker-compose.yml exec postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "backups/payroll-$(date +%F-%H%M%S).sql"
+```
+
+Restaurar en una base vacía de prueba antes de pisar producción y aplicar la misma checklist trimestral de arriba.
 
 ## Migraciones
 
@@ -95,6 +119,18 @@ declara no listo. SIN CAMBIOS hasta que D-3 decida. Plan exacto:
   backend sano antes de abrir el navegador.
 - Borrar: eliminar `desktop/` completo y su workflow
   `build-desktop.yml` hasta que se necesite.
+
+## CORS y CSRF de la API (V2-14)
+
+`PAYROLL_CORS_ORIGINS` vive en `.env.example` (vacío por defecto = sin CORS). Cada origen permitido combina `allow_credentials=true` con la cookie de sesión: es de plena confianza CSRF. Solo abrir el frontend propio por HTTPS y enviar `X-CSRF-Token` en `POST/PUT/PATCH/DELETE` de `/api/` con cookie cuando haya origins configurados. La web Jinja2 ya exige token CSRF con doble submit (`payroll_csrf` + campo oculto).
+
+## Comandos make (B-68P)
+
+Atajos verificados por CI (`.github/workflows/ci.yml`): `make setup` (venv + deps + `.env` + `data/`), `make migrate` (`alembic upgrade head`), `make seed` (demo idempotente), `make run` (uvicorn con reload), `make gates` (pytest + ruff + mypy). Ver `make help` para el listado en terminal.
+
+## Sesiones y cambio de contraseña
+
+`POST /api/v1/auth/change-password` existe y rota `User.session_version`: la cookie anterior queda en 401. Rotar la contraseña inicial `admin/admin` tras el primer arranque y no usar `PAYROLL_SEED_DEMO=true` con datos reales (el seed solo crea el admin si no existe, nunca lo re-escribe). En modo SQL (`PAYROLL_WEB_DATA_SOURCE=sql`) la UI filtra por la organización del usuario autenticado (fail-closed); no exponer la app a Internet sin HTTPS y secreto propio.
 
 ## Actualización y recuperación
 

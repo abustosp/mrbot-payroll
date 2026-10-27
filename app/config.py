@@ -37,6 +37,10 @@ class Settings(BaseSettings):
                 "PAYROLL_SECRET_KEY debe definirse con un valor propio cuando "
                 "PAYROLL_ENVIRONMENT no es 'development'."
             )
+        # V2-11/PW-6: fuera de development la cookie de sesion debe viajar con
+        # Secure; forzarla aunque el operador la haya dejado en false.
+        if self.environment.strip().lower() != "development" and not self.cookie_secure:
+            self.cookie_secure = True
         return self
 
 

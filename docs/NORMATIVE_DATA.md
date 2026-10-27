@@ -11,8 +11,8 @@ Los parámetros del seed, las escalas de demostración del CCT 130/75 y las tabl
 de Ganancias que se usan en tests son ilustrativos. No deben usarse para
 liquidaciones reales, presentaciones ante ARCA ni decisiones laborales.
 
-El catálogo de investigación `normative/cct/` reúne 10 convenios, 191 documentos
-oficiales y 235 escalas con evidencia para 2020-2026. Cada fila tiene fuente,
+El catálogo de investigación `normative/cct/` reúne 11 convenios, 254 documentos
+oficiales y 786 escalas con evidencia para 2020-2026. Cada fila tiene fuente,
 vigencia y hash. Eso es evidencia documental, no una aprobación profesional ni
 un paquete listo para producción. Además, algunas escalas publican un total
 conformado que puede incluir sumas no remunerativas; antes de usarlas hay que
@@ -39,7 +39,7 @@ La implementación actual se concentra en
 | Selección por fecha | `select_parameter`, `select_parameters` | Implementado, con vigencias inclusivas |
 | Detección de superposiciones | `find_overlaps`, `validate_no_overlaps` | Implementado |
 | Persistencia de documentos y parámetros | `NormativeDocument`, `NormativeParameter`, `SalaryScale` | Modelos y migración inicial |
-| Carga de un paquete validado | `package_loader.py` + API `/normative-packages/import` | Implementado; 235 escalas verificadas cargables |
+| Carga de un paquete validado | `package_loader.py` + API `/normative-packages/import` | Implementado; 786 escalas verificadas cargables |
 
 El catálogo de investigación está en `normative/cct/catalog.json`. El cargador
 `app/core/normative/package_loader.py` valida ese archivo y omite toda escala

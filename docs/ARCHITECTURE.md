@@ -165,8 +165,8 @@ empleado; el servicio `app/services/payroll_calculation.py` recorre una corrida,
 persiste resultados y trazas y marca la corrida como `CALCULATED` o `ERROR`.
 
 La selección del servicio usa el `period_end` de la corrida, contratos activos
-vigentes, una única escala por categoría y fórmulas en estado `VALIDATED` o
-`APPROVED`. Si un empleado no tiene contrato, categoría, escala o conceptos
+vigentes, una única escala por categoría y fórmulas en estado `APPROVED`
+(solo aprobadas; `VALIDATED` no liquida). Si un empleado no tiene contrato, categoría, escala o conceptos
 suficientes, se registra el error y se continúa con el resto.
 
 ### 6. Resultados y salidas

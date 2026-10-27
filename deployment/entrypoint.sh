@@ -23,13 +23,24 @@ case ",${COMPOSE_PROFILES:-}," in
         ;;
 esac
 
-# B-22: tolerar una base ya creada por create_all sin sellar (la migra
-# directa falla con "table ... already exists"): sellar y reintentar una vez.
-# shortcut: se asume que el fallo es por base pre-creada; una migracion rota
-# real quedaria sellada como head y habria que revisarla a mano.
-if ! alembic upgrade head; then
-    alembic stamp head
-    alembic upgrade head
+# B-22/V2-08: tolerar solo una base ya creada por create_all sin sellar
+# (el upgrade falla con "table ... already exists"): sellar y reintentar una
+# vez unicamente en ese caso; cualquier otro fallo aborta con el remedio para
+# no marcar una migracion rota como aplicada.
+if upgrade_out=$(alembic upgrade head 2>&1); then
+    printf '%s\n' "$upgrade_out"
+else
+    printf '%s\n' "$upgrade_out" >&2
+    case "$upgrade_out" in
+        *[Aa]lready*[Ee]xists*)
+            alembic stamp head
+            alembic upgrade head
+            ;;
+        *)
+            echo "ERROR: 'alembic upgrade head' fallo. Revisar la migracion y reintentar; no se sello nada." >&2
+            exit 1
+            ;;
+    esac
 fi
 
 if [ "${PAYROLL_SEED_DEMO:-false}" = "true" ]; then
