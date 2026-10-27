@@ -439,6 +439,13 @@ def calculate_vacations(
             field_name="plus_rate",
             error_type=SettlementParameterError,
         )
+        # B-29: un plus 0 explícito también avisa: declara que no corresponde
+        # plus, pero el default por CCT sigue pendiente (ver D-6).
+        if rate == ZERO:
+            warnings.append(
+                "plus_rate 0 explícito: se liquida plus 0; "
+                "verificar si el CCT exige plus vacacional (ver D-6)"
+            )
 
     daily_value = salary / base_days
     base_amount = quantize(daily_value * day_count, rounding)

@@ -439,14 +439,11 @@ def test_active_employee_without_contract_is_listed(
     assert "contrato" in omitted[0]["message"]
 
 
-def test_unconsumed_novelty_is_listed_as_warning(
-    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+def _add_unconsumed_novelty(
+    factory: sessionmaker[Session], context: dict[str, object]
 ) -> None:
-    # B-11: la novedad que ninguna fórmula consume se avisa en vez de
-    # pasar en silencio.
     from app.database.models import PayrollNovelty
 
-    factory, context = payroll_db
     employee_ids = context["employee_ids"]
     assert isinstance(employee_ids, list)
     with factory.begin() as session:
@@ -463,7 +460,35 @@ def test_unconsumed_novelty_is_listed_as_warning(
             )
         )
 
+
+def test_unconsumed_novelty_is_an_error_by_default(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    # V2-09: la novedad que ninguna fórmula consume deja la corrida en ERROR
+    # para que las horas extra impagas no parezcan pagadas.
+    factory, context = payroll_db
+    _add_unconsumed_novelty(factory, context)
+
     result = _calculate(factory, _create_run(factory, context))
+
+    assert result["status"] == "ERROR"
+    assert {
+        error["code"] for error in result["errors"] if error["type"] == "novelty_not_consumed"
+    } == {"horas_extra"}
+
+
+def test_unconsumed_novelty_is_listed_as_warning(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    # B-11: con el opt-out explícito, la novedad no consumida solo avisa.
+    factory, context = payroll_db
+    employee_ids = context["employee_ids"]
+    assert isinstance(employee_ids, list)
+    _add_unconsumed_novelty(factory, context)
+
+    result = _calculate(
+        factory, _create_run(factory, context), allow_unconsumed_novelties=True
+    )
 
     assert result["status"] == "CALCULATED"
     warnings = result["warnings"]

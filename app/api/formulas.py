@@ -347,7 +347,7 @@ def validate_formula(
     row = get_scoped(db, FormulaDefinition, formula_id, user.organization_id)
     version = latest_version(db, row)
     if version.status not in {"DRAFT", "VALIDATED"}:
-        raise HTTPException(status_code=409, detail="Solo se validan fórmulas en borrador")
+        raise HTTPException(status_code=409, detail=f"Solo se validan fórmulas en borrador (fórmula {formula_id}, estado {version.status})")
     try:
         candidate = {
             "code": row.code,

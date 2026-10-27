@@ -390,12 +390,13 @@ def test_vacations_missing_plus_rate_warns_but_keeps_amounts() -> None:
     assert any("plus_rate" in warning for warning in result.warnings)
 
 
-def test_vacations_explicit_zero_plus_rate_does_not_warn() -> None:
-    """B-29: an explicit zero declares that no plus applies."""
+def test_vacations_explicit_zero_plus_rate_warns() -> None:
+    """B-29R: an explicit zero also warns (the CCT default stays pending D-6)."""
 
     result = calculate_vacations(Decimal("750000"), Decimal("10"), plus_rate=Decimal("0"))
 
-    assert result.warnings == []
+    assert result.plus_amount == Decimal("0.00")
+    assert any("plus_rate" in warning for warning in result.warnings)
 
 
 def test_vacations_sequential_rounding_is_pinned() -> None:

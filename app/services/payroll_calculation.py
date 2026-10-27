@@ -7,7 +7,8 @@ import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.core.payroll_engine.calculator import _definition_applies, calculate_payroll
@@ -300,6 +301,7 @@ def calculate_payroll_run(
     include_items: bool = True,
     results_limit: int | None = None,
     results_offset: int = 0,
+    allow_unconsumed_novelties: bool = False,
 ) -> dict:
     """Calculate eligible employees and replace all results already stored for ``run``.
 
@@ -311,6 +313,9 @@ def calculate_payroll_run(
     per-employee detail in the response. The summary (totals over every
     calculated employee) is always complete; every result row is still
     persisted regardless of the window.
+
+    V2-09: a novelty no formula consumes leaves the run in ERROR unless
+    ``allow_unconsumed_novelties`` is set (explicit opt-out to ignore it).
     """
     if run.status not in {"DRAFT", "CALCULATED", "IN_REVIEW", "ERROR"}:
         raise PayrollRunStateError(
@@ -324,13 +329,26 @@ def calculate_payroll_run(
             f"run_type {run.run_type!r} no soportado; solo se liquida MONTHLY."
         )
 
-    # B-13: estado intermedio con commit antes de calcular para que un doble
-    # clic o un request concurrente vea VALIDATING y reciba 409 en vez de
-    # pisarse (borrar/insertar entrelazados). En Postgres preferir bloqueo
-    # pesimista (SELECT ... FOR UPDATE); ver D-2.
+    # B-13: reclamo atómico del estado con commit antes de calcular. El
+    # UPDATE condicional solo avanza desde estados calculables; si otro
+    # request ya tomó la corrida (0 filas), se devuelve 409 en vez de
+    # pisarse (borrar/insertar entrelazados). En Postgres el UPDATE
+    # concurrente se serializa por fila; ver D-2 para FOR UPDATE.
+    claimed = db.execute(
+        update(PayrollRun)
+        .where(
+            PayrollRun.id == run.id,
+            PayrollRun.status.in_(("DRAFT", "CALCULATED", "IN_REVIEW", "ERROR")),
+        )
+        .values(status="VALIDATING")
+    )
+    if not isinstance(claimed, CursorResult) or claimed.rowcount == 0:
+        db.rollback()
+        raise PayrollRunStateError(
+            "La liquidación ya está en cálculo o no está en un estado "
+            "calculable (aprobada o cerrada)."
+        )
     run.status = "VALIDATING"
-    db.add(run)
-    db.flush()
     db.commit()
     try:
         return _run_calculation(
@@ -339,6 +357,7 @@ def calculate_payroll_run(
             include_items=include_items,
             results_limit=results_limit,
             results_offset=results_offset,
+            allow_unconsumed_novelties=allow_unconsumed_novelties,
         )
     except Exception:
         # Un cálculo fallido queda reintentable en vez de atascado en VALIDATING.
@@ -356,6 +375,7 @@ def _run_calculation(
     include_items: bool = True,
     results_limit: int | None = None,
     results_offset: int = 0,
+    allow_unconsumed_novelties: bool = False,
 ) -> dict:
     """Heavy body of :func:`calculate_payroll_run` (run is already VALIDATING)."""
 
@@ -506,6 +526,7 @@ def _run_calculation(
     results: list[dict] = []
     errors: list[dict[str, str | int]] = []
     warnings: list[dict[str, str | int]] = list(rounding_warnings)
+    run_agreement_codes: set[str] = set()
     input_employees: list[dict] = []
     # B-36: summary accumulators stay complete when the detail is paginated.
     calculated_total = 0
@@ -549,6 +570,8 @@ def _run_calculation(
             if len(candidate_scales) == 1:
                 scale = candidate_scales[0]
         agreement_code = agreement_codes.get(contract.agreement_id or -1)
+        if agreement_code:
+            run_agreement_codes.add(agreement_code)
         base_salary = (
             contract.monthly_salary
             if contract.monthly_salary is not None
@@ -640,18 +663,6 @@ def _run_calculation(
 
         serialized = calculated.to_dict()
         row_hash = _digest(serialized)
-        # B-11: novelties consumed by no formula are reported, not silenced.
-        for code in calculated.unconsumed_novelties:
-            warnings.append({
-                "type": "novelty_not_consumed",
-                "employee_id": employee.id,
-                "employee_code": employee.employee_code,
-                "code": code,
-                "message": (
-                    f"La novedad {code} del período no fue consumida "
-                    "por ninguna fórmula."
-                ),
-            })
         # B-31: parameters shadowed by a base variable are reported too.
         for name in calculated.shadowed_parameters:
             warnings.append({
@@ -704,6 +715,31 @@ def _run_calculation(
                 "lines": calculated.trace,
             },
         ))
+        # V2-09: novelties consumed by no formula are errors by default, so
+        # unpaid overtime cannot look paid (B-11 keeps the warning channel
+        # only under the explicit opt-out flag).
+        for code in calculated.unconsumed_novelties:
+            entry: dict[str, str | int] = {
+                "type": "novelty_not_consumed",
+                "employee_id": employee.id,
+                "employee_code": employee.employee_code,
+                "code": code,
+                "message": (
+                    f"La novedad {code} del período no fue consumida "
+                    "por ninguna fórmula."
+                ),
+            }
+            if allow_unconsumed_novelties:
+                warnings.append(entry)
+            else:
+                errors.append(entry)
+                db.add(PayrollTrace(
+                    payroll_run_id=run.id,
+                    payroll_result_id=result.id,
+                    employee_id=employee.id,
+                    event="NOVELTY_NOT_CONSUMED",
+                    detail={"message": entry["message"], "code": code},
+                ))
         # B-36: every row is persisted, but only the requested window is
         # serialized into the response; totals below always cover everyone.
         slot = calculated_total
@@ -744,6 +780,20 @@ def _run_calculation(
         "parameters": parameters,
     })
     run.inputs_hash = inputs_hash
+    # B-26: la corrida abarca varios CCT y alguna fórmula no tiene scope, así
+    # que puede aplicarse donde no corresponde; se avisa sin bloquear.
+    if len(run_agreement_codes) > 1 and any(
+        formula.agreement_code is None for formula, _version in formulas
+    ):
+        warnings.append({
+            "type": "multi_cct_no_scope",
+            "message": (
+                "La corrida liquida varios CCT "
+                f"({', '.join(sorted(run_agreement_codes))}) y alguna fórmula "
+                "no tiene convenio asignado: verificar el alcance en "
+                "/formulas/{id}/scope."
+            ),
+        })
     # Gancho de cobertura por CCT: avisa (sin bloquear) cuando el período
     # excede la vigencia del catálogo o el estado no está vigente.
     if agreement_ids:

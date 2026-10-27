@@ -1,10 +1,17 @@
-"""Reportes internos de control en formatos descargables."""
+"""Reportes internos de control en formatos descargables.
+
+Equivalencia libro de sueldos (V2-29, parte segura): el libro se cubre con
+la planilla interna F.931 (``GET /reports/f931/{run_id}.xlsx``) más los
+recibos por empleado; el agregado por concepto está en
+``GET /reports/payroll-summary/{run_id}``. El layout legal completo del
+libro rubricado sigue PENDING (propuesta en el reporte del sprint).
+"""
 
 # ruff: noqa: B008 -- FastAPI resolves Depends defaults at request time.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_user
@@ -96,6 +103,20 @@ def export_f931_workbook(
             "Cache-Control": "private, no-store",
         },
     )
+
+
+@router.get("/payroll-summary/{run_id}")
+def payroll_summary(run_id: int, db: Session = Depends(get_db), user: User = Depends(require_user)) -> dict:
+    """Agregado por concepto de una corrida calculada (V2-29)."""
+    run = db.scalar(select(PayrollRun).where(PayrollRun.id == run_id, PayrollRun.organization_id == user.organization_id))
+    if run is None:
+        raise HTTPException(status_code=404, detail="Liquidación no encontrada")
+    if run.status not in REPORTABLE_STATUSES:
+        raise HTTPException(status_code=409, detail="La liquidación debe estar calculada para resumirse")
+    rows = db.execute(select(PayrollItem.code, PayrollItem.nature, func.count(PayrollItem.id), func.sum(PayrollItem.amount)).join(PayrollResult, PayrollResult.id == PayrollItem.payroll_result_id).where(PayrollResult.payroll_run_id == run.id).group_by(PayrollItem.code, PayrollItem.nature).order_by(PayrollItem.code)).all()
+    by_concept = [{"code": code, "nature": nature, "employees": count, "total": str(total)} for code, nature, count, total in rows]
+    employees_total = db.scalar(select(func.count(func.distinct(PayrollResult.employee_id))).where(PayrollResult.payroll_run_id == run.id)) or 0
+    return {"payroll_run_id": run.id, "status": run.status, "employees_total": employees_total, "by_concept": by_concept}
 
 
 __all__ = ["router"]

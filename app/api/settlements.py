@@ -14,7 +14,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.auth.dependencies import require_user
 from app.core.payroll_engine import settlements as settlement_engine
@@ -31,6 +31,12 @@ class _ResponseModel(BaseModel):
 class SacInput(BaseModel):
     """Datos para calcular el SAC de un período."""
 
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "period": "2026-06-30",
+        "months_worked": "6",
+        "remunerations": ["1000000", "1200000", "1100000"],
+    }]})
+
     period: date = Field(description="Fecha de cierre del período de SAC.")
     months_worked: Decimal = Field(ge=0, description="Meses de devengamiento ya determinados.")
     remunerations: list[Decimal] | None = Field(
@@ -40,6 +46,7 @@ class SacInput(BaseModel):
     best_salary: Decimal | None = Field(
         default=None,
         ge=0,
+        validation_alias=AliasChoices("best_salary", "base_salary"),
         description="Base explícita que reemplaza al máximo de remunerations.",
     )
     days_worked: Decimal | None = Field(
@@ -56,6 +63,13 @@ class SacInput(BaseModel):
 
 class VacationInput(BaseModel):
     """Datos para calcular el pago de vacaciones."""
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "monthly_salary": "750000",
+        "days": "10",
+        "days_base": "25",
+        "plus_rate": "0.20",
+    }]})
 
     monthly_salary: Decimal = Field(ge=0, description="Salario mensual.")
     days: Decimal = Field(ge=0, description="Días de vacaciones a liquidar.")
@@ -131,6 +145,26 @@ class FinalSettlementParameters(BaseModel):
 
 class FinalSettlementRequest(BaseModel):
     """Payload de liquidación final, separado en datos y parámetros."""
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "inputs": {
+            "period": "2026-06-30",
+            "monthly_salary": "1200000",
+            "integration_days": "15",
+            "vacation_days": "10",
+            "sac_months_worked": "6",
+            "sac_remunerations": ["1100000", "1200000"],
+            "years_of_service": "5",
+            "seniority_base_salary": "1200000",
+        },
+        "parameters": {
+            "preaviso_months": "1",
+            "month_integration_days_base": "30",
+            "vacation_days_base": "25",
+            "vacation_plus_rate": "0.20",
+            "seniority_months_per_year": "1",
+        },
+    }]})
 
     inputs: FinalSettlementInputs
     parameters: FinalSettlementParameters
