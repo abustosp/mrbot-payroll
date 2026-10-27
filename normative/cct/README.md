@@ -45,7 +45,7 @@ El catálogo conserva los textos base, categorías y fórmulas normativas existe
 
 ## 5. Fórmulas DSL Validadas (`normative/cct/formulas.json`)
 
-Se elaboraron y validaron **23 fórmulas declarativas DSL** para el motor de nómina (`payroll_engine`), cubriendo los 11 convenios colectivos. Cada fórmula cumple con las siguientes garantías de verificación:
+Se elaboraron y validaron **24 fórmulas declarativas DSL** para el motor de nómina (`payroll_engine`), cubriendo los 11 convenios colectivos. Cada fórmula cumple con las siguientes garantías de verificación:
 1. **Validación formal:** Valida formalmente contra el modelo Pydantic `FormulaDefinition` y contra el validador estructural de árbol sintáctico `validate_formula()`.
 2. **Determinismo y seguridad:** Ninguna fórmula contiene código ejecutable Python arbitrario; todas las operaciones utilizan operadores DSL seguros (`multiply`, `add`, `divide`, `if`, etc.).
 3. **Parametrización estricta:** Si una fórmula requiere importes o porcentajes que varían con acuerdos paritarios, se definen como parámetros obligatorios de entrada (`parameters`), impidiendo la inclusión de valores no verificados como constantes numéricas.
@@ -54,7 +54,8 @@ Se elaboraron y validaron **23 fórmulas declarativas DSL** para el motor de nó
 | Código de Fórmula | CCT Asociado | Concepto / Artículo | Naturaleza | Parámetros Requeridos |
 |---|---|---|---|---|
 | `CCT_130_75_ANTIGUEDAD` | 130/75 | Adicional antigüedad 1% (Art. 24) | `REMUNERATIVE` | `cct13075_porcentaje_antiguedad` |
-| `CCT_130_75_PRESENTISMO` | 130/75 | Asignación asistencia y puntualidad 1/12 (Art. 40, hasta 1 ausencia) | `REMUNERATIVE` | (constante legal 12; variable `dias_ausentes` ≤ 1) |
+| `CCT_130_75_PRESENTISMO` | 130/75 | Asignación asistencia y puntualidad 1/12 (Art. 40 + Acuerdo 07/2026: incluye sumas NR, hasta 1 ausencia) | `REMUNERATIVE` | (constante legal 12; variable `dias_ausentes` ≤ 1; concepto `CCT_130_75_SUMA_NR_MENSUAL`) |
+| `CCT_130_75_SUMA_NR_MENSUAL` | 130/75 | Suma NR mensual $120.000 + $25.000 extraordinarios jul-ago 2026 (Acuerdo 07/2026) | `NON_REMUNERATIVE` | `cct13075_suma_nr_mensual` |
 | `CCT_76_75_ASISTENCIA` | 76/75 | Adicional asistencia perfecta 20% (Art. 52) | `REMUNERATIVE` | `cct7675_porcentaje_asistencia` |
 | `CCT_76_75_FONDO_CESE` | 76/75 | Aporte Fondo de Cese 12% / 8% (Ley 22.250 Art. 15) | `CONTRIBUTION` | `cct7675_tasa_fondo_primer_anio`, `cct7675_tasa_fondo_segundo_anio` |
 | `CCT_260_75_ANTIGUEDAD` | 260/75 | Escalafón antigüedad 1% (Art. 27) | `REMUNERATIVE` | `cct26075_porcentaje_antiguedad` |

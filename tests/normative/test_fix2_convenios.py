@@ -65,7 +65,13 @@ def test_v2_15_presentismo_hasta_1_ausencia() -> None:
     cond = item["conditions"][0]
     assert cond["field"] == "dias_ausentes" and cond["value"] == 1
     assert cond["operator"] in {"lte", "less_than_or_equal", "less_than_or_equal_to"}
-    base = {"SUELDO_BASICO": "1200000.00", "CCT_130_75_ANTIGUEDAD": "0.00"}
+    # Contrato aclarado (Acuerdo 07/2026, notes.md §3 cct_130_75): la base suma
+    # las sumas no remunerativas mensuales con idéntico tratamiento.
+    base = {
+        "SUELDO_BASICO": "1200000.00",
+        "CCT_130_75_ANTIGUEDAD": "0.00",
+        "CCT_130_75_SUMA_NR_MENSUAL": "0.00",
+    }
     assert _eval("CCT_130_75_PRESENTISMO", variables={"dias_ausentes": 0}, concepts=base) == Decimal(
         "100000.00"
     )
@@ -74,6 +80,10 @@ def test_v2_15_presentismo_hasta_1_ausencia() -> None:
     )
     assert _eval("CCT_130_75_PRESENTISMO", variables={"dias_ausentes": 2}, concepts=base) == Decimal(
         "0.00"
+    )
+    con_nr = dict(base, CCT_130_75_SUMA_NR_MENSUAL="120000.00")
+    assert _eval("CCT_130_75_PRESENTISMO", variables={"dias_ausentes": 0}, concepts=con_nr) == Decimal(
+        "110000.00"
     )
 
 

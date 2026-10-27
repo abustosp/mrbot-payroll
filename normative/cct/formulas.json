@@ -65,7 +65,7 @@
   },
   {
     "code": "CCT_130_75_PRESENTISMO",
-    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual; se abona con hasta 1 ausencia injustificada en el mes (no computan enfermedad, accidente, vacaciones o licencia legal/convencional)",
+    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual más las sumas no remunerativas mensuales con idéntico tratamiento (Acuerdo 07/2026); se abona con hasta 1 ausencia injustificada en el mes (no computan enfermedad, accidente, vacaciones o licencia legal/convencional)",
     "formula": {
       "operator": "divide",
       "arguments": [
@@ -77,6 +77,9 @@
             },
             {
               "concept": "CCT_130_75_ANTIGUEDAD"
+            },
+            {
+              "concept": "CCT_130_75_SUMA_NR_MENSUAL"
             }
           ]
         },
@@ -98,13 +101,14 @@
     },
     "depends_on": [
       "SUELDO_BASICO",
-      "CCT_130_75_ANTIGUEDAD"
+      "CCT_130_75_ANTIGUEDAD",
+      "CCT_130_75_SUMA_NR_MENSUAL"
     ],
     "nature": "REMUNERATIVE",
     "valid_from": "1975-06-01",
     "valid_to": null,
-    "source": "documento: CCT 130/75; articulo: Art. 40 (no mas de una ausencia en el mes; no computan enfermedad, accidente, vacaciones o licencia legal/convencional); url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9; referencia: 05_Textos_Ordenados_Completos_y_Actas_Oficiales/CCT_130_75_Comercio_Texto_Ordenado_y_Serie_2020_2026.md Art. 40 (hasta una ausencia injustificada)",
-    "version": 2,
+    "source": "documento: CCT 130/75; articulo: Art. 40 (no mas de una ausencia en el mes; no computan enfermedad, accidente, vacaciones o licencia legal/convencional); url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9; referencia: 05_Textos_Ordenados_Completos_y_Actas_Oficiales/CCT_130_75_Comercio_Texto_Ordenado_y_Serie_2020_2026.md Art. 40 (hasta una ausencia injustificada); base con sumas NR: Acuerdo 07/2026 (src-130-002, src-130-003), ver normative/cct/evidence/cct_130_75/notes.md §3",
+    "version": 3,
     "status": "APPROVED",
     "tests": [
       {
@@ -114,7 +118,8 @@
         "parameters": {},
         "concepts": {
           "SUELDO_BASICO": "1200000.00",
-          "CCT_130_75_ANTIGUEDAD": "0.00"
+          "CCT_130_75_ANTIGUEDAD": "0.00",
+          "CCT_130_75_SUMA_NR_MENSUAL": "0.00"
         },
         "expected": "100000.00"
       },
@@ -125,7 +130,8 @@
         "parameters": {},
         "concepts": {
           "SUELDO_BASICO": "1200000.00",
-          "CCT_130_75_ANTIGUEDAD": "0.00"
+          "CCT_130_75_ANTIGUEDAD": "0.00",
+          "CCT_130_75_SUMA_NR_MENSUAL": "0.00"
         },
         "expected": "100000.00"
       },
@@ -136,9 +142,59 @@
         "parameters": {},
         "concepts": {
           "SUELDO_BASICO": "1200000.00",
-          "CCT_130_75_ANTIGUEDAD": "0.00"
+          "CCT_130_75_ANTIGUEDAD": "0.00",
+          "CCT_130_75_SUMA_NR_MENSUAL": "0.00"
         },
         "expected": "0.00"
+      },
+      {
+        "variables": {
+          "dias_ausentes": 0
+        },
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "1200000.00",
+          "CCT_130_75_ANTIGUEDAD": "0.00",
+          "CCT_130_75_SUMA_NR_MENSUAL": "120000.00"
+        },
+        "expected": "110000.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_130_75_SUMA_NR_MENSUAL",
+    "description": "Suma no remunerativa mensual CCT 130/75 (Acuerdo 07/2026, homologado por DI-2026-964-APN-DNRYRT#MCH: suma fija de $120.000 desde julio 2026 más asignación extraordinaria de $25.000 en julio y agosto 2026)",
+    "formula": {
+      "parameter": "cct13075_suma_nr_mensual"
+    },
+    "conditions": [],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [],
+    "nature": "NON_REMUNERATIVE",
+    "valid_from": "2026-07-01",
+    "valid_to": "2026-11-30",
+    "source": "documento: Acuerdo 07/2026 CCT 130/75 (incremento 5,7% + suma fija NR $120.000 + extraordinaria NR $50.000 en dos tramos de $25.000 jul-ago 2026); homologa DI-2026-964-APN-DNRYRT#MCH 05/08/2026; local: normative/cct/evidence/cct_130_75/notes.md §3 (src-130-002, src-130-003, vigencia 2026-07-01 a 2026-11-30)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {},
+        "parameters": {
+          "cct13075_suma_nr_mensual": "120000.00"
+        },
+        "concepts": {},
+        "expected": "120000.00"
+      },
+      {
+        "variables": {},
+        "parameters": {
+          "cct13075_suma_nr_mensual": "145000.00"
+        },
+        "concepts": {},
+        "expected": "145000.00"
       }
     ]
   },
