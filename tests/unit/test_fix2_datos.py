@@ -9,11 +9,13 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
+from app.api.common import commit_or_conflict
 from app.auth.service import seed_admin
 from app.database import Base
 from app.database.base import ensure_utc, utc_now
@@ -419,3 +421,33 @@ def test_b42p_concepto_con_items_no_se_borra(db_factory) -> None:
 def test_formula_definition_sin_usar() -> None:
     """Guarda: el import del módulo de fórmulas no usado no rompe el pin."""
     assert FormulaDefinition.__tablename__ == "formula_definitions"
+
+
+def test_guard_escala_mapea_409(db_factory) -> None:
+    """commit_or_conflict mapea ScaleInUseError a HTTP 409."""
+    factory, _ = db_factory
+    with factory() as session:
+        scale = session.scalar(select(SalaryScale).order_by(SalaryScale.id))
+        assert scale is not None
+        session.delete(scale)
+        with pytest.raises(HTTPException) as exc_info:
+            commit_or_conflict(session)
+        assert exc_info.value.status_code == 409
+        assert f"escala {scale.id}" in str(exc_info.value.detail)
+
+
+def test_guard_contrato_mapea_409(db_factory) -> None:
+    """commit_or_conflict mapea ContractInUseError a HTTP 409."""
+    factory, _ = db_factory
+    with factory() as session:
+        contract = session.scalar(
+            select(EmploymentContract)
+            .where(EmploymentContract.active.is_(True))
+            .order_by(EmploymentContract.id)
+        )
+        assert contract is not None
+        session.delete(contract)
+        with pytest.raises(HTTPException) as exc_info:
+            commit_or_conflict(session)
+        assert exc_info.value.status_code == 409
+        assert f"contrato {contract.id}" in str(exc_info.value.detail)

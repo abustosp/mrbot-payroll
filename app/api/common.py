@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.database.guards import ContractInUseError, ScaleInUseError
+
 
 def page(db: Session, statement, limit: int, offset: int) -> dict[str, Any]:
     total = db.scalar(select(func.count()).select_from(statement.subquery())) or 0
@@ -25,3 +27,6 @@ def commit_or_conflict(db: Session) -> None:
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Conflicto con una clave única o referencia existente") from exc
+    except (ScaleInUseError, ContractInUseError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
