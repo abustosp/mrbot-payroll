@@ -382,8 +382,8 @@ def test_failed_recalculation_stays_retryable(
 def test_unsupported_run_type_is_rejected_before_calculating(
     payroll_db: tuple[sessionmaker[Session], dict[str, object]],
 ) -> None:
-    # B-10: filas preexistentes con run_type especial no se liquidan como
-    # mensuales en silencio.
+    # B-10: filas preexistentes con un run_type desconocido no se liquidan
+    # como mensuales en silencio (SAC es soportado y tiene su propio camino).
     from app.services.payroll_calculation import PayrollRunStateError
 
     factory, context = payroll_db
@@ -391,10 +391,10 @@ def test_unsupported_run_type_is_rejected_before_calculating(
         run = PayrollRun(
             organization_id=context["organization_id"],
             company_id=context["company_id"],
-            code="legacy-sac",
+            code="legacy-unknown",
             period_start=date(2026, 6, 1),
             period_end=date(2026, 6, 30),
-            run_type="SAC",
+            run_type="QUINCENAL",
             status="DRAFT",
             created_by=context["admin_id"],
         )

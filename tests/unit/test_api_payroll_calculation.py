@@ -76,19 +76,31 @@ def test_calculation_requires_editor_and_rejects_approved_runs(tmp_path: Path) -
             with factory() as session:
                 assert session.get(PayrollRun, run_id).status == "APPROVED"
 
-            # B-10: un run_type especial no se crea ni se calcula como mensual.
+            # B-10: SAC es un run_type soportado (se liquida con el motor
+            # de settlements); un run_type desconocido se rechaza al crear.
             special = client.post(
                 "/api/v1/payroll-runs",
                 json={
                     "company_id": company_id,
-                    "code": "sac-mistaken",
+                    "code": "sac-run",
                     "period_start": "2026-06-01",
                     "period_end": "2026-06-30",
                     "run_type": "SAC",
                 },
             )
-            assert special.status_code == 422, special.text
-            assert "run_type" in special.text
+            assert special.status_code == 201, special.text
+            unknown = client.post(
+                "/api/v1/payroll-runs",
+                json={
+                    "company_id": company_id,
+                    "code": "quincenal-mistaken",
+                    "period_start": "2026-06-01",
+                    "period_end": "2026-06-30",
+                    "run_type": "QUINCENAL",
+                },
+            )
+            assert unknown.status_code == 422, unknown.text
+            assert "run_type" in unknown.text
     finally:
         app.dependency_overrides.pop(get_db, None)
         engine.dispose()

@@ -252,7 +252,7 @@ class AiProposalPublishRead(AiProposalRead):
     formula_status: str
 
 
-SUPPORTED_RUN_TYPES = ("MONTHLY",)
+SUPPORTED_RUN_TYPES = ("MONTHLY", "SAC", "VACATIONS", "FINAL")
 
 
 class PayrollRunInput(BaseModel):
@@ -273,8 +273,9 @@ class PayrollRunInput(BaseModel):
     @field_validator("run_type")
     @classmethod
     def run_type_is_supported(cls, value: str) -> str:
-        # B-10: SAC/vacaciones se simulan en /settlements; una corrida con
-        # otro run_type se liquidaría como mensual en silencio (D-9 pendiente).
+        # B-10: SAC/VACATIONS/FINAL se liquidan con el motor de settlements
+        # (datos del historial y novedades AUXILIARY); otro run_type se
+        # rechaza para no liquidarlo como mensual en silencio.
         if value not in SUPPORTED_RUN_TYPES:
             raise ValueError(
                 f"run_type {value!r} no soportado; "
