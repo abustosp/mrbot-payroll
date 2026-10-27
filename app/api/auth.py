@@ -100,7 +100,13 @@ def change_password(
     _set_session_cookie(response, user.id, settings, user.session_version)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    # Explicit name: the web router also registers "logout" and url_for
+    # resolves the first match (this API route is included first).
+    name="api_logout",
+)
 def logout(
     response: Response,
     user: User = Depends(require_user),

@@ -540,3 +540,43 @@ def test_unhandled_error_renders_recovery_page() -> None:
             "/propuestas-ia/prop-001/estado", data={"status": "invented"}
         )
         assert invalid.status_code == 400
+
+
+def test_logout_route_name_resolves_to_web_logout() -> None:
+    """El form Salir de base.html usa url_for('logout'): debe ser /logout web.
+
+    La ruta API POST /api/v1/auth/logout comparte el nombre implicito y se
+    incluye primero; si gana, el clic Salir devuelve 401.
+    """
+
+    assert str(main_module.app.url_path_for("logout")) == "/logout"
+
+
+def _all_named_routes(routes, prefix: str = "") -> list[tuple[str, str]]:
+    """Nombres y paths de todas las rutas, entrando en sub-routers incluidos."""
+
+    collected = []
+    for route in routes:
+        name = getattr(route, "name", None)
+        path = getattr(route, "path", "")
+        original = getattr(route, "original_router", None)
+        if original is not None and hasattr(original, "routes"):
+            collected.extend(
+                _all_named_routes(original.routes, prefix + str(path))
+            )
+        else:
+            inner = getattr(route, "routes", None)
+            if inner:
+                collected.extend(_all_named_routes(inner, prefix + str(path)))
+            elif name:
+                collected.append((str(name), prefix + str(path)))
+    return collected
+
+
+def test_full_app_route_names_are_unique() -> None:
+    """Los nombres de ruta no se repiten entre API y web (falla B-URL)."""
+
+    named = _all_named_routes(main_module.app.routes)
+    names = [name for name, _path in named]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    assert not duplicates, f"nombres de ruta duplicados: {duplicates}"
