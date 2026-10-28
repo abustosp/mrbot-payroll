@@ -221,7 +221,7 @@
             </a>
             <a class="quick-action" href="{{ url_for('receipts_list') }}">
               <span class="quick-icon quick-icon--warm">{{ icon("receipts") }}</span>
-              <span class="quick-action-text"><strong>Emitir recibos</strong><small>Vista previa y descarga PDF</small></span>
+              <span class="quick-action-text"><strong>Consultar recibos</strong><small>Vista previa y descarga PDF</small></span>
             </a>
           </div>
         </div>
@@ -286,7 +286,7 @@
               {% endfor %}
             </ul>
           {% else %}
-            {% with empty_title="Sin recibos emitidos", empty_message="Genere una liquidación para emitir recibos.", empty_icon="receipts" %}
+            {% with empty_title="Sin recibos", empty_message="Todavía no hay recibos disponibles para consultar.", empty_icon="receipts" %}
               {% include "partials/_empty_state.html" %}
             {% endwith %}
           {% endif %}

@@ -70,7 +70,9 @@ def test_seed_login_calculate_recalculate_and_export(tmp_path: Path) -> None:
             with factory() as session:
                 assert session.scalar(select(func.count()).select_from(PayrollResult)) == 2
                 assert session.scalar(select(func.count()).select_from(PayrollItem)) == 6
-                assert session.scalar(select(func.count()).select_from(PayrollTrace)) == 2
+                assert session.scalar(select(func.count()).select_from(PayrollTrace).where(PayrollTrace.employee_id.is_not(None))) == 2
+                review = session.scalar(select(PayrollTrace).where(PayrollTrace.event == "CALCULATION_REVIEW"))
+                assert review is not None and review.detail["summary"]["calculated"] == 2
                 employees = {
                     employee.id: employee
                     for employee in session.scalars(select(Employee)).all()
@@ -127,6 +129,20 @@ def test_seed_login_calculate_recalculate_and_export(tmp_path: Path) -> None:
             assert receipt.status_code == 200, receipt.text
             assert receipt.headers["content-type"] == "application/pdf"
             assert receipt.content.startswith(b"%PDF-")
+
+            report = client.get(f"/api/v1/reports/f931/{run_id}.xlsx")
+            assert report.status_code == 200, report.text
+            assert report.content.startswith(b"PK")
+            approved = client.post(f"/api/v1/payroll-runs/{run_id}/approve")
+            assert approved.status_code == 200, approved.text
+            assert approved.json()["status"] == "APPROVED"
+            for action in ("calculate", "approve", "reopen"):
+                blocked = client.post(f"/api/v1/payroll-runs/{run_id}/{action}")
+                assert blocked.status_code == 409, (action, blocked.text)
+            after = client.get(f"/api/v1/payroll-runs/{run_id}")
+            assert after.json()["status"] == "APPROVED"
+            with factory() as session:
+                assert session.scalar(select(func.count()).select_from(PayrollResult)) == 2
     finally:
         app.dependency_overrides.pop(get_db, None)
         engine.dispose()

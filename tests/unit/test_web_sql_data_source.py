@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
@@ -195,6 +196,22 @@ def test_sql_lists_filter_in_sql_and_paginate(tmp_path: Path) -> None:
                     amount=amount,
                 )
             )
+        category_match = AgreementCategory(
+            agreement_id=org["agreement_id"], code="MATCH", name="CategoriaUnica"
+        )
+        session.add(category_match)
+        session.flush()
+        second = session.scalar(select(Employee).where(Employee.employee_code == "P-002"))
+        third = session.scalar(select(Employee).where(Employee.employee_code == "P-003"))
+        assert second is not None and third is not None
+        session.add(EmploymentContract(
+            employee_id=second.id, company_id=org["company_id"],
+            agreement_id=org["agreement_id"], category_id=category_match.id,
+            valid_from=date(2020, 1, 1), valid_to=date(2021, 1, 1), active=False,
+        ))
+        current = session.scalar(select(EmploymentContract).where(EmploymentContract.employee_id == third.id))
+        assert current is not None
+        current.category_id = category_match.id
 
     statements: list[str] = []
 
@@ -223,6 +240,8 @@ def test_sql_lists_filter_in_sql_and_paginate(tmp_path: Path) -> None:
             employee.id for employee in employees
         }
         assert source.list_employees(limit=1, offset=9) == []
+        assert [employee.file_number for employee in source.list_employees(query="CategoriaUnica", limit=1)] == ["P-003"]
+        assert source.list_employees(query="CategoriaUnica", limit=1, offset=1) == []
 
         receipts = source.list_receipts()
         assert len(receipts) == 3
@@ -232,8 +251,13 @@ def test_sql_lists_filter_in_sql_and_paginate(tmp_path: Path) -> None:
         assert source.list_receipts(period="2026-09") == receipts
         assert source.list_receipts(period="1999-01") == []
         assert source.list_receipts(period="nope") == []
+        assert source.list_receipts(period="9999-12") == []
         assert source.list_receipts(company_id=str(org["company_id"])) == receipts
         assert source.list_receipts(query="paginado 3") != []
+        assert source.list_receipts(query=receipts[0].number) == [receipts[0]]
+        assert source.list_receipts(query="R-2026-09-run-p", limit=2) == receipts[:2]
+        assert source.list_receipts(payroll_id=str(org["run_id"])) == receipts
+        assert source.list_receipts(payroll_id="99999") == []
 
         first_receipts = source.list_receipts(limit=2)
         rest_receipts = source.list_receipts(limit=2, offset=2)
@@ -415,8 +439,16 @@ def test_sql_data_source_isolates_organizations(tmp_path: Path) -> None:
             assert session.get(AiProposal, org_b["proposal_id"]).status == "draft"
         metrics_before_update = source_a.dashboard_metrics()
         assert metrics_before_update["pending_proposals"] == 1
-        updated = source_a.set_proposal_status(str(org_a["proposal_id"]), "approved")
-        assert updated is not None and updated.status == "approved"
+        with factory() as session:
+            user_id = session.scalar(select(User.id).where(User.organization_id == org_a["organization_id"]))
+        with pytest.raises(HTTPException) as invalid:
+            source_a.set_proposal_status(str(org_a["proposal_id"]), "approved", user_id=user_id)
+        assert invalid.value.status_code == 409
+        updated = source_a.set_proposal_status(str(org_a["proposal_id"]), "rejected", user_id=user_id)
+        assert updated is not None and updated.status == "rejected"
+        with pytest.raises(HTTPException) as final:
+            source_a.set_proposal_status(str(org_a["proposal_id"]), "in_review", user_id=user_id)
+        assert final.value.status_code == 409
         with factory() as session:
             assert session.get(AiProposal, org_b["proposal_id"]).status == "draft"
 

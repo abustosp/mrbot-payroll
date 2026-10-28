@@ -1,6 +1,18 @@
 {% from "partials/icons.html" import icon %}
 <div id="receipts-results">
   <div class="filter-summary">
+  {% if receipts %}
+    <a class="btn btn--primary" href="{{ url_for('receipts_zip') }}?company_id={{ company_id | urlencode }}&amp;period={{ period | urlencode }}&amp;payroll_id={{ payroll_id | urlencode }}&amp;q={{ query | urlencode }}&amp;status={{ status | urlencode }}">
+      {{ icon("download") }} Descargar lote ZIP
+    </a>
+  {% else %}
+    <span class="btn btn--primary" aria-disabled="true" title="Sin resultados para los filtros aplicados">
+      {{ icon("download") }} Descargar lote ZIP
+    </span>
+  {% endif %}
+  <small class="muted">El ZIP incluye todos los recibos que coinciden con los filtros, incluida la búsqueda y el estado, en todas las páginas.</small>
+</div>
+  <div class="filter-summary">
     <span><strong>{{ receipts | length }}</strong> recibos encontrados{% if query %} para “{{ query }}”{% endif %}</span>
     <span>Neto consolidado: <strong>{{ receipts | sum(attribute="net") | money }}</strong></span>
   </div>

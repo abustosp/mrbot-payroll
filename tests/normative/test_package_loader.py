@@ -526,3 +526,24 @@ def test_import_requires_admin_but_listing_allows_editor(api) -> None:
 
     listing = client.get("/api/v1/normative-packages/ccts")
     assert listing.status_code == 200, listing.text
+
+
+def test_parameter_scopes_allow_same_code_and_keep_import_idempotent(session: Session) -> None:
+    catalog = minimal_catalog()
+    original = catalog["ccts"][0]["parameters"][0]
+    for agreement, category, value in (
+        ("130/75", "", "0.02"), ("130/75", "ADMIN_A", "0.03"), ("389/04", "", "0.04"),
+    ):
+        catalog["ccts"][0]["parameters"].append({
+            **original, "agreement_code": agreement, "category_code": category, "value": value,
+        })
+    result = load_cct_catalog(session, catalog, dry_run=False)
+    assert result.parameters.created == 4
+    assert load_cct_catalog(session, catalog, dry_run=False).parameters.unchanged == 4
+    rows = session.scalars(select(NormativeParameter)).all()
+    assert {(row.agreement_code, row.category_code) for row in rows} == {
+        ("", ""), ("130/75", ""), ("130/75", "ADMIN_A"), ("389/04", ""),
+    }
+    catalog["ccts"][0]["parameters"].append({**original, "category_code": "ADMIN_A"})
+    with pytest.raises(PackageValidationError, match="category_code requiere agreement_code"):
+        load_cct_catalog(session, catalog)

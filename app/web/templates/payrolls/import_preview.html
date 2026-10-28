@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Revisar novedades{% endblock %}
+{% block breadcrumb %}<li><a href="{{ url_for('payroll_detail', payroll_id=run.id) }}">Liquidación</a></li><li class="current">Revisar novedades</li>{% endblock %}
+{% block content %}
+<section class="card"><div class="card-header"><h2 class="card-title">Vista previa: {{ filename }}</h2></div><div class="card-body">
+  <p>{{ preview.valid_count }} filas válidas · {{ preview.error_count }} errores · {{ preview.duplicate_count }} duplicados</p>
+  {% for error in preview.errors %}<p role="alert">Fila {{ error.row }}: {{ error.message }}</p>{% endfor %}
+  {% for duplicate in preview.duplicates %}<p>Fila {{ duplicate.row }}: {{ duplicate.message }}</p>{% endfor %}
+  {% for warning in preview.warnings %}<p>Advertencia: {{ warning.message }}</p>{% endfor %}
+  {% if preview.valid_rows %}<div class="table-wrap"><table class="data-table"><thead><tr><th>Legajo</th><th>Período</th><th>Tipo</th><th>Cantidad</th><th>Importe</th><th>Observación</th></tr></thead><tbody>
+  {% for row in preview.valid_rows %}<tr><td>{{ row.legajo }}</td><td>{{ row.periodo }}</td><td>{{ row.tipo }}</td><td>{{ row.cantidad or '' }}</td><td>{{ row.importe or '' }}</td><td>{{ row.observacion or '' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('payroll_novelties', run_id=run.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation" value="{{ confirmation }}">
+    <p>Seleccione el mismo archivo para confirmar la importación de las filas válidas.</p>
+    <label for="confirmed-file">Archivo revisado</label> <input id="confirmed-file" type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
+    <button class="btn btn--primary" type="submit">Confirmar importación</button>
+  </form>{% endif %}
+  <p><a href="{{ url_for('payroll_detail', payroll_id=run.id) }}">Volver a la liquidación</a></p>
+</div></section>
+{% endblock %}

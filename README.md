@@ -27,20 +27,21 @@ demo y no constituye una implementación lista para producción.
 | Proveedor Argentina | Implementado como demo | CCT 130/75 acotado y parámetros ilustrativos |
 | IA supervisada | Implementado | Extracción, análisis, validación, persistencia y publicación manual como fórmula borrador |
 | API de IA | Implementado con `MockProvider` | Para un proveedor real hay que inyectar la dependencia en código |
-| UI web | Implementado | Demo por defecto o lectura SQL opcional; login y CSRF |
+| UI web | Implementado | Demo por defecto; en SQL creación, novedades, cálculo, revisión y aprobación con login/CSRF |
 | Recibos PDF | Implementado | HTML, PDF individual y ZIP; sin validación legal |
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
 | Importadores CSV/XLSX | Implementado | API con dry-run; alta idempotente de empleados y novedades |
 | Paquetes normativos CCT | Implementado | 11 CCT, 254 documentos y 786 escalas verificadas (778 desde 2020 y 8 históricas) |
-| Liquidaciones especiales | Implementado como módulo, API y `run_type` | SAC por historial, vacaciones/final por novedades `AUXILIARY`; sin aportes ni contribuciones |
+| Liquidaciones especiales | Implementado con revisión | SAC proporcional por días e historial o base explícita; descuentos/contribuciones por fórmulas aprobadas específicas; final incompleta bloqueada para aprobación |
 | Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
 
 La autenticación, la API, el motor de fórmulas, el cálculo, el flujo de IA, la
 importación, la evidencia CCT y los reportes internos existen. Lo que sigue
-pendiente es filtrar parámetros por convenio/categoría, llevar
-SAC/vacaciones/final a la UI (ya son `run_type` liquidables), validar los
-formatos contra ARCA y completar el endurecimiento para producción.
+pendiente es completar los escenarios de liquidación final según causa,
+validar los formatos contra ARCA y completar el endurecimiento para producción.
+Los parámetros ya se resuelven por convenio/categoría y los tipos de corrida
+están disponibles en la UI SQL.
 
 ## Requisitos
 
@@ -97,7 +98,8 @@ no hay un bootstrap de usuarios para producción.
 
 La interfaz arranca en modo demo por defecto. Para que muestre los datos
 cargados en SQLite, agregar `PAYROLL_WEB_DATA_SOURCE=sql` a `.env` y reiniciar la
-aplicación. Ese modo es de solo lectura.
+aplicación. Ese modo permite operar el circuito de liquidaciones con los roles
+de editor y administrador; el rol viewer conserva acceso de solo lectura.
 
 La UI exige login en ambos modos (`PAYROLL_WEB_AUTH_ENABLED=true` por defecto).
 En modo demo valida `PAYROLL_ADMIN_EMAIL` y `PAYROLL_ADMIN_PASSWORD`; en modo SQL
@@ -228,8 +230,9 @@ Tiene dos fuentes de datos:
 - `PAYROLL_WEB_DATA_SOURCE=demo` es el valor por defecto y usa un
   `DemoDataStore` en memoria. Los cambios desaparecen al reiniciar y no se
   reflejan en SQLAlchemy.
-- `PAYROLL_WEB_DATA_SOURCE=sql` usa `SqlAlchemyDataSource`, una proyección de
-  solo lectura sobre las tablas reales. Requiere migración y datos cargados. La
+- `PAYROLL_WEB_DATA_SOURCE=sql` usa `SqlAlchemyDataSource` para consultar las
+  tablas reales y reutiliza los servicios de API para operar liquidaciones.
+  Requiere migración y datos cargados. La
   bandeja de propuestas de la UI lista las propuestas persistidas en
   `ai_proposals`, que requieren revisión humana antes de aprobarse.
 
@@ -420,8 +423,11 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
 - La publicación de una propuesta crea una fórmula en `DRAFT`; no la aprueba
   ni la activa.
 - SAC, vacaciones y liquidación final se eligen desde el tipo de corrida
-  (`SAC`/`VACATIONS`/`FINAL`) además de la API de simulación; todavía no
-  desde la UI.
+  (`SAC`/`VACATIONS`/`FINAL`) en la UI SQL, además de la API de simulación,
+  con revisión de errores y trazas. Las corridas especiales
+  requieren fórmulas aprobadas específicas de descuentos y contribuciones;
+  no se aprueban si faltan esas reglas. FINAL conserva alcance parcial y no
+  admite aprobación hasta completar sus escenarios.
 - El reporte F.931 es una planilla interna de control, no el formato oficial.
 - El cálculo cubre una corrida mensual básica. No incluye retroactivos
   complejos ni asientos contables.
@@ -437,6 +443,8 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
 
 - `docs/ARCHITECTURE.md`: componentes, flujo, seguridad y auditoría.
 - `docs/AUDIT_2026-10-26.md`: hallazgos de la auditoría y correcciones aplicadas.
+- `docs/AUDIT_E2E_2026-10-28.md`: auditoría con especialistas, correcciones E2E y pendientes priorizados.
+- `docs/MEJORAS_LIQUIDACION_2026-10-28.md`: continuación implementada, referencias PDF/ERP, migraciones y límites restantes.
 - `docs/NORMATIVE_DATA.md`: datos demo, versionado y validación pendiente.
 - `docs/OPERATIONS.md`: salud, backups y operación.
 - `docs/IMPLEMENTATION_CONTRACTS.md`: contratos entre módulos.

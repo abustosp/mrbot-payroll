@@ -3,8 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from app.web.routes import TEMPLATES_DIR, templates
+from app.config import Settings, get_settings
+from app.web.demo_data import DemoDataStore
+from app.web.routes import TEMPLATES_DIR, router, templates
 
 
 def _template_files() -> list[Path]:
@@ -72,6 +76,23 @@ def test_templates_do_not_contain_secret_placeholders() -> None:
         content = path.read_text(encoding="utf-8")
         for needle in forbidden:
             assert needle not in content, f"{needle} encontrado en {path}"
+
+
+def test_receipt_filter_refreshes_zip_scope() -> None:
+    app = FastAPI()
+    app.include_router(router)
+    app.state.payroll_data_source = DemoDataStore()
+    app.dependency_overrides[get_settings] = lambda: Settings(web_auth_enabled=False)
+    with TestClient(app) as client:
+        response = client.get(
+            "/recibos",
+            params={"company_id": "cmp-andes", "period": "2026-09", "payroll_id": "pay-2026-09"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert response.status_code == 200
+    assert "company_id=cmp-andes&amp;period=2026-09&amp;payroll_id=pay-2026-09" in response.text
+    assert "incluida la búsqueda y el estado" in response.text
 
 
 @pytest.mark.parametrize(

@@ -42,8 +42,6 @@
   <div style="display: grid; gap: 8px; margin-top: 18px;">
     {% if proposal.status in ["draft", "in_review"] %}
       <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-            hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-            hx-target="#proposal-status-panel" hx-swap="outerHTML"
             onsubmit="return confirm('¿Confirmás aprobar esta propuesta?')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="status" value="approved">
@@ -51,8 +49,6 @@
       </form>
       {% if proposal.status == "draft" %}
         <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-              hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-              hx-target="#proposal-status-panel" hx-swap="outerHTML"
               onsubmit="return confirm('¿Confirmás enviar esta propuesta a revisión?')">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="status" value="in_review">
@@ -60,22 +56,20 @@
         </form>
       {% endif %}
       <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-            hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-            hx-target="#proposal-status-panel" hx-swap="outerHTML"
             onsubmit="return confirm('¿Confirmás rechazar esta propuesta?')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="status" value="rejected">
         <button class="btn btn--danger" type="submit" style="width: 100%;">{{ icon("x") }} Rechazar propuesta</button>
       </form>
-    {% else %}
+    {% elif demo_mode and proposal.status != "published" %}
       <form method="post" action="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-            hx-post="{{ url_for('proposal_update_status', proposal_id=proposal.id) }}"
-            hx-target="#proposal-status-panel" hx-swap="outerHTML"
             onsubmit="return confirm('¿Confirmás devolver esta propuesta a revisión?')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="status" value="in_review">
         <button class="btn btn--outline" type="submit" style="width: 100%;">{{ icon("refresh") }} Devolver a revisión</button>
       </form>
+    {% else %}
+      <p class="muted" style="margin: 0;">Esta propuesta ya fue resuelta y no puede volver a revisión.</p>
     {% endif %}
   </div>
   {% else %}

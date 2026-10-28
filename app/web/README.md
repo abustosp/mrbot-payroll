@@ -38,6 +38,10 @@ visual está en `GET /salud` y en el alias `GET /health/visual`.
 | `/convenios/{id}` | Detalle normativo y propuestas IA |
 | `/liquidaciones` | Historial filtrable |
 | `/liquidaciones/{id}` | Resultados, conceptos y recibos |
+| `POST /liquidaciones` | Crear corrida SQL (editor/admin) |
+| `POST /liquidaciones/{id}/novedades` | Revisar y confirmar archivo de novedades |
+| `POST /liquidaciones/{id}/accion` | Calcular; aprobar o reabrir con rol admin |
+| `/liquidaciones/{id}/descargar/{kind}` | Resultados CSV o control interno F.931 |
 | `/propuestas-ia` | Bandeja de revisión (demo y SQL) |
 | `/propuestas-ia/{id}` | Detalle y acciones de estado |
 | `/recibos` | Listado filtrable de recibos |
@@ -51,6 +55,15 @@ visual está en `GET /salud` y en el alias `GET /health/visual`.
 Las acciones de estado de propuestas funcionan en ambos modos (demo y SQL).
 La publicación real de reglas debe hacerse en el servicio de IA con permisos y
 auditoría; la capa web no duplica esas reglas.
+
+En SQL, el circuito de liquidación permite crear una corrida, revisar un archivo
+de novedades, confirmar su importación, calcular, consultar errores y trazas,
+reabrir, recalcular y aprobar. La confirmación exige seleccionar el mismo
+archivo revisado; la firma liga su contenido, extensión, usuario y corrida.
+La demo no permite escribir liquidaciones. Las empresas, legajos, contratos y
+fórmulas deben estar configurados previamente; sus altas siguen en la API.
+Los recibos ZIP respetan búsqueda, estado, empresa, período y corrida, en
+todas las páginas del listado.
 
 ## Autenticación y CSRF
 

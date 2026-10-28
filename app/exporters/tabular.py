@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import Response
 from openpyxl import Workbook
@@ -35,7 +36,7 @@ def normalize_format(raw: Any) -> str:
     return value
 
 
-def _cell(value: Any, *, for_xlsx: bool = False) -> Any:
+def _cell(value: Any, *, for_xlsx: bool = False, spreadsheet: bool = False) -> Any:
     if value is None:
         return ""
     if isinstance(value, bool):
@@ -44,6 +45,8 @@ def _cell(value: Any, *, for_xlsx: bool = False) -> Any:
         return float(value) if for_xlsx else str(value)
     if isinstance(value, (date, datetime)):
         return value.isoformat()
+    if spreadsheet and isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + value
     return value
 
 
@@ -66,7 +69,9 @@ def render_table(
         sheet.title = "datos"
         sheet.append(list(columns))
         for row in rows:
-            sheet.append([_cell(row.get(column), for_xlsx=True) for column in columns])
+            sheet.append([
+                _cell(row.get(column), for_xlsx=True, spreadsheet=True) for column in columns
+            ])
         buffer = io.BytesIO()
         book.save(buffer)
         return buffer.getvalue()
@@ -74,7 +79,7 @@ def render_table(
     writer = csv.writer(text_buffer)
     writer.writerow(list(columns))
     for row in rows:
-        writer.writerow([_cell(row.get(column)) for column in columns])
+        writer.writerow([_cell(row.get(column), spreadsheet=True) for column in columns])
     return ("\ufeff" + text_buffer.getvalue()).encode("utf-8")
 
 
@@ -88,12 +93,13 @@ def table_response(
 
     fmt = normalize_format(format)
     content = render_table(rows, columns, fmt)
+    filename = quote(f"{base_name}-export.{_SUFFIXES[fmt]}", safe="-_.")
     return Response(
         content=content,
         media_type=_MEDIA_TYPES[fmt],
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{base_name}-export.{_SUFFIXES[fmt]}"'
+                f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
             ),
             "Cache-Control": "private, no-store",
         },

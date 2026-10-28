@@ -13,23 +13,38 @@ presentan los datos.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, URLSafeTimedSerializer
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.imports import _read_upload, import_novelties
+from app.api.payroll_runs import (
+    approve_payroll_run,
+    calculate_run,
+    create_payroll_run,
+    export_payroll_results,
+    reopen_payroll_run,
+)
+from app.api.reports import export_f931_workbook
+from app.api.schemas import PayrollRunInput
 from app.config import Settings, get_settings
-from app.database.models import User
+from app.database.models import Employee, PayrollResult, PayrollRun, PayrollTrace, User
 from app.database.session import get_db
 from app.exporters.pdf.receipts import (
+    PdfRendererUnavailable,
     ReceiptContextError,
+    ReceiptError,
     pdf_backend_status,
     render_receipt_html,
     render_receipt_pdf,
@@ -141,6 +156,7 @@ PAYROLL_STATUS_OPTIONS = [
     ("draft", "Borrador"),
     ("calculated", "Calculada"),
     ("review", "En revisión"),
+    ("error", "Con errores"),
     ("approved", "Aprobada"),
     ("closed", "Cerrada"),
 ]
@@ -176,9 +192,12 @@ def _receipts_error_redirect(
     *,
     company_id: str = "",
     period: str = "",
+    payroll_id: str = "",
+    q: str = "",
+    status: str = "",
     error: str,
 ) -> RedirectResponse:
-    params = {key: value for key, value in (("company_id", company_id), ("period", period)) if value}
+    params = {key: value for key, value in (("company_id", company_id), ("period", period), ("payroll_id", payroll_id), ("q", q), ("status", status)) if value}
     params["error"] = error
     return RedirectResponse(
         url=f"{request.url_for('receipts_list')}?{urlencode(params)}",
@@ -227,6 +246,7 @@ def _render(
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Cache-Control", "private, no-store")
     return response
 
 
@@ -671,8 +691,144 @@ def payrolls_list(
     return _render(request, "payrolls/list.html", **context)
 
 
+
+def _sql_user(db: Session, user: WebUser, data: Any, roles: set[str]) -> User:
+    if user.is_demo or getattr(data, "is_demo", False):
+        raise HTTPException(status_code=403, detail="El modo demo es de solo lectura.")
+    row = db.get(User, user.id)
+    if row is None or not row.active or row.role not in roles:
+        raise HTTPException(status_code=403, detail="Permiso insuficiente.")
+    return row
+
+
+def _run(db: Session, user: User, run_id: int) -> PayrollRun:
+    row = db.scalar(select(PayrollRun).where(
+        PayrollRun.id == run_id, PayrollRun.organization_id == user.organization_id
+    ))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Liquidación no encontrada.")
+    return row
+
+
+def _payroll_redirect(request: Request, run_id: int | None = None, **params: str) -> RedirectResponse:
+    url = str(request.url_for("payroll_detail", payroll_id=run_id)) if run_id else str(request.url_for("payrolls_list"))
+    if params:
+        url += "?" + urlencode(params)
+    return RedirectResponse(url, status_code=303)
+
+
+@protected_router.post("/liquidaciones", name="payroll_create")
+def payroll_create(
+    request: Request, data: DataSource, user: WebUserDep, db: SessionDep, settings: SettingsDep,
+    company_id: Annotated[str, Form()], code: Annotated[str, Form()],
+    period_start: Annotated[str, Form()], period_end: Annotated[str, Form()],
+    run_type: Annotated[str, Form()], csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    try:
+        payload = PayrollRunInput(company_id=company_id, code=code.strip(), period_start=period_start,
+                                  period_end=period_end, run_type=run_type)
+        run = create_payroll_run(payload, db=db, user=actor)
+    except (ValidationError, HTTPException) as exc:
+        db.rollback()
+        return _payroll_redirect(request, error=_error_message(exc))
+    return _payroll_redirect(request, run.id, notice="Liquidación creada. Cargue novedades y calcule.")
+
+
+def _error_message(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)[:300]
+    if isinstance(exc, ValidationError):
+        return "; ".join(f"{'.'.join(str(x) for x in e['loc'])}: {e['msg']}" for e in exc.errors())[:300]
+    return str(exc)[:300]
+
+
+@protected_router.post("/liquidaciones/{run_id}/accion", name="payroll_action")
+def payroll_action(
+    request: Request, run_id: int, data: DataSource, user: WebUserDep, db: SessionDep,
+    settings: SettingsDep, action: Annotated[str, Form()], csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin"} if action in {"approve", "reopen"} else {"admin", "editor"})
+    run = _run(db, actor, run_id)
+    try:
+        if action == "calculate":
+            calculate_run(run_id, include_items=False, results_limit=50, results_offset=0,
+                          allow_unconsumed_novelties=False, db=db, user=actor)
+            notice = "Cálculo terminado. Revise los resultados y alertas."
+        elif action == "reopen":
+            reopen_payroll_run(run_id, db=db, user=actor)
+            notice = "Liquidación reabierta. Puede modificar novedades y recalcular."
+        elif action == "approve":
+            count = db.scalar(select(func.count(PayrollResult.id)).where(PayrollResult.payroll_run_id == run.id))
+            if run.status not in {"CALCULATED", "IN_REVIEW"} or not count:
+                raise HTTPException(status_code=409, detail="Solo se aprueban liquidaciones calculadas con resultados y sin errores.")
+            approve_payroll_run(run_id, db=db, user=actor)
+            notice = "Liquidación aprobada."
+        else:
+            raise HTTPException(status_code=400, detail="Acción no válida.")
+    except HTTPException as exc:
+        db.rollback()
+        return _payroll_redirect(request, run_id, error=_error_message(exc))
+    return _payroll_redirect(request, run_id, notice=notice)
+
+
+@protected_router.post("/liquidaciones/{run_id}/novedades", name="payroll_novelties")
+def payroll_novelties(
+    request: Request, run_id: int, data: DataSource, user: WebUserDep, db: SessionDep,
+    settings: SettingsDep, file: Annotated[UploadFile, File()],
+    csrf_token: Annotated[str, Form()] = "", confirmation: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    run = _run(db, actor, run_id)
+    if run.status != "DRAFT":
+        return _payroll_redirect(request, run_id, error="Reabra la liquidación antes de importar novedades.")
+    try:
+        content, filename = _read_upload(file)
+        preview = import_novelties(file=file, dry_run=True, company_id=run.company_id, db=db, user=actor)
+        period = run.period_end.strftime("%Y%m")
+        if any(row["periodo"] != period for row in preview["valid_rows"]):
+            raise HTTPException(status_code=400, detail=f"Todas las novedades deben corresponder al período {period}.")
+        serializer = URLSafeTimedSerializer(settings.secret_key, salt="payroll-web-import")
+        proof = {"run": run.id, "user": actor.id, "digest": hashlib.sha256(content).hexdigest(), "suffix": Path(filename).suffix.lower()}
+        if confirmation:
+            try:
+                signed = serializer.loads(confirmation, max_age=3600)
+            except BadSignature as exc:
+                raise HTTPException(status_code=400, detail="La confirmación venció. Revise el archivo nuevamente.") from exc
+            if signed != proof:
+                raise HTTPException(status_code=400, detail="El archivo no coincide con el revisado.")
+            result = import_novelties(file=file, dry_run=False, company_id=run.company_id, db=db, user=actor)
+            problems = result.get("errors", []) + result.get("duplicates", [])
+            message = f"Importación terminada: {result.get('created', 0)} creadas; {len(problems)} errores o duplicados."
+            if problems:
+                message += " " + "; ".join(f"Fila {item.get('row', '?')}: {item.get('message', '')}" for item in problems[:3])[:200]
+            return _payroll_redirect(request, run_id, notice=message)
+        token = serializer.dumps(proof)
+    except HTTPException as exc:
+        db.rollback()
+        return _payroll_redirect(request, run_id, error=_error_message(exc))
+    return _render(request, "payrolls/import_preview.html", page_title="Revisar novedades",
+                   page_subtitle=f"Liquidación {run.code}", active_nav="payrolls", run=run,
+                   preview=preview, confirmation=token, filename=filename)
+
+
+@protected_router.get("/liquidaciones/{run_id}/descargar/{kind}", name="payroll_download")
+def payroll_download(run_id: int, kind: str, data: DataSource, user: WebUserDep, db: SessionDep) -> Response:
+    actor = _sql_user(db, user, data, {"admin", "editor", "viewer"})
+    _run(db, actor, run_id)
+    if kind == "resultados":
+        return export_payroll_results(run_id, format="csv", db=db, user=actor)
+    if kind == "f931":
+        return export_f931_workbook(run_id, db=db, user=actor)
+    raise HTTPException(status_code=404, detail="Descarga no encontrada.")
+
+
+
 @protected_router.get("/liquidaciones/{payroll_id}", name="payroll_detail")
-def payroll_detail(request: Request, payroll_id: str, data: DataSource) -> HTMLResponse:
+def payroll_detail(request: Request, payroll_id: str, data: DataSource, user: WebUserDep, db: SessionDep) -> HTMLResponse:
     payroll = data.get_payroll(payroll_id)
     if payroll is None:
         return _not_found(
@@ -681,7 +837,19 @@ def payroll_detail(request: Request, payroll_id: str, data: DataSource) -> HTMLR
             message=f"No existe una liquidación con identificador {payroll_id!r}.",
             active_nav="payrolls",
         )
-    receipts = data.list_receipts(company_id=payroll.company_id, period=payroll.period)
+    receipts = data.list_receipts(payroll_id=payroll.id)
+    traces: list[Any] = []
+    if not user.is_demo and not getattr(data, "is_demo", False) and payroll_id.isdigit():
+        actor = _sql_user(db, user, data, {"admin", "editor", "viewer"})
+        run = _run(db, actor, int(payroll_id))
+        traces = list(db.execute(select(PayrollTrace, Employee).outerjoin(
+            Employee, Employee.id == PayrollTrace.employee_id
+        ).where(PayrollTrace.payroll_run_id == run.id).order_by(PayrollTrace.id)).all())
+    approval_blocked = any(
+        alert.get("type") in {"settlement_missing_rules", "settlement_incomplete"}
+        for trace, _employee in traces if trace.event == "CALCULATION_REVIEW"
+        for alert in trace.detail.get("warnings", [])
+    )
     return _render(
         request,
         "payrolls/detail.html",
@@ -690,6 +858,8 @@ def payroll_detail(request: Request, payroll_id: str, data: DataSource) -> HTMLR
         active_nav="payrolls",
         payroll=payroll,
         receipts=receipts,
+        traces=traces,
+        approval_blocked=approval_blocked,
     )
 
 
@@ -755,7 +925,7 @@ def proposal_update_status(
     allowed = {"draft", "in_review", "approved", "rejected"}
     if status not in allowed:
         raise HTTPException(status_code=400, detail="Estado de propuesta no válido.")
-    proposal = data.set_proposal_status(proposal_id, status)
+    proposal = data.set_proposal_status(proposal_id, status, user_id=user.id)
     if proposal is None:
         if _is_htmx(request):
             return HTMLResponse(
@@ -787,6 +957,7 @@ def receipts_list(
     company_id: Annotated[str, Query(max_length=80)] = "",
     period: Annotated[str, Query(max_length=20)] = "",
     status: Annotated[str, Query(max_length=30)] = "",
+    payroll_id: Annotated[str, Query(max_length=80)] = "",
     page: Annotated[int, Query(ge=1)] = 1,
     error: Annotated[str, Query(max_length=200)] = "",
 ) -> HTMLResponse:
@@ -797,6 +968,7 @@ def receipts_list(
         company_id=company_id,
         period=period,
         status=status,
+        payroll_id=payroll_id,
         limit=limit,
         offset=offset,
     )
@@ -808,6 +980,7 @@ def receipts_list(
         "company_id": company_id,
         "period": period,
         "status": status,
+        "payroll_id": payroll_id,
         "error": _clean_query(error),
         "status_options": RECEIPT_STATUS_OPTIONS,
         "active_nav": "receipts",
@@ -825,20 +998,25 @@ def receipts_zip(
     data: DataSource,
     company_id: Annotated[str, Query(max_length=80)] = "",
     period: Annotated[str, Query(max_length=20)] = "",
+    payroll_id: Annotated[str, Query(max_length=80)] = "",
+    q: Annotated[str, Query(max_length=120)] = "",
+    status: Annotated[str, Query(max_length=30)] = "",
 ) -> Response:
-    receipts = data.list_receipts(company_id=company_id, period=period)
+    receipts = data.list_receipts(company_id=company_id, period=period, payroll_id=payroll_id, query=_clean_query(q), status=status)
     if not receipts:
         return _receipts_error_redirect(
             request,
             company_id=company_id,
             period=period,
+            payroll_id=payroll_id,
+            q=q, status=status,
             error="No hay recibos para los filtros indicados.",
         )
     try:
         archive = render_receipts_zip(receipt.to_pdf_context() for receipt in receipts)
-    except ReceiptContextError as exc:
+    except (ReceiptError, PdfRendererUnavailable) as exc:
         return _receipts_error_redirect(
-            request, company_id=company_id, period=period, error=str(exc)[:200]
+            request, company_id=company_id, period=period, payroll_id=payroll_id, q=q, status=status, error=str(exc)[:200]
         )
     suffix = period or "todos"
     return Response(
@@ -909,7 +1087,7 @@ def receipt_pdf(request: Request, receipt_id: str, data: DataSource) -> Response
         return _receipts_error_redirect(request, error="Recibo no encontrado.")
     try:
         pdf = render_receipt_pdf(receipt.to_pdf_context())
-    except ReceiptContextError as exc:
+    except (ReceiptError, PdfRendererUnavailable) as exc:
         return _receipts_error_redirect(request, error=str(exc)[:200])
     return Response(
         content=pdf,

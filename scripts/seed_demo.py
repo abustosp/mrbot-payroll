@@ -299,6 +299,8 @@ def seed(session: Session) -> dict[str, object]:
             select(NormativeParameter).where(
                 NormativeParameter.jurisdiction == "AR",
                 NormativeParameter.code == code,
+                NormativeParameter.agreement_code == "",
+                NormativeParameter.category_code == "",
                 NormativeParameter.valid_from == DEMO_START,
                 NormativeParameter.version == 1,
             )

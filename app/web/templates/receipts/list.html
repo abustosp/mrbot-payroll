@@ -5,17 +5,7 @@
 
 {% block breadcrumb %}<li class="current" aria-current="page">Recibos</li>{% endblock %}
 
-{% block page_actions %}
-  {% if receipts %}
-    <a class="btn btn--primary" href="{{ url_for('receipts_zip') }}?company_id={{ company_id | urlencode }}&period={{ period | urlencode }}">
-      {{ icon("download") }} Descargar lote ZIP
-    </a>
-  {% else %}
-    <span class="btn btn--primary" aria-disabled="true" title="Sin resultados para los filtros aplicados">
-      {{ icon("download") }} Descargar lote ZIP
-    </span>
-  {% endif %}
-{% endblock %}
+
 
 {% block content %}
   {% if error %}
@@ -27,7 +17,6 @@
         <h2 class="card-title">Recibos de sueldo</h2>
         <p class="card-subtitle">Consulte, previsualice y descargue documentos en PDF.</p>
       </div>
-      <span class="badge badge--outline">{{ receipts | length }} resultados</span>
     </div>
 
     <form class="filters-bar"
@@ -38,6 +27,8 @@
           hx-swap="outerHTML"
           hx-push-url="true"
           hx-trigger="submit, change, keyup changed delay:350ms from:input[type='search']">
+      {% if payroll_id %}<input type="hidden" name="payroll_id" value="{{ payroll_id }}">{% endif %}
+      {% if payroll_id %}<p class="muted" style="width: 100%; margin: 0;">Mostrando recibos de <a href="{{ url_for('payroll_detail', payroll_id=payroll_id) }}">la liquidación seleccionada</a>. Use «Limpiar» para ver todas.</p>{% endif %}
       <div class="field field--grow">
         <label for="receipts-q">Buscar recibo</label>
         <div class="search-control">

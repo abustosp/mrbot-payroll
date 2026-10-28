@@ -15,7 +15,7 @@
 {% block content %}
   <div class="alert alert--info">
     {{ icon("shield") }}
-    <div><strong>IA supervisada.</strong> Las propuestas no modifican reglas de producción hasta que un usuario autorizado las revise y apruebe.</div>
+    <div><strong>IA supervisada.</strong> La revisión y aprobación cambian el estado de la propuesta; publicar reglas requiere una acción separada en el servicio de IA.</div>
   </div>
 
   <section class="card">
@@ -24,7 +24,6 @@
         <h2 class="card-title">Bandeja de revisión</h2>
         <p class="card-subtitle">Reglas sugeridas por el analizador de convenios.</p>
       </div>
-      <span class="badge badge--outline">{{ proposals | length }} resultados</span>
     </div>
 
     <form class="filters-bar"

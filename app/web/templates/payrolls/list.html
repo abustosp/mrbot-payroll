@@ -6,20 +6,32 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Liquidaciones</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar el motor de liquidación">
-    {{ icon("plus") }} Nueva liquidación
-  </button>
-  <small class="muted">Próximamente: motor de liquidación</small>
+  {% if not demo_mode and current_user.role in ["admin", "editor"] %}
+  <a class="btn btn--primary" href="#nueva-liquidacion">{{ icon("plus") }} Nueva liquidación</a>
+  {% else %}<small class="muted">{% if demo_mode %}Modo demo: solo lectura.{% else %}Su usuario tiene acceso de solo lectura.{% endif %}</small>{% endif %}
 {% endblock %}
 
 {% block content %}
+  {% if request.query_params.get("error") %}<div class="callout" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
+  {% if not demo_mode and current_user.role in ["admin", "editor"] %}
+  <section class="card" id="nueva-liquidacion"><div class="card-header"><h2 class="card-title">Nueva liquidación</h2></div><div class="card-body">
+    <form method="post" action="{{ url_for('payroll_create') }}" class="filters-bar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label for="new-company">Empresa</label><select class="select" id="new-company" name="company_id" required>{% for company in companies %}<option value="{{ company.id }}">{{ company.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="new-code">Código</label><input class="input" id="new-code" name="code" maxlength="80" required></div>
+      <div class="field"><label for="new-start">Desde</label><input class="input" id="new-start" name="period_start" type="date" required></div>
+      <div class="field"><label for="new-end">Hasta</label><input class="input" id="new-end" name="period_end" type="date" required></div>
+      <div class="field"><label for="new-type">Tipo</label><select class="select" id="new-type" name="run_type"><option value="MONTHLY">Mensual</option><option value="SAC">SAC</option><option value="VACATIONS">Vacaciones</option><option value="FINAL">Final</option></select></div>
+      <button class="btn btn--primary" type="submit">Crear</button>
+    </form></div></section>
+  {% endif %}
+
   <section class="card">
     <div class="card-header">
       <div>
         <h2 class="card-title">Historial de liquidaciones</h2>
         <p class="card-subtitle">Consulte el estado del circuito y los importes consolidados.</p>
       </div>
-      <span class="badge badge--outline">{{ payrolls | length }} resultados</span>
     </div>
 
     <form class="filters-bar"

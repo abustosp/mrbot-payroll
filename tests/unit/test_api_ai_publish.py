@@ -21,6 +21,8 @@ from app.database.models import (
 )
 from app.database.session import get_db
 from app.main import app
+from app.web.auth import CSRF_COOKIE
+from app.web.sql_data_source import SqlAlchemyDataSource
 
 PASSWORD = "a-long-test-password"
 ANALYSIS_PAYLOAD = {
@@ -79,6 +81,37 @@ def analyze(client: TestClient) -> dict:
 
 def persist(client: TestClient, analysis: dict | None = None):
     return client.post("/api/v1/ai/proposals", json=analysis or analyze(client))
+
+
+def test_web_approval_uses_api_validation_and_keeps_published_final(
+    api: tuple[TestClient, sessionmaker[Session], int], monkeypatch,
+) -> None:
+    client, sessions, admin_id = api
+    login(client)
+    proposal_id = persist(client).json()["id"]
+    monkeypatch.setattr(app.state, "payroll_data_source", SqlAlchemyDataSource(sessions), raising=False)
+    page = client.get(f"/propuestas-ia/{proposal_id}")
+    assert page.status_code == 200
+    token = client.cookies.get(CSRF_COOKIE)
+    assert token
+    approved = client.post(
+        f"/propuestas-ia/{proposal_id}/estado",
+        data={"status": "approved", "csrf_token": token}, follow_redirects=False,
+    )
+    assert approved.status_code == 303, approved.text
+    with sessions() as db:
+        row = db.get(AiProposal, proposal_id)
+        assert row.status == "approved"
+        assert row.approved_by == admin_id
+        assert row.approved_at is not None
+    assert client.post(f"/api/v1/ai/proposals/{proposal_id}/publish").status_code == 200
+    reopened = client.post(
+        f"/propuestas-ia/{proposal_id}/estado",
+        data={"status": "in_review", "csrf_token": token},
+    )
+    assert reopened.status_code == 409
+    with sessions() as db:
+        assert db.get(AiProposal, proposal_id).status == "published"
 
 
 def test_persist_approve_and_publish_creates_only_draft(

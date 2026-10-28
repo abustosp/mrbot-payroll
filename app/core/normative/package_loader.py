@@ -110,6 +110,8 @@ class CatalogParameter:
     version: int = 1
     source: str = ""
     document_key: str | None = None
+    agreement_code: str = ""
+    category_code: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -777,6 +779,10 @@ def _read_parameters(
             item, ("jurisdiction", "jurisdiccion"), item_path, errors, max_length=80
         ) or "AR"
         code = _read_text(item, ("code", "codigo"), item_path, errors, required=True, max_length=100)
+        agreement_code = _read_text(item, ("agreement_code", "convenio"), item_path, errors, max_length=40) or ""
+        category_code = _read_text(item, ("category_code", "categoria"), item_path, errors, max_length=40) or ""
+        if category_code and not agreement_code:
+            errors.append(f"{item_path}: category_code requiere agreement_code")
         value = _read_decimal(
             item,
             ("value", "valor", "amount", "importe"),
@@ -823,6 +829,8 @@ def _read_parameters(
                 version=version,
                 source=source,
                 document_key=document_key,
+                agreement_code=agreement_code,
+                category_code=category_code,
             )
         )
     return tuple(parameters)
@@ -1011,11 +1019,11 @@ def _validate_scale_overlaps(ccts: Iterable[CatalogCct], errors: list[str]) -> N
 def _validate_parameter_overlaps(
     parameters: Iterable[CatalogParameter], errors: list[str]
 ) -> None:
-    grouped: dict[tuple[str, str], list[CatalogParameter]] = {}
-    seen: set[tuple[str, str, date, int]] = set()
+    grouped: dict[tuple[str, str, str, str], list[CatalogParameter]] = {}
+    seen: set[tuple[str, str, str, str, date, int]] = set()
     for parameter in parameters:
-        key = (parameter.jurisdiction.casefold(), parameter.code.casefold())
-        identity = (key[0], key[1], parameter.valid_from, parameter.version)
+        key = (parameter.jurisdiction.casefold(), parameter.code.casefold(), parameter.agreement_code.casefold(), parameter.category_code.casefold())
+        identity = (*key, parameter.valid_from, parameter.version)
         if identity in seen:
             errors.append(
                 f"Parámetro duplicado {parameter.code!r} "
@@ -1023,7 +1031,7 @@ def _validate_parameter_overlaps(
             )
         seen.add(identity)
         grouped.setdefault(key, []).append(parameter)
-    for (jurisdiction, code), versions in grouped.items():
+    for (jurisdiction, code, _agreement, _category), versions in grouped.items():
         for left_index, left in enumerate(versions):
             for right in versions[left_index + 1 :]:
                 if _ranges_overlap(
@@ -1199,6 +1207,8 @@ def _assert_no_parameter_overlap(
         select(NormativeParameter).where(
             NormativeParameter.jurisdiction == spec.jurisdiction,
             NormativeParameter.code == spec.code,
+            NormativeParameter.agreement_code == spec.agreement_code,
+            NormativeParameter.category_code == spec.category_code,
         )
     ).all()
     for row in rows:
@@ -1304,6 +1314,8 @@ def _build_plans(
             select(NormativeParameter).where(
                 NormativeParameter.jurisdiction == parameter.jurisdiction,
                 NormativeParameter.code == parameter.code,
+                NormativeParameter.agreement_code == parameter.agreement_code,
+                NormativeParameter.category_code == parameter.category_code,
                 NormativeParameter.valid_from == parameter.valid_from,
                 NormativeParameter.version == parameter.version,
             )
@@ -1452,6 +1464,8 @@ def _apply_parameters(session: Session, plans: Iterable[_ParameterPlan]) -> None
             row = NormativeParameter(
                 jurisdiction=parameter.jurisdiction,
                 code=parameter.code,
+                agreement_code=parameter.agreement_code,
+                category_code=parameter.category_code,
                 value=parameter.value,
                 valid_from=parameter.valid_from,
                 valid_to=parameter.valid_to,

@@ -72,7 +72,7 @@
         {% if demo_mode %}
           Datos de ejemplo en memoria. Sin conexión a base de datos.
         {% else %}
-          {{ data_source_name }} · fuente de solo lectura.
+          {{ data_source_name }} · consulta de datos y revisión de propuestas.
         {% endif %}
       </p>
     </div>
@@ -97,7 +97,7 @@
         </div>
       </div>
       <div class="header-right">
-        <a class="header-health" href="{{ url_for('health_page') }}">
+        <a class="header-health" href="{{ url_for('health_page') }}" aria-label="Estado del sistema">
           <span class="status-dot" aria-hidden="true"></span>
           <span>Estado del sistema</span>
         </a>
@@ -122,7 +122,7 @@
     <main class="app-content" id="main-content">
       <div class="page-heading">
         <div>
-          <div class="page-eyebrow">{% block eyebrow %}Payroll Argentina{% endblock %}</div>
+          <div class="page-eyebrow">{% block eyebrow %}Payroll Argentina{% endblock %} · {% if demo_mode %}Modo demo{% else %}{{ data_source_name }}{% endif %}</div>
           <h1>{% block heading %}{{ page_title|default("Dashboard") }}{% endblock %}</h1>
           {% if page_subtitle %}<p>{% block subtitle %}{{ page_subtitle }}{% endblock %}</p>{% endif %}
         </div>

@@ -1,6 +1,7 @@
 # ruff: noqa: B008 -- FastAPI resolves Depends defaults at request time.
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.api.common import commit_or_conflict, get_scoped, page
@@ -13,11 +14,16 @@ from app.database.models import (
     PayrollApproval,
     PayrollResult,
     PayrollRun,
+    PayrollTrace,
     User,
 )
 from app.database.session import get_db
 from app.exporters.tabular import normalize_format, table_response
-from app.services.payroll_calculation import PayrollRunStateError, calculate_payroll_run
+from app.services.payroll_calculation import (
+    PayrollRunStateError,
+    _clear_previous_results,
+    calculate_payroll_run,
+)
 
 router = APIRouter(prefix="/payroll-runs", tags=["payroll-runs"])
 
@@ -117,10 +123,12 @@ def create_payroll_run(
         select(Company).where(
             Company.id == payload.company_id,
             Company.organization_id == user.organization_id,
-        )
+        ).with_for_update()
     )
     if company is None:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    # Share the import lock, including SQLite where FOR UPDATE is ignored.
+    db.execute(update(Company).where(Company.id == company.id).values(active=Company.active))
     row = PayrollRun(
         organization_id=user.organization_id,
         created_by=user.id,
@@ -190,8 +198,14 @@ def update_payroll_run(
     )
     if company is None:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
-    for key, value in payload.model_dump().items():
-        setattr(row, key, value)
+    claimed = db.execute(
+        update(PayrollRun)
+        .where(PayrollRun.id == row.id, PayrollRun.status == "DRAFT")
+        .values(**payload.model_dump())
+    )
+    if not isinstance(claimed, CursorResult) or claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Solo se editan liquidaciones en borrador")
     commit_or_conflict(db)
     db.refresh(row)
     return row
@@ -204,7 +218,12 @@ def delete_payroll_run(
     row = get_scoped(db, PayrollRun, run_id, user.organization_id)
     if row.status != "DRAFT":
         raise HTTPException(status_code=409, detail="Solo se eliminan liquidaciones en borrador")
-    db.delete(row)
+    claimed = db.execute(
+        delete(PayrollRun).where(PayrollRun.id == row.id, PayrollRun.status == "DRAFT")
+    )
+    if not isinstance(claimed, CursorResult) or claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Solo se eliminan liquidaciones en borrador")
     commit_or_conflict(db)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -214,9 +233,28 @@ def approve_payroll_run(
     run_id: int, db: Session = Depends(get_db), user: User = Depends(require_role("admin")),
 ):
     row = get_scoped(db, PayrollRun, run_id, user.organization_id)
-    if row.status not in {"CALCULATED", "IN_REVIEW"}:
+    claimed = db.execute(
+        update(PayrollRun)
+        .where(PayrollRun.id == row.id, PayrollRun.status.in_(("CALCULATED", "IN_REVIEW")))
+        .values(status="APPROVED")
+    )
+    if not isinstance(claimed, CursorResult) or claimed.rowcount != 1:
+        db.rollback()
         raise HTTPException(status_code=409, detail=f"La liquidación {run_id} debe estar calculada para aprobarse (estado {row.status})")
-    row.status = "APPROVED"
+    count = db.scalar(select(func.count(PayrollResult.id)).where(PayrollResult.payroll_run_id == row.id))
+    review = db.scalar(select(PayrollTrace).where(
+        PayrollTrace.payroll_run_id == row.id, PayrollTrace.event == "CALCULATION_REVIEW",
+    ).order_by(PayrollTrace.id.desc()))
+    incomplete = (review is None and row.run_type != "MONTHLY") or (review is not None and any(
+        warning.get("type") in {"settlement_missing_rules", "settlement_incomplete"}
+        for warning in review.detail.get("warnings", [])
+    ))
+    if not count or incomplete:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=(
+            "No se puede aprobar una liquidación vacía o incompleta. "
+            "Revise las reglas de descuentos/contribuciones y las alertas del cálculo."
+        ))
     db.add(PayrollApproval(payroll_run_id=row.id, user_id=user.id, status="APPROVED"))
     commit_or_conflict(db)
     db.refresh(row)
@@ -236,7 +274,15 @@ def reopen_payroll_run(
     if row.status not in {"CALCULATED", "IN_REVIEW", "ERROR"}:
         raise HTTPException(status_code=409, detail="Solo se reabren liquidaciones calculadas o con error")
     before = row.status
-    row.status = "DRAFT"
+    claimed = db.execute(
+        update(PayrollRun)
+        .where(PayrollRun.id == row.id, PayrollRun.status == before)
+        .values(status="DRAFT", inputs_hash=None, results_hash=None, ruleset_id=None)
+    )
+    if not isinstance(claimed, CursorResult) or claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El estado de la liquidación cambió")
+    _clear_previous_results(db, row.id)
     db.add(AuditLog(
         organization_id=user.organization_id, user_id=user.id, action="payroll_run.reopened",
         entity_type="PayrollRun", entity_id=str(row.id),

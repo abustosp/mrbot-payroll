@@ -30,6 +30,7 @@ from app.core.payroll_engine.types import (
 from app.database.models import (
     AgreementCategory,
     CollectiveAgreement,
+    Company,
     Employee,
     EmploymentContract,
     FormulaDefinition,
@@ -44,10 +45,15 @@ from app.database.models import (
     Ruleset,
     SalaryScale,
 )
+from app.services.payroll_parameters import load_parameters, parameter_snapshot, resolve_parameters
 
 
 class PayrollRunStateError(ValueError):
     """The run is in a state that cannot be recalculated."""
+
+
+class PayrollNoveltyScopeError(ValueError):
+    """Historical novelties cannot be assigned safely to this employer."""
 
 
 #: Run types calculated by the settlement engine instead of monthly formulas.
@@ -56,6 +62,7 @@ SETTLEMENT_RUN_TYPES = ("SAC", "VACATIONS", "FINAL")
 #: Settlement inputs ride on AUXILIARY novelties of the run period so no new
 #: input table is needed. Missing inputs are employee errors (fail-closed);
 #: unknown codes still fall under the V2-09 unconsumed-novelty rule.
+SAC_BASE_CODE = "SAC_BASE"
 VAC_DAYS_CODE = "VAC_DIAS"
 VAC_PLUS_RATE_CODE = "VAC_PLUS_TASA"
 FINAL_INTEGRATION_DAYS_CODE = "LIQ_DIAS_INTEGRACION"
@@ -88,9 +95,9 @@ SETTLEMENT_CONCEPT_CODES: dict[str, tuple[str, ...]] = {
 
 #: Novelty codes each settlement run type consumes (V2-09 applies to the rest).
 SETTLEMENT_CONSUMED_CODES: dict[str, frozenset[str]] = {
-    "SAC": frozenset(),
+    "SAC": frozenset({SAC_BASE_CODE}),
     "VACATIONS": frozenset({VAC_DAYS_CODE, VAC_PLUS_RATE_CODE}),
-    "FINAL": frozenset({VAC_DAYS_CODE, FINAL_INTEGRATION_DAYS_CODE}),
+    "FINAL": frozenset({VAC_DAYS_CODE, FINAL_INTEGRATION_DAYS_CODE, SAC_BASE_CODE}),
 }
 
 #: Run statuses whose persisted results count as semester history for SAC.
@@ -100,6 +107,20 @@ _SAC_HISTORY_STATUSES = ("CALCULATED", "IN_REVIEW", "APPROVED", "CLOSED")
 def _digest(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _run_type_matches(conditions: list[dict[str, Any]] | None, run_type: str, *, unscoped: bool) -> bool:
+    markers = [condition for condition in conditions or [] if condition.get("field") == "run_type"]
+    return (unscoped if not markers else all(
+        set(marker) == {"field", "operator", "value"} and marker["operator"] == "eq"
+        and marker["value"] == run_type for marker in markers
+    ))
+
+
+def _without_run_type_condition(definitions: list[FormulaContract]) -> list[FormulaContract]:
+    # Run-type conditions are selected by the service; the numeric DSL cannot compare strings.
+    return [definition.model_copy(update={"conditions": [condition for condition in definition.conditions
+                if condition.get("field") != "run_type"]}) for definition in definitions]
 
 
 def _applicable_formulas(
@@ -123,28 +144,13 @@ def _applicable_formulas(
 
 
 def _applicable_parameters(db: Session, period: date) -> dict[str, Decimal]:
-    rows = db.scalars(
-        select(NormativeParameter)
-        .where(
-            NormativeParameter.jurisdiction == "AR",
-            NormativeParameter.valid_from <= period,
-            or_(NormativeParameter.valid_to.is_(None), NormativeParameter.valid_to >= period),
-        )
-        .order_by(
-            NormativeParameter.code,
-            NormativeParameter.version.desc(),
-            NormativeParameter.valid_from.desc(),
-        )
-    ).all()
-    parameters: dict[str, Decimal] = {}
-    for row in rows:
-        parameters.setdefault(row.code, row.value)
-    return parameters
+    return resolve_parameters(load_parameters(db, period))
 
 
 def _novelties_for_employees(
     db: Session,
     organization_id: int,
+    company_id: int,
     employee_ids: list[int],
     period: date,
 ) -> dict[int, list[dict[str, object]]]:
@@ -167,11 +173,36 @@ def _novelties_for_employees(
             PayrollNovelty.organization_id == organization_id,
             PayrollNovelty.employee_id.in_(employee_ids),
             PayrollNovelty.period == period_key,
+            or_(PayrollNovelty.company_id == company_id, PayrollNovelty.company_id.is_(None)),
         )
         .order_by(PayrollNovelty.id)
     ).all()
+    legacy_employee_ids = {row.employee_id for row in rows if row.company_id is None}
+    companies_by_employee: dict[int, set[int]] = {}
+    if legacy_employee_ids:
+        month_start = period.replace(day=1)
+        next_month = date(period.year + (period.month == 12), period.month % 12 + 1, 1)
+        contracts = db.execute(select(EmploymentContract.employee_id, EmploymentContract.company_id)
+            .join(Employee, Employee.id == EmploymentContract.employee_id)
+            .join(Company, Company.id == EmploymentContract.company_id)
+            .where(EmploymentContract.employee_id.in_(legacy_employee_ids),
+                   Company.organization_id == organization_id,
+                   Employee.organization_id == organization_id,
+                   EmploymentContract.valid_from < next_month,
+                   or_(EmploymentContract.valid_to.is_(None), EmploymentContract.valid_to >= month_start)))
+        for employee_id, contract_company_id in contracts:
+            companies_by_employee.setdefault(employee_id, set()).add(contract_company_id)
+    scoped_keys = {(row.employee_id, row.code, row.source) for row in rows if row.company_id is not None}
     novelties: dict[int, list[dict[str, object]]] = {}
     for row in rows:
+        if row.company_id is None:
+            companies = companies_by_employee.get(row.employee_id, set())
+            if len(companies) != 1:
+                raise PayrollNoveltyScopeError(f"La novedad histórica {row.id} no tiene empresa y sus contratos del mes no identifican una empresa única.")
+            if company_id not in companies:
+                continue
+            if (row.employee_id, row.code, row.source) in scoped_keys:
+                raise PayrollNoveltyScopeError(f"La novedad histórica {row.id} duplica una novedad de la empresa; resuelva el conflicto antes de calcular.")
         novelties.setdefault(row.employee_id, []).append(
             {
                 "code": row.code,
@@ -300,6 +331,7 @@ def _snapshot_ruleset(
     parameters: dict[str, Decimal],
     inputs_hash: str,
     period: date,
+    parameter_rows: list[NormativeParameter] | None = None,
 ) -> Ruleset:
     """Persist an immutable snapshot of the normative package applied (B-27).
 
@@ -331,6 +363,7 @@ def _snapshot_ruleset(
             for formula, version in formulas
         ],
         "parameters": {code: str(value) for code, value in parameters.items()},
+        "parameter_versions": parameter_snapshot(parameter_rows or []),
     }
     # Shared code with a global version sequence (run codes can fill the
     # 80-char column; the run links back through run.ruleset_id).
@@ -406,7 +439,7 @@ def calculate_payroll_run(
     db.commit()
     try:
         if run.run_type in SETTLEMENT_RUN_TYPES:
-            return _run_settlement(
+            response = _run_settlement(
                 db,
                 run,
                 include_items=include_items,
@@ -414,14 +447,39 @@ def calculate_payroll_run(
                 results_offset=results_offset,
                 allow_unconsumed_novelties=allow_unconsumed_novelties,
             )
-        return _run_calculation(
-            db,
-            run,
-            include_items=include_items,
-            results_limit=results_limit,
-            results_offset=results_offset,
-            allow_unconsumed_novelties=allow_unconsumed_novelties,
-        )
+        else:
+            response = _run_calculation(
+                db,
+                run,
+                include_items=include_items,
+                results_limit=results_limit,
+                results_offset=results_offset,
+                allow_unconsumed_novelties=allow_unconsumed_novelties,
+            )
+        db.add(PayrollTrace(payroll_run_id=run.id, event="CALCULATION_REVIEW", detail={
+            key: response[key] for key in ("summary", "errors", "warnings")
+        }))
+        db.flush()
+        return response
+    except PayrollNoveltyScopeError as exc:
+        db.rollback()
+        _clear_previous_results(db, run.id)
+        run.status = "ERROR"
+        run.inputs_hash = None
+        run.results_hash = None
+        run.ruleset_id = None
+        response = {
+            "payroll_run_id": run.id, "status": "ERROR",
+            "summary": {"employees_total": 0, "calculated": 0, "errors": 1, "gross": "0", "net": "0"},
+            "results": [], "results_total": 0, "errors": [{"message": str(exc)}], "warnings": [],
+            "inputs_hash": None, "results_hash": None, "ruleset_id": None,
+        }
+        db.add(PayrollTrace(payroll_run_id=run.id, event="RUN_ERROR", detail={"message": str(exc)}))
+        db.add(PayrollTrace(payroll_run_id=run.id, event="CALCULATION_REVIEW", detail={
+            key: response[key] for key in ("summary", "errors", "warnings")
+        }))
+        db.flush()
+        return response
     except Exception:
         # Un cálculo fallido queda reintentable en vez de atascado en VALIDATING.
         db.rollback()
@@ -471,6 +529,22 @@ def _load_active_population(
                     Employee.termination_date.is_(None),
                     Employee.termination_date >= period,
                 ),
+                or_(
+                    ~select(EmploymentContract.id).where(
+                        EmploymentContract.employee_id == Employee.id
+                    ).exists(),
+                    select(EmploymentContract.id).where(
+                        EmploymentContract.employee_id == Employee.id,
+                        EmploymentContract.company_id == run.company_id,
+                    ).exists(),
+                ),
+                ~select(EmploymentContract.id).where(
+                    EmploymentContract.employee_id == Employee.id,
+                    EmploymentContract.company_id != run.company_id,
+                    EmploymentContract.active.is_(True),
+                    EmploymentContract.valid_from <= period,
+                    or_(EmploymentContract.valid_to.is_(None), EmploymentContract.valid_to >= period),
+                ).exists(),
             )
             .order_by(Employee.id)
         ).all()
@@ -594,8 +668,10 @@ def _run_calculation(
 
     period = run.period_end
     _clear_previous_results(db, run.id)
-    formulas = _applicable_formulas(db, run.organization_id, period)
-    parameters = _applicable_parameters(db, period)
+    formulas = [row for row in _applicable_formulas(db, run.organization_id, period)
+                if _run_type_matches(row[1].conditions, "MONTHLY", unscoped=True)]
+    parameter_rows = load_parameters(db, period)
+    parameters: dict[str, Decimal] = {}
     concept_rows = db.scalars(
         select(PayrollConcept).where(
             PayrollConcept.organization_id == run.organization_id,
@@ -610,7 +686,7 @@ def _run_calculation(
     base_definitions: list[FormulaContract] | None
     definitions_error = ""
     try:
-        base_definitions = _definitions_for_employee(formulas, concepts)
+        base_definitions = _without_run_type_condition(_definitions_for_employee(formulas, concepts))
     except ValueError as exc:
         base_definitions = None
         definitions_error = str(exc)
@@ -640,7 +716,7 @@ def _run_calculation(
     )
     employee_ids = [employee.id for employee in employees]
     novelties_by_employee = _novelties_for_employees(
-        db, run.organization_id, employee_ids, period
+        db, run.organization_id, run.company_id, employee_ids, period
     )
     categories, scales_by_category, agreement_ids, agreement_codes = (
         _preload_agreement_data(db, contracts_by_employee, period)
@@ -661,8 +737,8 @@ def _run_calculation(
             "employee_id": candidate.id,
             "employee_code": candidate.employee_code,
             "message": (
-                "El empleado activo no tiene un contrato vigente para la "
-                "empresa y el período; quedó fuera de la liquidación."
+                "El empleado no tiene un contrato vigente que permita determinar "
+                "su inclusión en la empresa y el período; quedó fuera de la liquidación."
             ),
         })
         db.add(PayrollTrace(
@@ -670,8 +746,8 @@ def _run_calculation(
             employee_id=candidate.id,
             event="EMPLOYEE_ERROR",
             detail={"message": (
-                "El empleado activo no tiene un contrato vigente para la "
-                "empresa y el período; quedó fuera de la liquidación."
+                "El empleado no tiene un contrato vigente que permita determinar "
+                "su inclusión en la empresa y el período; quedó fuera de la liquidación."
             )},
         ))
     for employee in employees:
@@ -688,7 +764,7 @@ def _run_calculation(
         scale = None
         category = None
         if contract.category_id is not None:
-            category = categories.get(contract.category_id)
+            category = categories.get(contract.category_id or -1)
             candidate_scales = scales_by_category.get(contract.category_id, [])
             if len(candidate_scales) == 1:
                 scale = candidate_scales[0]
@@ -701,7 +777,7 @@ def _run_calculation(
         employee_novelties = novelties_by_employee.get(employee.id, [])
         # B-02: the scale base and its non-remunerative part travel as
         # distinct variables so formulas can target them separately.
-        employee_parameters = dict(parameters)
+        employee_parameters: dict[str, Any] = {"run_type": "MONTHLY"}
         if scale is not None:
             employee_parameters.setdefault("escala_basico", scale.base_salary)
             employee_parameters.setdefault("escala_adicional", scale.additional)
@@ -725,6 +801,8 @@ def _run_calculation(
             ],
         })
         try:
+            employee_parameters.update(resolve_parameters(parameter_rows, agreement_code or "", category.code if category else ""))
+            input_employees[-1]["effective_parameters"] = dict(employee_parameters)
             if category is None:
                 raise ValueError("El contrato no tiene una categoría vigente configurada.")
             if base_salary is None:
@@ -899,7 +977,7 @@ def _run_calculation(
             {"formula_id": formula.id, "version_id": version.id, "version": version.version}
             for formula, version in formulas
         ],
-        "parameters": parameters,
+        "parameters": parameter_snapshot(parameter_rows),
     })
     run.inputs_hash = inputs_hash
     # B-26: la corrida abarca varios CCT y alguna fórmula no tiene scope, así
@@ -933,10 +1011,14 @@ def _run_calculation(
         )
 
     # B-27: seal the normative package applied and point the run at it.
-    ruleset = _snapshot_ruleset(db, run, formulas, parameters, inputs_hash, period)
+    ruleset = _snapshot_ruleset(db, run, formulas, parameters, inputs_hash, period, parameter_rows)
     run.ruleset_id = ruleset.id
     # B-36: compact deterministic hash over the per-row hashes, so a paginated
     # response carries the same run hash as the full one.
+    if not employees:
+        message = "La corrida no contiene empleados elegibles."
+        errors.append({"message": message})
+        db.add(PayrollTrace(payroll_run_id=run.id, event="RUN_ERROR", detail={"message": message}))
     run.results_hash = _digest({"results": result_hashes, "errors": errors})
     run.status = "ERROR" if errors else "CALCULATED"
     db.flush()
@@ -984,44 +1066,48 @@ def _completed_years(start: date, end: date) -> int:
     return max(0, years)
 
 
-def _prior_monthly_remunerations(
-    db: Session,
-    *,
-    organization_id: int,
-    company_id: int,
-    employee_id: int,
-    semester_start: date,
-    cutoff: date,
-) -> list[Decimal]:
-    """Semester history for SAC: monthly remunerative amounts up to ``cutoff``.
-
-    Only MONTHLY runs with persisted results count; a settlement never feeds
-    another settlement (the SAC of a SAC is not a monthly remuneration).
-    """
-
-    return list(
-        db.scalars(
-            select(PayrollResult.remunerative)
-            .join(PayrollRun, PayrollRun.id == PayrollResult.payroll_run_id)
-            .where(
-                PayrollRun.organization_id == organization_id,
-                PayrollRun.company_id == company_id,
-                PayrollRun.run_type == "MONTHLY",
-                PayrollRun.status.in_(_SAC_HISTORY_STATUSES),
-                PayrollResult.employee_id == employee_id,
-                PayrollRun.period_start >= semester_start,
-                PayrollRun.period_start <= cutoff,
-            )
-            .order_by(PayrollRun.period_start)
-        ).all()
-    )
-
-
-def _settlement_months_worked(hire: date, semester_start: date, end: date) -> int:
-    """Accrual months from the later of hire/semester start to ``end`` (cap 6)."""
-
+def _sac_inputs(
+    db: Session, *, run: PayrollRun, employee: Employee, hire: date,
+    end: date, novelties: list[dict[str, object]],
+) -> tuple[list[Decimal], Decimal | None, Decimal, list[str]]:
+    semester_start, semester_end = _semester_bounds(end)
     start = max(hire, semester_start)
-    return min(6, _months_inclusive(date(start.year, start.month, 1), end))
+    if start > end:
+        raise ValueError("La fecha de ingreso es posterior al fin del período SAC.")
+    days = (end - start).days + 1
+    semester_days = (semester_end - semester_start).days + 1
+    months = Decimal(6) * Decimal(days) / Decimal(semester_days)
+    rows = db.execute(
+        select(PayrollRun.period_start, PayrollResult.remunerative)
+        .join(PayrollResult, PayrollRun.id == PayrollResult.payroll_run_id)
+        .where(PayrollRun.organization_id == run.organization_id,
+               PayrollRun.company_id == run.company_id,
+               PayrollRun.run_type == "MONTHLY",
+               PayrollRun.status.in_(_SAC_HISTORY_STATUSES),
+               PayrollResult.employee_id == employee.id,
+               PayrollRun.period_start >= semester_start,
+               PayrollRun.period_start <= end)
+        .order_by(PayrollRun.period_start)
+    ).all()
+    entries = _novelty_entries(novelties, SAC_BASE_CODE)
+    if len(entries) > 1:
+        raise ValueError(f"Se requiere como máximo una novedad {SAC_BASE_CODE}.")
+    best = None
+    if entries:
+        if entries[0].get("kind") != "AUXILIARY" or entries[0].get("amount") is None:
+            raise ValueError(f"{SAC_BASE_CODE} requiere kind AUXILIARY y amount.")
+        best = _novelty_decimal(entries[0]["amount"], SAC_BASE_CODE, "amount")
+        if best <= 0:
+            raise ValueError(f"{SAC_BASE_CODE} debe ser mayor que cero.")
+    expected = {(start.year, month) for month in range(start.month, end.month + 1)}
+    seen = [(d.year, d.month) for d, _ in rows]
+    missing = sorted(expected - set(seen))
+    if best is None and (missing or len(seen) != len(set(seen))):
+        detail = ", ".join(f"{year:04d}-{month:02d}" for year, month in missing)
+        raise ValueError(f"Historial mensual SAC incompleto o duplicado; faltantes: {detail or 'ninguno'}; cargar {SAC_BASE_CODE} explícito.")
+    trace = [f"SAC semestre={semester_start}/{semester_end}; trabajado={start}/{end}; días={days}/{semester_days}",
+             f"SAC historia={[(d.isoformat(), str(value)) for d, value in rows]}; faltantes={missing}; base explícita={best}"]
+    return [value for _, value in rows], best, months, trace
 
 
 def _novelty_entries(
@@ -1065,24 +1151,17 @@ def _compute_sac(
     base_salary: Decimal,
     hire: date,
     period: date,
+    novelties: list[dict[str, object]],
 ) -> tuple[Decimal, list[dict[str, Any]], list[str]]:
-    """SAC from semester history (or the current base without history).
+    """SAC from complete semester history or an explicitly supplied base.
 
-    Returns ``(amount, items, trace)``. No novelty is consumed.
+    Returns ``(amount, items, trace)``. SAC_BASE may supply the explicit base.
     """
 
-    semester_start, _semester_end = _semester_bounds(period)
-    history = _prior_monthly_remunerations(
-        db,
-        organization_id=run.organization_id,
-        company_id=run.company_id,
-        employee_id=employee.id,
-        semester_start=semester_start,
-        cutoff=run.period_start,
+    history, best, months, history_trace = _sac_inputs(
+        db, run=run, employee=employee, hire=hire, end=period, novelties=novelties,
     )
-    remunerations = history if history else [base_salary]
-    months = _settlement_months_worked(hire, semester_start, period)
-    result = calculate_sac(remunerations, period, months_worked=Decimal(months))
+    result = calculate_sac(history, period, months_worked=months, best_salary=best)
     items = [{
         "code": "SAC",
         "name": "Sueldo anual complementario",
@@ -1091,7 +1170,7 @@ def _compute_sac(
         "unit_value": None,
         "amount": result.amount,
     }]
-    return result.amount, items, result.trace
+    return result.amount, items, history_trace + result.trace
 
 
 def _compute_vacations(
@@ -1150,9 +1229,8 @@ def _compute_final(
 ) -> tuple[Decimal, Decimal, list[dict[str, Any]], list[str]]:
     """Final settlement for a termination inside the run period.
 
-    Returns ``(remunerative, non_remunerative, items, trace)``. The engine
-    does not compute contributions or deductions (same contract as the
-    /settlements simulation); missing legal parameters are employee errors.
+    Returns ``(remunerative, non_remunerative, items, trace)``. Missing
+    legal parameters are employee errors; separate rules apply deductions.
     """
 
     missing = [code for code in FINAL_PARAMETER_CODES if code not in parameters]
@@ -1170,16 +1248,9 @@ def _compute_final(
     )
     vacation_days = _required_novelty_quantity(novelties, VAC_DAYS_CODE)
     years = _completed_years(hire, termination)
-    semester_start, _semester_end = _semester_bounds(termination)
-    history = _prior_monthly_remunerations(
-        db,
-        organization_id=run.organization_id,
-        company_id=run.company_id,
-        employee_id=employee.id,
-        semester_start=semester_start,
-        cutoff=termination,
+    history, best, months, history_trace = _sac_inputs(
+        db, run=run, employee=employee, hire=hire, end=termination, novelties=novelties,
     )
-    months = _settlement_months_worked(hire, semester_start, termination)
     result = calculate_final_settlement(
         {
             "period": period,
@@ -1189,7 +1260,8 @@ def _compute_final(
             "sac_months_worked": Decimal(months),
             "years_of_service": Decimal(years),
             "seniority_base_salary": base_salary,
-            "sac_remunerations": history if history else [base_salary],
+            "sac_remunerations": history,
+            "sac_best_salary": best,
         },
         engine_parameters,
     )
@@ -1205,7 +1277,7 @@ def _compute_final(
         result.remunerative_total,
         result.non_remunerative_total,
         items,
-        result.trace,
+        history_trace + result.trace,
     )
 
 
@@ -1217,6 +1289,8 @@ def _store_settlement_result(
     employee_code: str,
     remunerative: Decimal,
     non_remunerative: Decimal,
+    deductions: Decimal,
+    contributions: Decimal,
     items: list[dict[str, Any]],
     trace_lines: list[str],
     concepts: dict[str, PayrollConcept],
@@ -1237,11 +1311,11 @@ def _store_settlement_result(
         employee_id=employee.id,
         remunerative=remunerative,
         non_remunerative=non_remunerative,
-        deductions=Decimal("0"),
-        contributions=Decimal("0"),
+        deductions=deductions,
+        contributions=contributions,
         gross=gross,
-        net=gross,
-        employer_cost=Decimal("0"),
+        net=gross - deductions,
+        employer_cost=gross + contributions,
         calculated_at=datetime.now(UTC),
     )
     db.add(result)
@@ -1263,6 +1337,8 @@ def _store_settlement_result(
         "employee_id": employee.id,
         "remunerative": str(remunerative),
         "non_remunerative": str(non_remunerative),
+        "deductions": str(deductions),
+        "contributions": str(contributions),
         "items": [
             {key: str(item.get(key)) for key in ("code", "amount", "quantity")}
             for item in items
@@ -1285,11 +1361,11 @@ def _store_settlement_result(
 
 def _load_terminated_population(
     db: Session, run: PayrollRun, period: date
-) -> tuple[list[Employee], dict[int, list[EmploymentContract]]]:
+) -> tuple[list[Employee], list[Employee], dict[int, list[EmploymentContract]]]:
     """Employees terminated inside the run period with their contracts.
 
-    Unlike monthly-like runs there is no omitted channel: anyone outside the
-    window is simply out of scope for a final settlement.
+    Employees without a valid contract are reported when their company is
+    this run's company or cannot be determined from any contract.
     """
 
     employees = db.scalars(
@@ -1321,7 +1397,21 @@ def _load_terminated_population(
             )
         ).all():
             contracts_by_employee.setdefault(contract_row.employee_id, []).append(contract_row)
-    return employees, contracts_by_employee
+    omitted = [candidate for candidate in db.scalars(
+        select(Employee).where(
+            Employee.organization_id == run.organization_id,
+            Employee.termination_date >= run.period_start,
+            Employee.termination_date <= period,
+            or_(~select(EmploymentContract.id).where(EmploymentContract.employee_id == Employee.id).exists(),
+                select(EmploymentContract.id).where(EmploymentContract.employee_id == Employee.id,
+                    EmploymentContract.company_id == run.company_id).exists()),
+            ~select(EmploymentContract.id).where(EmploymentContract.employee_id == Employee.id,
+                EmploymentContract.company_id != run.company_id,
+                EmploymentContract.valid_from <= Employee.termination_date,
+                or_(EmploymentContract.valid_to.is_(None), EmploymentContract.valid_to >= Employee.termination_date)).exists(),
+        ).order_by(Employee.id)
+    ).all() if candidate.id not in employee_ids]
+    return employees, omitted, contracts_by_employee
 
 
 def _run_settlement(
@@ -1339,13 +1429,14 @@ def _run_settlement(
     history, and VACATIONS/FINAL read per-employee inputs from AUXILIARY
     novelties of the run period (documented codes). Anything missing is a
     per-employee error (fail-closed); unknown novelties follow V2-09.
-    Contributions and deductions are not computed (same contract as the
-    /settlements simulation), so net equals gross.
+    Approved deductions and contributions opt in using a run_type condition;
+    missing rule types are reported for review.
     """
 
     period = run.period_end
     _clear_previous_results(db, run.id)
-    parameters = _applicable_parameters(db, period)
+    parameter_rows = load_parameters(db, period)
+    parameters: dict[str, Decimal] = {}
     concept_rows = db.scalars(
         select(PayrollConcept).where(
             PayrollConcept.organization_id == run.organization_id,
@@ -1353,21 +1444,25 @@ def _run_settlement(
         )
     ).all()
     concepts = {concept.code: concept for concept in concept_rows}
+    formulas = [row for row in _applicable_formulas(db, run.organization_id, period)
+                if _run_type_matches(row[1].conditions, run.run_type, unscoped=False)
+                and row[0].code in concepts
+                and concepts[row[0].code].nature in ("DEDUCTION", "CONTRIBUTION")]
+    definitions = _without_run_type_condition(_definitions_for_employee(formulas, concepts)) if formulas else []
 
     if run.run_type == "FINAL":
-        employees, contracts_by_employee = _load_terminated_population(
+        employees, omitted, contracts_by_employee = _load_terminated_population(
             db, run, period
         )
-        omitted: list[Employee] = []
     else:
         employees, omitted, contracts_by_employee = _load_active_population(
             db, run, period
         )
     employee_ids = [employee.id for employee in employees]
     novelties_by_employee = _novelties_for_employees(
-        db, run.organization_id, employee_ids, period
+        db, run.organization_id, run.company_id, employee_ids, period
     )
-    _categories, scales_by_category, _agreement_ids, _agreement_codes = (
+    categories, scales_by_category, _agreement_ids, agreement_codes = (
         _preload_agreement_data(db, contracts_by_employee, period)
     )
 
@@ -1385,8 +1480,8 @@ def _run_settlement(
             "employee_id": candidate.id,
             "employee_code": candidate.employee_code,
             "message": (
-                "El empleado activo no tiene un contrato vigente para la "
-                "empresa y el período; quedó fuera de la liquidación."
+                "El empleado no tiene un contrato vigente que permita determinar "
+                "su inclusión en la empresa y el período; quedó fuera de la liquidación."
             ),
         })
         db.add(PayrollTrace(
@@ -1394,8 +1489,8 @@ def _run_settlement(
             employee_id=candidate.id,
             event="EMPLOYEE_ERROR",
             detail={"message": (
-                "El empleado activo no tiene un contrato vigente para la "
-                "empresa y el período; quedó fuera de la liquidación."
+                "El empleado no tiene un contrato vigente que permita determinar "
+                "su inclusión en la empresa y el período; quedó fuera de la liquidación."
             )},
         ))
     for employee in employees:
@@ -1428,6 +1523,10 @@ def _run_settlement(
             "settlement": {"run_type": run.run_type},
         })
         try:
+            category = categories.get(contract.category_id or -1)
+            agreement_code = agreement_codes.get(contract.agreement_id or -1)
+            employee_parameters = resolve_parameters(parameter_rows, agreement_code or "", category.code if category else "")
+            input_employees[-1]["effective_parameters"] = dict(employee_parameters)
             if base_salary is None:
                 raise ValueError(
                     "No hay sueldo base: el contrato no fija monthly_salary "
@@ -1438,7 +1537,7 @@ def _run_settlement(
                 remunerative, items, trace_lines = _compute_sac(
                     db, run=run, employee=employee,
                     base_salary=base_salary, hire=hire,
-                    period=period,
+                    period=period, novelties=employee_novelties,
                 )
                 non_remunerative = Decimal("0")
                 extra_warnings: list[str] = []
@@ -1458,9 +1557,11 @@ def _run_settlement(
                     base_salary=base_salary, hire=hire,
                     termination=employee.termination_date,
                     period=period, novelties=employee_novelties,
-                    parameters=parameters,
+                    parameters=employee_parameters,
                 )
                 extra_warnings = []
+            trace_lines.append(f"scope run_type={run.run_type}")
+            input_employees[-1]["settlement_trace"] = list(trace_lines)
             for extra in extra_warnings:
                 warnings.append({
                     "type": "settlement_warning",
@@ -1469,12 +1570,53 @@ def _run_settlement(
                     "code": run.run_type,
                     "message": extra,
                 })
+            category = categories.get(contract.category_id or -1)
+            agreement_code = agreement_codes.get(contract.agreement_id or -1)
+            applicable = [definition for definition in definitions if _definition_applies(
+                definition, agreement_code=agreement_code,
+                category=category.code if category else None) is None]
+            deductions = contributions = Decimal("0")
+            unconsumed = {str(entry.get("code")) for entry in employee_novelties} - SETTLEMENT_CONSUMED_CODES[run.run_type]
+            if applicable:
+                special_parameters: dict[str, Any] = dict(employee_parameters)
+                special_parameters["run_type"] = run.run_type
+                special_parameters.update({
+                    "settlement_remunerative": remunerative,
+                    "settlement_non_remunerative": non_remunerative,
+                    "settlement_gross": remunerative + non_remunerative,
+                    **{f"settlement_{item['code']}": item["amount"] for item in items},
+                })
+                formula_novelties = [entry for entry in employee_novelties if entry.get("code") in unconsumed]
+                calculated = calculate_payroll({
+                    "id": employee.id, "base_salary": base_salary,
+                    "start_date": employee.hire_date or contract.valid_from,
+                    "agreement_code": agreement_code,
+                    "agreement_category": category.code if category else None,
+                    "workday_factor": _resolve_workday_factor(contract),
+                }, period, applicable, special_parameters, novelties=formula_novelties)
+                deductions, contributions = calculated.deductions, calculated.contributions
+                unconsumed = set(calculated.unconsumed_novelties)
+                items.extend(item.to_dict() | {"amount": item.amount, "quantity": item.quantity,
+                                               "unit_value": item.unit_value} for item in calculated.items)
+                trace_lines.extend(calculated.trace)
+            for nature in (ConceptNature.DEDUCTION, ConceptNature.CONTRIBUTION):
+                if not any(definition.nature == nature for definition in applicable):
+                    warnings.append({"type": "settlement_missing_rules", "employee_id": employee.id,
+                        "employee_code": employee.employee_code, "code": nature.value,
+                        "message": f"No hay reglas {nature.value} explícitas para {run.run_type}; importe cero sin verificar."})
+            if run.run_type == "FINAL":
+                warnings.append({"type": "settlement_incomplete", "employee_id": employee.id,
+                    "employee_code": employee.employee_code, "code": "FINAL",
+                    "message": "La liquidación final incluye solo los componentes configurados; requiere revisión de los conceptos y condiciones aplicables."})
+            if remunerative + non_remunerative - deductions < 0:
+                raise ValueError("El resultado de la liquidación tiene un neto negativo.")
             row_hash = _store_settlement_result(
                 db, run,
                 employee=employee,
                 employee_code=employee.employee_code,
                 remunerative=remunerative,
                 non_remunerative=non_remunerative,
+                deductions=deductions, contributions=contributions,
                 items=items,
                 trace_lines=trace_lines,
                 concepts=concepts,
@@ -1498,8 +1640,7 @@ def _run_settlement(
         # V2-09: novelties consumed by no settlement input are errors by
         # default, warnings only under the explicit opt-out flag.
         for code in sorted(
-            {str(entry.get("code")) for entry in employee_novelties}
-            - SETTLEMENT_CONSUMED_CODES[run.run_type]
+            unconsumed
         ):
             entry: dict[str, str | int] = {
                 "type": "novelty_not_consumed",
@@ -1526,7 +1667,7 @@ def _run_settlement(
         slot = calculated_total
         calculated_total += 1
         gross_total += remunerative + non_remunerative
-        net_total += remunerative + non_remunerative
+        net_total += remunerative + non_remunerative - deductions
         result_hashes.append(row_hash)
         if (
             include_items
@@ -1537,11 +1678,11 @@ def _run_settlement(
                 "employee_id": employee.id,
                 "remunerative": str(remunerative),
                 "non_remunerative": str(non_remunerative),
-                "deductions": "0",
-                "contributions": "0",
+                "deductions": str(deductions),
+                "contributions": str(contributions),
                 "gross": str(remunerative + non_remunerative),
-                "net": str(remunerative + non_remunerative),
-                "employer_cost": "0",
+                "net": str(remunerative + non_remunerative - deductions),
+                "employer_cost": str(remunerative + non_remunerative + contributions),
                 "items": [
                     {
                         "code": item["code"],
@@ -1569,15 +1710,20 @@ def _run_settlement(
         "period_end": run.period_end,
         "run_type": run.run_type,
         "employees": input_employees,
-        "parameters": parameters,
+        "parameters": parameter_snapshot(parameter_rows),
+        "formula_versions": [{"formula_id": f.id, "version_id": v.id, "version": v.version} for f, v in formulas],
     })
     run.inputs_hash = inputs_hash
-    # B-27: seal the applied inputs even without formulas so reliquidating an
+    # B-27: seal the applied inputs so reliquidating an
     # old period with rewritten parameters cannot silently change history.
-    ruleset = _snapshot_ruleset(db, run, [], parameters, inputs_hash, period)
+    ruleset = _snapshot_ruleset(db, run, formulas, parameters, inputs_hash, period, parameter_rows)
     run.ruleset_id = ruleset.id
     # B-36: compact deterministic hash over the per-row hashes, so a paginated
     # response carries the same run hash as the full one.
+    if not employees:
+        message = "La corrida no contiene empleados elegibles."
+        errors.append({"message": message})
+        db.add(PayrollTrace(payroll_run_id=run.id, event="RUN_ERROR", detail={"message": message}))
     run.results_hash = _digest({"results": result_hashes, "errors": errors})
     run.status = "ERROR" if errors else "CALCULATED"
     db.flush()

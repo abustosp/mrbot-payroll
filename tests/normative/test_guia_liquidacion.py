@@ -130,3 +130,25 @@ def test_matriz_once_cct_con_formula_verde() -> None:
             parameters=first.get("parameters", {}),
             concepts=first.get("concepts", {}),
         ) == Decimal(str(first["expected"]))
+
+
+def test_oraculo_deducciones_y_discrepancia_del_neto_impreso() -> None:
+    from datetime import date
+
+    from app.core.payroll_engine.calculator import calculate_payroll
+    from app.core.payroll_engine.types import ConceptNature
+
+    formulas = [FormulaDefinition(code="HABER", formula={"constant": "46440.31"}),
+                FormulaDefinition(code="NR", nature=ConceptNature.NON_REMUNERATIVE,
+                                  formula={"constant": "1000"})]
+    for code, rate in (("JUB", "0.11"), ("PAMI", "0.03"), ("OS", "0.03"),
+                       ("SIND", "0.02"), ("FAECYS", "0.005")):
+        formulas.append(FormulaDefinition(code=code, nature=ConceptNature.DEDUCTION,
+            formula={"operator": "multiply", "arguments": [{"concept": "HABER"}, {"constant": rate}]}))
+    formulas.append(FormulaDefinition(code="OSECAC", nature=ConceptNature.DEDUCTION,
+                                      formula={"constant": "100"}))
+    result = calculate_payroll({"id": 1, "base_salary": "34308.14", "start_date": date(2000, 10, 12)},
+                               date(2020, 3, 31), formulas)
+    assert result.deductions == Decimal("9155.86")
+    assert result.remunerative - result.deductions == Decimal("37284.45")  # impreso en guía
+    assert result.net == Decimal("38284.45")  # incluye los $1000 NR también impresos

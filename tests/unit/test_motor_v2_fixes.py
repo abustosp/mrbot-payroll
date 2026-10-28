@@ -9,17 +9,23 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.payroll_runs import approve_payroll_run, delete_payroll_run, update_payroll_run
+from app.api.schemas import PayrollRunInput
 from app.api.settlements import FinalSettlementRequest, SacInput, VacationInput
 from app.database import Base
 from app.database.models import (
     AuditLog,
     CollectiveAgreement,
     EmploymentContract,
+    PayrollApproval,
     PayrollNovelty,
+    PayrollResult,
+    PayrollRun,
 )
 from app.database.session import get_db
 from app.main import app
@@ -185,11 +191,19 @@ def test_v225_reopen_returns_to_draft_with_audit(env: tuple[TestClient, sessionm
     run_id = _create_run(client, company_id, "v225-reopen")
     assert client.post(f"/api/v1/payroll-runs/{run_id}/reopen").status_code == 409
 
-    assert client.post(f"/api/v1/payroll-runs/{run_id}/calculate").status_code == 200
+    calculated = client.post(f"/api/v1/payroll-runs/{run_id}/calculate")
+    assert calculated.status_code == 200
+    result_id = calculated.json()["results"][0]["id"]
+    assert client.get(f"/api/v1/exports/receipts/{result_id}/json").status_code == 200
     reopened = client.post(f"/api/v1/payroll-runs/{run_id}/reopen")
     assert reopened.status_code == 200, reopened.text
     assert reopened.json()["status"] == "DRAFT"
+    assert reopened.json()["ruleset_id"] is None
+    assert client.get(f"/api/v1/exports/receipts/{result_id}/json").status_code == 404
     with factory() as session:
+        assert session.scalar(select(PayrollResult).where(PayrollResult.payroll_run_id == run_id)) is None
+        stored = session.get(PayrollRun, run_id)
+        assert stored is not None and stored.inputs_hash is None and stored.results_hash is None
         entry = session.scalar(
             select(AuditLog).where(
                 AuditLog.action == "payroll_run.reopened",
@@ -204,6 +218,50 @@ def test_v225_reopen_returns_to_draft_with_audit(env: tuple[TestClient, sessionm
     assert client.post(f"/api/v1/payroll-runs/{run_id}/calculate").status_code == 200
     assert client.post(f"/api/v1/payroll-runs/{run_id}/approve").status_code == 200
     assert client.post(f"/api/v1/payroll-runs/{run_id}/reopen").status_code == 409
+
+
+def test_approval_rejects_a_stale_calculated_state(env: tuple[TestClient, sessionmaker[Session], dict[str, Any]]) -> None:
+    client, factory, context = env
+    run_id = _create_run(client, context["company"].id, "approval-race")
+    assert client.post(f"/api/v1/payroll-runs/{run_id}/calculate").status_code == 200
+    with factory() as stale:
+        run = stale.get(PayrollRun, run_id)
+        assert run is not None and run.status == "CALCULATED"
+        user = stale.merge(context["admin"])
+        with factory.begin() as concurrent:
+            concurrent.get(PayrollRun, run_id).status = "VALIDATING"
+        with pytest.raises(HTTPException) as exc:
+            approve_payroll_run(run_id, stale, user)
+        assert exc.value.status_code == 409
+    with factory() as session:
+        assert session.get(PayrollRun, run_id).status == "VALIDATING"
+        assert session.scalar(select(PayrollApproval).where(PayrollApproval.payroll_run_id == run_id)) is None
+
+
+@pytest.mark.parametrize("operation", ["update", "delete"])
+def test_draft_mutation_rejects_a_stale_state(
+    env: tuple[TestClient, sessionmaker[Session], dict[str, Any]], operation: str,
+) -> None:
+    client, factory, context = env
+    run_id = _create_run(client, context["company"].id, f"draft-race-{operation}")
+    with factory() as stale:
+        run = stale.get(PayrollRun, run_id)
+        assert run is not None and run.status == "DRAFT"
+        user = stale.merge(context["admin"])
+        with factory.begin() as concurrent:
+            concurrent.get(PayrollRun, run_id).status = "VALIDATING"
+        with pytest.raises(HTTPException) as exc:
+            if operation == "delete":
+                delete_payroll_run(run_id, stale, user)
+            else:
+                update_payroll_run(run_id, PayrollRunInput(
+                    company_id=context["company"].id, code="changed",
+                    period_start=date(2026, 6, 1), period_end=date(2026, 6, 30),
+                ), stale, user)
+        assert exc.value.status_code == 409
+    with factory() as session:
+        run = session.get(PayrollRun, run_id)
+        assert run is not None and run.status == "VALIDATING" and run.code != "changed"
 
 
 def test_v226_contract_create_validates_overlap_and_validity(env: tuple[TestClient, sessionmaker[Session], dict[str, Any]]) -> None:

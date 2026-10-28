@@ -18,7 +18,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from fastapi import HTTPException
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,7 @@ from app.database.models import (
     PayrollResult,
     PayrollRun,
     SalaryScale,
+    User,
 )
 from app.database.models import (
     AiProposal as PersistedProposal,
@@ -87,6 +89,7 @@ _RUN_TYPES = {
     "WEEKLY": "Semanal",
     "SAC": "SAC",
     "VACATION": "Vacaciones",
+    "VACATIONS": "Vacaciones",
     "FINAL": "Final",
     "COMPLEMENTARY": "Complementaria",
     "SIMULATION": "Simulación",
@@ -262,17 +265,18 @@ def _employee_text_filter(query: str, organization_id: int):
 
 
 def _receipt_text_filter(query: str):
-    """Filtro ILIKE por código de corrida / empleado en SQL."""
+    """Filtra los mismos campos que muestra la búsqueda de recibos."""
 
     pattern = _like_pattern(query)
     full_name = Employee.first_name + " " + Employee.last_name
+    number = (
+        "R-" + func.substr(cast(PayrollRun.period_start, String), 1, 7)
+        + "-" + PayrollRun.code + "-" + Employee.employee_code
+    )
     return or_(
-        PayrollRun.code.ilike(pattern, escape="\\"),
-        Employee.first_name.ilike(pattern, escape="\\"),
-        Employee.last_name.ilike(pattern, escape="\\"),
+        number.ilike(pattern, escape="\\"),
         full_name.ilike(pattern, escape="\\"),
-        Employee.cuil.ilike(pattern, escape="\\"),
-        Employee.employee_code.ilike(pattern, escape="\\"),
+        cast(Employee.id, String).ilike(pattern, escape="\\"),
     )
 
 
@@ -530,8 +534,7 @@ class SqlAlchemyDataSource:
         organization_id = self._scope()
         if (company_id and requested_company is None) or organization_id is None:
             return []
-        # B-53/K-05: filtros estructurados y texto libre en SQL; la
-        # paginación siempre se aplica en SQL.
+        # Los filtros estructurados se aplican en SQL.
         today = date.today()
         wanted = status.casefold() if status else ""
         if wanted and wanted not in {"active", "inactive"}:
@@ -567,21 +570,24 @@ class SqlAlchemyDataSource:
                 )
             if _use_sql_text_search(query):
                 statement = statement.where(_employee_text_filter(query, organization_id))
-            elif query.strip():
-                # Consulta no-ASCII: filtro y paginación en Python con recall
-                # exacto (ver `_use_sql_text_search`).
-                rows = session.scalars(statement).all()
-                matched = [
-                    employee for employee in self._employees(session, rows, requested_company)
-                    if _matches(
-                        query,
-                        employee.name,
-                        employee.cuil,
-                        employee.file_number,
-                        employee.category,
-                        employee.company_name,
+            if query.strip():
+                # El SQL incluye contratos históricos; filtrar los datos del
+                # contrato mostrado antes de contar resultados para la página.
+                matched: list[WebEmployee] = []
+                batch_size = max(limit or 50, 50)
+                batch_offset = 0
+                while True:
+                    rows = session.scalars(statement.limit(batch_size).offset(batch_offset)).all()
+                    matched.extend(
+                        employee for employee in self._employees(session, rows, requested_company)
+                        if _matches(
+                            query, employee.name, employee.cuil, employee.file_number,
+                            employee.category, employee.company_name,
+                        )
                     )
-                ]
+                    if len(rows) < batch_size or (limit is not None and len(matched) >= offset + limit):
+                        break
+                    batch_offset += batch_size
                 return matched if limit is None else matched[offset:offset + limit]
             if limit is not None:
                 statement = statement.limit(limit).offset(offset)
@@ -875,7 +881,7 @@ class SqlAlchemyDataSource:
                 return None
             return self._proposal(row)
 
-    def set_proposal_status(self, proposal_id: str, status: str) -> AIProposal | None:
+    def set_proposal_status(self, proposal_id: str, status: str, *, user_id: int | None = None) -> AIProposal | None:
         if status not in _PROPOSAL_STATUS_DB:
             raise ValueError(f"Estado de propuesta no valido: {status}")
         row_id = _id(proposal_id)
@@ -886,6 +892,27 @@ class SqlAlchemyDataSource:
             row = session.get(PersistedProposal, row_id)
             if row is None or row.organization_id != organization_id:
                 return None
+            user = session.get(User, user_id) if user_id is not None else None
+            if user is None or not user.active or user.organization_id != organization_id or user.role not in {"admin", "editor"}:
+                raise HTTPException(status_code=403, detail="Permiso insuficiente.")
+            if row.status not in {"draft", "validated"}:
+                raise HTTPException(status_code=409, detail="La propuesta ya fue revisada o publicada.")
+            if status == "approved":
+                from app.api.ai import approve_persisted_ai_proposal
+
+                row = approve_persisted_ai_proposal(row_id, session, user)
+                return self._proposal(row)
+            if status == "in_review":
+                from app.api.ai import (
+                    _analysis_from_proposal,
+                    _ensure_valid_reports,
+                    _reports_for_analysis,
+                    _stored_validation_is_valid,
+                )
+
+                if not _stored_validation_is_valid(row.validation_json):
+                    raise HTTPException(status_code=409, detail="La propuesta no tiene una validación determinística satisfactoria")
+                _ensure_valid_reports(_reports_for_analysis(_analysis_from_proposal(row)))
             row.status = _PROPOSAL_STATUS_DB[status]
             session.commit()
             session.refresh(row)
@@ -952,6 +979,7 @@ class SqlAlchemyDataSource:
             issued_on = result.calculated_at.date() if result.calculated_at else run.period_end
             output.append(WebReceipt(
                 id=str(result.id),
+                payroll_id=str(run.id),
                 number=f"R-{payroll.period}-{run.code}-{employee.employee_code}",
                 company_id=str(company.id),
                 employee_id=str(employee.id),
@@ -990,10 +1018,12 @@ class SqlAlchemyDataSource:
         status: str = "",
         limit: int | None = None,
         offset: int = 0,
+        payroll_id: str = "",
     ) -> list[WebReceipt]:
         requested_company = _id(company_id) if company_id else None
+        requested_payroll = _id(payroll_id) if payroll_id else None
         organization_id = self._scope()
-        if (company_id and requested_company is None) or organization_id is None:
+        if (company_id and requested_company is None) or (payroll_id and requested_payroll is None) or organization_id is None:
             return []
         # B-53/K-05: filtros estructurados y texto libre en SQL (rango de mes
         # por período, sin funciones de dialecto); la paginación siempre se
@@ -1017,16 +1047,17 @@ class SqlAlchemyDataSource:
             )
             if requested_company is not None:
                 statement = statement.where(PayrollRun.company_id == requested_company)
+            if requested_payroll is not None:
+                statement = statement.where(PayrollRun.id == requested_payroll)
             if month_start is not None:
-                next_month = date(
-                    month_start.year + (month_start.month == 12),
-                    month_start.month % 12 + 1,
-                    1,
-                )
-                statement = statement.where(
-                    PayrollRun.period_start >= month_start,
-                    PayrollRun.period_start < next_month,
-                )
+                statement = statement.where(PayrollRun.period_start >= month_start)
+                if month_start != date(9999, 12, 1):
+                    next_month = date(
+                        month_start.year + (month_start.month == 12),
+                        month_start.month % 12 + 1,
+                        1,
+                    )
+                    statement = statement.where(PayrollRun.period_start < next_month)
             if wanted == "issued":
                 statement = statement.where(func.upper(PayrollRun.status).in_(("APPROVED", "CLOSED")))
             elif wanted == "pending":

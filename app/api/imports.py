@@ -19,31 +19,35 @@ libres se rechazan con ``caracteres_no_permitidos`` (V2-13).
 
 El commit de **novedades** persiste las filas validas en
 ``payroll_novelties`` y es idempotente por la clave natural
-``(employee_id, period, code, source)``. Los legajos se resuelven dentro de la
+``(employee_id, company_id, period, code, source)``. Los legajos se resuelven dentro de la
 organizacion del usuario; una fila cuyo legajo no existe se informa como error
 sin abortar el resto del lote. ``company_id`` es opcional y, si se informa, se
-valida que la empresa pertenezca a la organizacion.
+valida que la empresa pertenezca a la organizacion y tenga contrato en el mes;
+si se omite, debe existir una sola empresa contractual.
 """
 
 from __future__ import annotations
 
 import io
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.common import commit_or_conflict
 from app.auth.dependencies import require_user
 from app.database.models import (
+    AuditLog,
     Company,
     Employee,
     EmploymentContract,
     PayrollConcept,
     PayrollNovelty,
+    PayrollRun,
     User,
 )
 from app.database.session import get_db
@@ -58,6 +62,7 @@ from app.importers.models import (
 )
 from app.importers.readers import ImportFileError
 from app.importers.service import analyze_file, import_rows
+from app.services.payroll_calculation import _clear_previous_results
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -179,15 +184,11 @@ def _commit_employees(
     result.dry_run = False
 
     company = (
-        _scoped_company(db, company_id, user.organization_id)
-        if company_id is not None
-        else None
+        _scoped_company(db, company_id, user.organization_id) if company_id is not None else None
     )
     existing_codes = set(
         db.scalars(
-            select(Employee.employee_code).where(
-                Employee.organization_id == user.organization_id
-            )
+            select(Employee.employee_code).where(Employee.organization_id == user.organization_id)
         ).all()
     )
 
@@ -206,8 +207,7 @@ def _commit_employees(
                     first_row=row_number,
                     key=f"legajo:{row.legajo}",
                     message=(
-                        "Ya existe un empleado con ese legajo en la organizacion; "
-                        "la fila se omite."
+                        "Ya existe un empleado con ese legajo en la organizacion; la fila se omite."
                     ),
                 )
             )
@@ -305,8 +305,7 @@ def _commit_concepts(
                     first_row=row_number,
                     key=f"codigo:{row.codigo}",
                     message=(
-                        "Ya existe un concepto con ese codigo en la organizacion; "
-                        "la fila se omite."
+                        "Ya existe un concepto con ese codigo en la organizacion; la fila se omite."
                     ),
                 )
             )
@@ -336,7 +335,7 @@ def _commit_novelties(
 ) -> dict[str, Any]:
     """Persiste novedades validas sin abortar el lote por una fila con error.
 
-    La idempotencia se garantiza por ``(employee_id, period, code, source)``.
+    La idempotencia se garantiza por ``(employee_id, company_id, period, code, source)``.
     Una novedad ya importada se informa como duplicada y no se vuelve a crear;
     si dos filas compiten por la misma clave, el ``IntegrityError`` se aisla con
     un ``SAVEPOINT`` y se continua con las restantes. Los legajos se resuelven
@@ -357,16 +356,15 @@ def _commit_novelties(
             select(Employee).where(Employee.organization_id == user.organization_id)
         ).all()
     }
-    periods = sorted(
-        {row.periodo for row in result.valid_rows if isinstance(row, NoveltyRow)}
-    )
-    existing: set[tuple[int, str, str]] = set()
+    periods = sorted({row.periodo for row in result.valid_rows if isinstance(row, NoveltyRow)})
+    existing: set[tuple[int, int | None, str, str]] = set()
     if periods:
         existing = {
-            (row[0], row[1], row[2])
+            (row[0], row[1], row[2], row[3])
             for row in db.execute(
                 select(
                     PayrollNovelty.employee_id,
+                    PayrollNovelty.company_id,
                     PayrollNovelty.period,
                     PayrollNovelty.code,
                 ).where(
@@ -392,25 +390,77 @@ def _commit_novelties(
                     field="legajo",
                     code="legajo_no_encontrado",
                     message=(
-                        "No existe un empleado con ese legajo en la organizacion; "
-                        "la fila se omite."
+                        "No existe un empleado con ese legajo en la organizacion; la fila se omite."
                     ),
                     value=row.legajo,
                 )
             )
             continue
 
-        key = (employee.id, row.periodo, row.tipo)
-        if key in existing:
+        year, month = int(row.periodo[:4]), int(row.periodo[4:])
+        month_start = date(year, month, 1)
+        next_month = date(year + (month == 12), month % 12 + 1, 1)
+        companies = set(
+            db.scalars(
+                select(EmploymentContract.company_id)
+                .join(Company, Company.id == EmploymentContract.company_id)
+                .where(
+                    EmploymentContract.employee_id == employee.id,
+                    Company.organization_id == user.organization_id,
+                    EmploymentContract.valid_from < next_month,
+                    or_(
+                        EmploymentContract.valid_to.is_(None),
+                        EmploymentContract.valid_to >= month_start,
+                    ),
+                )
+            )
+        )
+        if company_id is not None and company_id not in companies or not companies:
+            skipped += 1
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field="legajo",
+                    code="sin_contrato",
+                    message="El empleado no tiene contrato en la empresa para el mes indicado.",
+                    value=row.legajo,
+                )
+            )
+            continue
+        if company_id is None and len(companies) != 1:
+            skipped += 1
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field="legajo",
+                    code="empresa_ambigua",
+                    message="El empleado tiene contratos en varias empresas para el mes; indique company_id.",
+                    value=row.legajo,
+                )
+            )
+            continue
+        resolved_company = company_id if company_id is not None else next(iter(companies))
+        legacy_key = (employee.id, None, row.periodo, row.tipo)
+        if legacy_key in existing and len(companies) != 1:
+            skipped += 1
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field="legajo",
+                    code="empresa_ambigua",
+                    message="La novedad histórica no tiene empresa y sus contratos del mes son ambiguos.",
+                    value=row.legajo,
+                )
+            )
+            continue
+        key = (employee.id, resolved_company, row.periodo, row.tipo)
+        if key in existing or legacy_key in existing:
             skipped += 1
             result.duplicates.append(
                 DuplicateRow(
                     row=row_number,
                     first_row=row_number,
-                    key=(
-                        f"legajo:{row.legajo}|periodo:{row.periodo}|"
-                        f"tipo:{row.tipo}"
-                    ),
+                    key=(f"legajo:{row.legajo}|periodo:{row.periodo}|tipo:{row.tipo}"),
                     message=(
                         "Ya existe una novedad con el mismo legajo, periodo, tipo "
                         "y origen; la fila se omite."
@@ -419,9 +469,55 @@ def _commit_novelties(
             )
             continue
 
+        # Serialize creation of new runs for this company with the import.
+        db.scalar(select(Company).where(Company.id == resolved_company).with_for_update())
+        db.execute(
+            update(Company).where(Company.id == resolved_company).values(active=Company.active)
+        )
+
+        # Lock even DRAFT rows: calculation/approval claims use conditional
+        # updates on these same rows, so they cannot race this transaction.
+        runs = db.scalars(
+            select(PayrollRun)
+            .where(
+                PayrollRun.organization_id == user.organization_id,
+                PayrollRun.company_id == resolved_company,
+                PayrollRun.period_end >= month_start,
+                PayrollRun.period_end < next_month,
+            )
+            .order_by(PayrollRun.id)
+            .with_for_update()
+        ).all()
+        for run in runs:
+            db.execute(
+                update(PayrollRun).where(PayrollRun.id == run.id).values(status=PayrollRun.status)
+            )
+            db.refresh(run)
+        blocked = next(
+            (run for run in runs if run.status in {"APPROVED", "CLOSED", "VALIDATING"}), None
+        )
+        if blocked:
+            skipped += 1
+            calculating = blocked.status == "VALIDATING"
+            result.errors.append(
+                RowError(
+                    row=row_number,
+                    field="periodo",
+                    code="liquidacion_en_calculo" if calculating else "liquidacion_bloqueada",
+                    message=(
+                        "La liquidación está en cálculo; vuelva a intentar al terminar."
+                        if calculating
+                        else "La liquidación está aprobada o cerrada; registre el cambio mediante un ajuste."
+                    ),
+                    value=row.periodo,
+                )
+            )
+            continue
+
         novelty = PayrollNovelty(
             organization_id=user.organization_id,
             employee_id=employee.id,
+            company_id=resolved_company,
             period=row.periodo,
             code=row.tipo,
             kind=row.naturaleza or NOVELTY_KIND,
@@ -453,6 +549,23 @@ def _commit_novelties(
             continue
 
         existing.add(key)
+        for run in runs:
+            if run.status in {"CALCULATED", "IN_REVIEW", "ERROR"}:
+                before = run.status
+                run.status = "DRAFT"
+                run.inputs_hash = run.results_hash = run.ruleset_id = None
+                _clear_previous_results(db, run.id)
+                db.add(
+                    AuditLog(
+                        organization_id=user.organization_id,
+                        user_id=user.id,
+                        action="payroll_run.reopened",
+                        entity_type="PayrollRun",
+                        entity_id=str(run.id),
+                        before={"status": before},
+                        after={"status": "DRAFT", "reason": "novelty_import"},
+                    )
+                )
         created += 1
 
     commit_or_conflict(db)
@@ -525,7 +638,10 @@ def import_novelties(
     devuelve el resultado del commit junto con los conteos de creadas y
     omitidas. Las novedades ya importadas se informan como duplicadas y no
     interrumpen el resto del lote. ``company_id`` es opcional: si se informa,
-    se valida que la empresa pertenezca a la organizacion del usuario.
+    se valida que la empresa pertenezca a la organizacion y tenga contrato en
+    el mes; si se omite debe haber una sola empresa contractual. Los duplicados
+    no modifican liquidaciones. Nuevas filas reabren liquidaciones calculadas,
+    y se rechazan si hay una aprobada, cerrada o en cálculo.
 
     Contrato B-47P: siempre HTTP 200 con ``errors[]`` por fila; ``<``/``>``
     en observacion/legajo se rechazan (V2-13).

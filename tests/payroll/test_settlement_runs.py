@@ -239,6 +239,9 @@ def test_sac_uses_best_semester_remuneration(
 ) -> None:
     """SAC: mejor remuneración del semestre / 12 * meses (historial)."""
     factory, context = settlement_db
+    for month in (1, 2, 6):
+        _add_monthly_history(factory, context, "E-1", date(2026, month, 1), "900000")
+    _add_novelty(factory, context, "E-2", "SAC_BASE", "202606", amount="600000")
     _add_monthly_history(factory, context, "E-1", date(2026, 3, 1), "900000")
     _add_monthly_history(factory, context, "E-1", date(2026, 4, 1), "1200000")
     _add_monthly_history(factory, context, "E-1", date(2026, 5, 1), "1100000")
@@ -253,15 +256,23 @@ def test_sac_uses_best_semester_remuneration(
     assert result["status"] == "CALCULATED", result["errors"]
     assert result["summary"] == {
         "employees_total": 2, "calculated": 2, "errors": 0,
-        "gross": "650000.00", "net": "650000.00",
+        "gross": "634806.63", "net": "634806.63",
     }
     by_employee = {row["employee_id"]: row for row in result["results"]}
     e1 = context["employees"]["E-1"].id
     e2 = context["employees"]["E-2"].id
     # E-1: mejor 1200000 / 12 * 6 meses.
     assert by_employee[e1]["gross"] == "600000.00"
-    # E-2: sin historial, base actual 600000, 1 mes (junio).
-    assert by_employee[e2]["gross"] == "50000.00"
+    assert by_employee[e1]["employer_cost"] == "600000.00"
+    with factory() as session:
+        from sqlalchemy import select
+
+        stored = session.scalar(select(PayrollResult).where(
+            PayrollResult.payroll_run_id == run_id, PayrollResult.employee_id == e1
+        ))
+        assert stored is not None and stored.employer_cost == stored.gross
+    # E-2: 21 días calendario de los 181 días del semestre.
+    assert by_employee[e2]["gross"] == "34806.63"
 
 
 def test_sac_ignores_non_monthly_history(
@@ -294,6 +305,8 @@ def test_sac_ignores_non_monthly_history(
             net=Decimal("5000000"),
             employer_cost=Decimal("0"),
         ))
+    _add_novelty(factory, context, "E-1", "SAC_BASE", "202606", amount="1200000")
+    _add_novelty(factory, context, "E-2", "SAC_BASE", "202606", amount="600000")
     run_id = _create_run(
         factory, context, "sac-h1b", "SAC", date(2026, 6, 1), date(2026, 6, 30)
     )
@@ -362,6 +375,7 @@ def test_final_settlement_terminated_only(
         factory, context, "E-3", "LIQ_DIAS_INTEGRACION", "202606", quantity="10"
     )
 
+    _add_novelty(factory, context, "E-3", "SAC_BASE", "202606", amount="1000000")
     run_id = _create_run(
         factory, context, "final", "FINAL", date(2026, 6, 1), date(2026, 6, 30)
     )
@@ -371,9 +385,9 @@ def test_final_settlement_terminated_only(
     assert result["summary"]["employees_total"] == 1
     row = result["results"][0]
     # PREAVISO 1200000 + INTEGRACION 400000 + VACACIONES 672000
-    # + SAC 500000 + ANTIGUEDAD 7200000 = 9972000.
-    assert row["gross"] == "9972000.00"
-    assert row["remunerative"] == "2772000.00"
+    # + SAC 472375.69 (171/181 días) + ANTIGUEDAD 7200000.
+    assert row["gross"] == "9944375.69"
+    assert row["remunerative"] == "2744375.69"
     assert row["non_remunerative"] == "7200000.00"
     assert [item["code"] for item in row["items"]] == [
         "PREAVISO", "INTEGRACION_MES", "VACACIONES_NO_GOZADAS",
@@ -418,6 +432,8 @@ def test_settlement_unconsumed_novelty_follows_v209(
         factory, context, "E-1", "HORAS_EXTRA", "202606",
         quantity="5", amount="10000",
     )
+    _add_novelty(factory, context, "E-1", "SAC_BASE", "202606", amount="1200000")
+    _add_novelty(factory, context, "E-2", "SAC_BASE", "202606", amount="600000")
     run_id = _create_run(
         factory, context, "sac-novedad", "SAC",
         date(2026, 6, 1), date(2026, 6, 30),
@@ -436,3 +452,106 @@ def test_settlement_unconsumed_novelty_follows_v209(
         warning["code"] for warning in allowed["warnings"]
         if warning["type"] == "novelty_not_consumed"
     } == {"HORAS_EXTRA"}
+
+
+def test_sac_calendar_days_and_explicit_base(settlement_db):
+    from app.core.payroll_engine.settlements import calculate_sac
+    from app.services.payroll_calculation import _sac_inputs
+    factory, context = settlement_db
+    for hire, end, amount, expected in (
+        (date(2025, 11, 6), date(2025, 12, 31), "6900", "1050.00"),
+        (date(2025, 2, 10), date(2025, 6, 30), "20000", "7790.06"),
+    ):
+        with factory() as session:
+            run = PayrollRun(organization_id=context["organization_id"], company_id=context["company_id"],
+                             run_type="SAC", period_start=end, period_end=end, status="DRAFT", code="temporary")
+            employee = session.get(Employee, context["employees"]["E-1"].id)
+            history, best, months, trace = _sac_inputs(session, run=run, employee=employee, hire=hire, end=end,
+                novelties=[{"code": "SAC_BASE", "kind": "AUXILIARY", "amount": Decimal(amount)}])
+            assert calculate_sac(history, end, months_worked=months, best_salary=best).amount == Decimal(expected)
+            assert any("faltantes=" in line and "días=" in trace[0] for line in trace)
+
+
+def test_empty_runs_are_errors(settlement_db):
+    from sqlalchemy import select
+
+    from app.database.models import PayrollTrace
+    factory, context = settlement_db
+    with factory.begin() as session:
+        company = Company(organization_id=context["organization_id"], cuit="30567890199", legal_name="Sin empleados")
+        session.add(company)
+        session.flush()
+        context = {**context, "company_id": company.id}
+    for kind in ("MONTHLY", "SAC", "VACATIONS", "FINAL"):
+        run_id = _create_run(factory, context, "empty-" + kind, kind, date(2028, 1, 1), date(2028, 1, 31))
+        result = _calculate(factory, run_id)
+        assert result["status"] == "ERROR"
+        with factory() as session:
+            events = session.scalars(select(PayrollTrace.event).where(PayrollTrace.payroll_run_id == run_id)).all()
+            assert "RUN_ERROR" in events and "CALCULATION_REVIEW" in events
+
+
+def test_special_rules_are_explicit_scoped_and_snapshotted(settlement_db):
+    from app.database.models import FormulaDefinition, FormulaVersion, Ruleset
+    factory, context = settlement_db
+    with factory.begin() as session:
+        contract = session.query(EmploymentContract).filter_by(employee_id=context["employees"]["E-1"].id).one()
+        contract.agreement_id = session.get(AgreementCategory, contract.category_id).agreement_id
+        for code, nature, rate, condition, scope in (
+            ("VAC_APORTE", "DEDUCTION", "0.10", "VACATIONS", None),
+            ("VAC_PATRONAL", "CONTRIBUTION", "0.20", "VACATIONS", None),
+            ("OTRO_CCT", "DEDUCTION", "0.50", "VACATIONS", "NO-APLICA"),
+            ("CCT_APORTE", "DEDUCTION", "0.01", "VACATIONS", "999/99"),
+            ("MENSUAL", "REMUNERATIVE", "1", "MONTHLY", None),
+        ):
+            session.add(PayrollConcept(organization_id=context["organization_id"], code=code, name=code, nature=nature))
+            definition = FormulaDefinition(organization_id=context["organization_id"], code=code, agreement_code=scope)
+            session.add(definition)
+            session.flush()
+            session.add(FormulaVersion(formula_id=definition.id, version=1, status="APPROVED", valid_from=date(2026, 1, 1),
+                expression={"operator": "multiply", "arguments": [{"parameter": "settlement_remunerative"}, {"constant": rate}]},
+                conditions=[{"field": "run_type", "operator": "eq", "value": condition}]))
+    for employee in ("E-1", "E-2"):
+        _add_novelty(factory, context, employee, "VAC_DIAS", "202606", quantity="5")
+    run_id = _create_run(factory, context, "special-rules", "VACATIONS", date(2026, 6, 1), date(2026, 6, 30))
+    result = _calculate(factory, run_id)
+    assert result["status"] == "CALCULATED", result["errors"]
+    row = next(row for row in result["results"] if row["employee_id"] == context["employees"]["E-1"].id)
+    assert (row["gross"], row["deductions"], row["contributions"], row["net"], row["employer_cost"]) == (
+        "240000.00", "26400.00", "48000.00", "213600.00", "288000.00")
+    assert {item["code"] for item in row["items"]} == {"VACACIONES", "VAC_APORTE", "VAC_PATRONAL", "CCT_APORTE"}
+    with factory() as session:
+        snapshot = session.get(Ruleset, result["ruleset_id"]).rules
+        assert {f["code"] for f in snapshot["formulas"]} == {"VAC_APORTE", "VAC_PATRONAL", "OTRO_CCT", "CCT_APORTE"}
+        assert snapshot["parameter_versions"]
+
+
+def test_final_reports_terminated_without_contract(settlement_db):
+    from sqlalchemy import select
+
+    from app.database.models import PayrollTrace
+    factory, context = settlement_db
+    with factory.begin() as session:
+        employee = Employee(organization_id=context["organization_id"], employee_code="SIN-CONT",
+                            first_name="Sin", last_name="Contrato", hire_date=date(2020, 1, 1),
+                            termination_date=date(2026, 6, 15), active=False)
+        session.add(employee)
+        session.flush()
+        employee_id = employee.id
+    run_id = _create_run(factory, context, "final-sin-contrato", "FINAL", date(2026, 6, 1), date(2026, 6, 30))
+    result = _calculate(factory, run_id)
+    assert result["status"] == "ERROR"
+    assert any(error.get("employee_id") == employee_id and "contrato" in error["message"] for error in result["errors"])
+    with factory() as session:
+        assert session.scalar(select(PayrollTrace.id).where(PayrollTrace.payroll_run_id == run_id,
+            PayrollTrace.employee_id == employee_id, PayrollTrace.event == "EMPLOYEE_ERROR")) is not None
+
+
+def test_sac_missing_history_reports_months(settlement_db):
+    factory, context = settlement_db
+    _add_monthly_history(factory, context, "E-1", date(2026, 3, 1), "900000")
+    run_id = _create_run(factory, context, "incomplete-history", "SAC", date(2026, 6, 1), date(2026, 6, 30))
+    result = _calculate(factory, run_id)
+    assert result["status"] == "ERROR"
+    error = next(error for error in result["errors"] if error["employee_id"] == context["employees"]["E-1"].id)
+    assert "2026-01" in error["message"] and "SAC_BASE" in error["message"]

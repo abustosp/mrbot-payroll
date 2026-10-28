@@ -287,13 +287,16 @@ class NormativeDocument(Base):
 class NormativeParameter(Base):
     __tablename__ = "normative_parameters"
     __table_args__ = (
-        UniqueConstraint("jurisdiction", "code", "valid_from", "version"),
+        UniqueConstraint("jurisdiction", "code", "agreement_code", "category_code", "valid_from", "version"),
         CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="inclusive_validity"),
+        CheckConstraint("category_code = '' OR agreement_code <> ''", name="parameter_category_scope"),
         Index("ix_parameter_lookup", "jurisdiction", "code", "valid_from", "valid_to"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     jurisdiction: Mapped[str] = mapped_column(String(80), default="AR", nullable=False)
     code: Mapped[str] = mapped_column(String(100), nullable=False)
+    agreement_code: Mapped[str] = mapped_column(String(40), default="", server_default="", nullable=False)
+    category_code: Mapped[str] = mapped_column(String(40), default="", server_default="", nullable=False)
     value: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     valid_from: Mapped[date] = mapped_column(Date, nullable=False)
     valid_to: Mapped[date | None] = mapped_column(Date)
@@ -383,7 +386,7 @@ class PayrollNovelty(Base):
 
     ``period`` is the imputation period in ``AAAAMM`` format. ``kind`` classifies
     the novelty nature using the same values as ``PayrollConcept.nature``. The
-    natural key ``(employee_id, period, code, source)`` makes imports
+    natural key ``(employee_id, company_id, period, code, source)`` makes imports
     idempotent, while ``(organization_id, external_id)`` prevents the same
     external record from being imported twice. Multiple null ``external_id``
     values are allowed by the unique constraint, as required for manually
@@ -394,10 +397,11 @@ class PayrollNovelty(Base):
     __table_args__ = (
         UniqueConstraint(
             "employee_id",
+            "company_id",
             "period",
             "code",
             "source",
-            name="uq_payroll_novelties_employee_period_code_source",
+            name="uq_payroll_novelties_employee_company_period_code_source",
         ),
         UniqueConstraint(
             "organization_id",
@@ -422,6 +426,7 @@ class PayrollNovelty(Base):
     employee_id: Mapped[int] = mapped_column(
         ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
     )
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
     period: Mapped[str] = mapped_column(String(6), nullable=False)
     code: Mapped[str] = mapped_column(String(40), nullable=False)
     kind: Mapped[str] = mapped_column(

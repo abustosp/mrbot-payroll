@@ -17,11 +17,14 @@ from app.api.imports import MAX_IMPORT_BYTES, router
 from app.auth.dependencies import require_user
 from app.database import Base
 from app.database.models import (
+    AuditLog,
     Company,
     Employee,
     EmploymentContract,
     Organization,
     PayrollNovelty,
+    PayrollResult,
+    PayrollRun,
     User,
 )
 from app.database.session import get_db
@@ -83,6 +86,26 @@ def add_employee(
         return employee.id
 
 
+def add_contract(
+    factory: sessionmaker[Session], employee_id: int, company_id: int | None = None
+) -> int:
+    with factory.begin() as session:
+        if company_id is None:
+            company_count = session.scalar(select(func.count()).select_from(Company))
+            company = Company(
+                organization_id=1, cuit=f"30{company_count + 1:09d}", legal_name="Empresa"
+            )
+            session.add(company)
+            session.flush()
+            company_id = company.id
+        session.add(
+            EmploymentContract(
+                employee_id=employee_id, company_id=company_id, valid_from=date(2025, 1, 1)
+            )
+        )
+        return company_id
+
+
 @pytest.fixture
 def api(tmp_path: Path) -> Generator[tuple[TestClient, sessionmaker[Session], FastAPI], None, None]:
     engine = create_engine(
@@ -128,10 +151,7 @@ def _post_employee_file(client: TestClient, content: bytes, filename: str, **par
 def test_employees_csv_dry_run_returns_preview(api) -> None:
     client, factory, _ = api
     content = employee_csv(
-        [
-            "E-1;Pérez;Juan;20-12345678-6;15/03/2024;Administrativo;CCT 130/75;"
-            "juan.perez@example.com"
-        ]
+        ["E-1;Pérez;Juan;20-12345678-6;15/03/2024;Administrativo;CCT 130/75;juan.perez@example.com"]
     )
 
     response = _post_employee_file(client, content, "employees.csv")
@@ -243,6 +263,7 @@ def test_novelties_dry_run_returns_preview(api) -> None:
 def test_novelties_commit_persists_and_is_idempotent(api) -> None:
     client, factory, _ = api
     employee_id = add_employee(factory, "E-30")
+    add_contract(factory, employee_id)
     content = novelty_csv(
         [
             "E-30;202601;horas_extra;10;1500,50",
@@ -268,9 +289,7 @@ def test_novelties_commit_persists_and_is_idempotent(api) -> None:
     assert first_data["source"] == "import"
 
     with factory() as session:
-        rows = session.scalars(
-            select(PayrollNovelty).order_by(PayrollNovelty.id)
-        ).all()
+        rows = session.scalars(select(PayrollNovelty).order_by(PayrollNovelty.id)).all()
         assert len(rows) == 2
         overtime = rows[0]
         assert overtime.organization_id == 1
@@ -312,6 +331,7 @@ def test_novelties_commit_persists_and_is_idempotent(api) -> None:
 def test_novelties_commit_reports_unknown_legajo_without_aborting(api) -> None:
     client, factory, _ = api
     employee_id = add_employee(factory, "E-31")
+    add_contract(factory, employee_id)
     content = novelty_csv(
         [
             "E-999;202601;horas_extra;5;100",
@@ -344,6 +364,7 @@ def test_novelties_commit_persists_naturaleza_per_row(api) -> None:
     # B-43: la naturaleza por novedad se persiste en kind (default REMUNERATIVE).
     client, factory, _ = api
     employee_id = add_employee(factory, "E-32")
+    add_contract(factory, employee_id)
     content = (
         b"Legajo;Periodo;Tipo;Cantidad;Importe;Naturaleza\n"
         b"E-32;202601;bonificacion;1;50000;NR\n"
@@ -359,9 +380,7 @@ def test_novelties_commit_persists_naturaleza_per_row(api) -> None:
     assert response.status_code == 200, response.text
     assert response.json()["created"] == 2
     with factory() as session:
-        rows = session.scalars(
-            select(PayrollNovelty).order_by(PayrollNovelty.id)
-        ).all()
+        rows = session.scalars(select(PayrollNovelty).order_by(PayrollNovelty.id)).all()
         assert len(rows) == 2
         assert rows[0].employee_id == employee_id
         assert rows[0].kind == "NON_REMUNERATIVE"
@@ -405,6 +424,7 @@ def test_novelties_commit_is_isolated_by_organization(api) -> None:
         assert session.get(Employee, foreign_employee_id) is not None
 
     local_employee_id = add_employee(factory, "E-40", organization_id=1)
+    add_contract(factory, local_employee_id, company_id)
     local = client.post(
         "/api/v1/imports/novelties",
         params={"dry_run": "false", "company_id": company_id},
@@ -529,9 +549,7 @@ def test_employees_commit_creates_contract_when_company_is_provided(api) -> None
         session.flush()
         company_id = company.id
 
-    content = employee_csv(
-        ["E-13;López;Pedro;20-12345678-6;20/05/2024;;;pedro@example.com"]
-    )
+    content = employee_csv(["E-13;López;Pedro;20-12345678-6;20/05/2024;;;pedro@example.com"])
 
     response = _post_employee_file(
         client, content, "employees.csv", dry_run="false", company_id=company_id
@@ -554,9 +572,7 @@ def test_employees_commit_creates_contract_when_company_is_provided(api) -> None
 
 def test_imports_require_authentication(api) -> None:
     client, _, application = api
-    content = employee_csv(
-        ["E-14;Anónimo;Sin Sesión;20-12345678-6;15/03/2024;;;anon@example.com"]
-    )
+    content = employee_csv(["E-14;Anónimo;Sin Sesión;20-12345678-6;15/03/2024;;;anon@example.com"])
     application.dependency_overrides.pop(require_user)
 
     employee_response = _post_employee_file(client, content, "employees.csv")
@@ -580,9 +596,7 @@ def test_viewer_can_preview_but_cannot_commit(api) -> None:
         active=True,
     )
     application.dependency_overrides[require_user] = lambda: viewer
-    content = employee_csv(
-        ["E-15;Vista;Solo;20-12345678-6;15/03/2024;;;vista@example.com"]
-    )
+    content = employee_csv(["E-15;Vista;Solo;20-12345678-6;15/03/2024;;;vista@example.com"])
 
     preview = _post_employee_file(client, content, "employees.csv", dry_run="true")
     commit = _post_employee_file(client, content, "employees.csv", dry_run="false")
@@ -591,3 +605,152 @@ def test_viewer_can_preview_but_cannot_commit(api) -> None:
     assert commit.status_code == 403
     with factory() as session:
         assert session.scalar(select(func.count()).select_from(Employee)) == 0
+
+
+def test_novelties_scope_invalidate_and_block_runs(api) -> None:
+    client, factory, _ = api
+    employee_id = add_employee(factory, "E-50")
+    first_company = add_contract(factory, employee_id)
+    second_company = add_contract(factory, employee_id)
+    with factory.begin() as session:
+        session.add_all(
+            [
+                PayrollRun(
+                    id=1,
+                    organization_id=1,
+                    company_id=first_company,
+                    code="run-1",
+                    period_start=date(2026, 1, 1),
+                    period_end=date(2026, 1, 31),
+                    status="CALCULATED",
+                    created_by=1,
+                    inputs_hash="input",
+                    results_hash="output",
+                ),
+                PayrollRun(
+                    id=2,
+                    organization_id=1,
+                    company_id=second_company,
+                    code="run-2",
+                    period_start=date(2026, 1, 1),
+                    period_end=date(2026, 1, 31),
+                    status="APPROVED",
+                    created_by=1,
+                ),
+                PayrollResult(payroll_run_id=1, employee_id=employee_id),
+            ]
+        )
+    content = novelty_csv(["E-50;202601;horas_extra;1;100"])
+
+    def post(company_id=None):
+        params = {"dry_run": "false"}
+        if company_id:
+            params["company_id"] = company_id
+        return client.post(
+            "/api/v1/imports/novelties",
+            params=params,
+            files={"file": ("n.csv", content, "text/csv")},
+        ).json()
+
+    assert post()["errors"][0]["code"] == "empresa_ambigua"
+    assert post(second_company)["errors"][0]["code"] == "liquidacion_bloqueada"
+    assert post(first_company)["created"] == 1
+    with factory.begin() as session:
+        run = session.get(PayrollRun, 1)
+        assert (run.status, run.inputs_hash, run.results_hash, run.ruleset_id) == (
+            "DRAFT",
+            None,
+            None,
+            None,
+        )
+        assert session.scalar(select(func.count()).select_from(PayrollResult)) == 0
+        assert session.scalar(select(func.count()).select_from(AuditLog)) == 1
+        run.status = "CALCULATED"
+        run.inputs_hash = "still-valid"
+    assert post(first_company)["duplicate_count"] == 1
+    with factory() as session:
+        assert session.get(PayrollRun, 1).inputs_hash == "still-valid"
+        assert session.get(PayrollRun, 1).status == "CALCULATED"
+        assert session.get(PayrollRun, 2).status == "APPROVED"
+        assert session.scalar(select(PayrollNovelty)).company_id == first_company
+
+    with factory.begin() as session:
+        session.get(PayrollRun, 2).status = "VALIDATING"
+    assert post(second_company)["errors"][0]["code"] == "liquidacion_en_calculo"
+    with factory.begin() as session:
+        session.get(PayrollRun, 2).status = "DRAFT"
+    assert post(second_company)["created"] == 1
+    with factory() as session:
+        assert set(session.scalars(select(PayrollNovelty.company_id))) == {
+            first_company,
+            second_company,
+        }
+
+
+def test_novelties_require_contract_in_month(api) -> None:
+    client, factory, _ = api
+    employee_id = add_employee(factory, "E-51")
+    company_id = add_contract(factory, employee_id)
+    content = novelty_csv(["E-51;202401;horas_extra;1;100"])
+    response = client.post(
+        "/api/v1/imports/novelties",
+        params={"dry_run": "false", "company_id": company_id},
+        files={"file": ("n.csv", content, "text/csv")},
+    )
+    assert response.json()["errors"][0]["code"] == "sin_contrato"
+
+
+def test_calculation_loader_scopes_companies_and_refuses_ambiguous_legacy(api) -> None:
+    from app.services.payroll_calculation import _novelties_for_employees
+
+    client, factory, _ = api
+    employee_id = add_employee(factory, "E-52")
+    first_company = add_contract(factory, employee_id)
+    with factory.begin() as session:
+        session.add(
+            PayrollNovelty(
+                organization_id=1,
+                employee_id=employee_id,
+                period="202601",
+                code="legacy",
+                source="import",
+            )
+        )
+    with factory() as session:
+        rows = _novelties_for_employees(session, 1, first_company, [employee_id], date(2026, 1, 31))
+        assert [row["code"] for row in rows[employee_id]] == ["legacy"]
+    content = novelty_csv(["E-52;202601;legacy;1;100"])
+    params = {"dry_run": "false", "company_id": first_company}
+    response = client.post(
+        "/api/v1/imports/novelties", params=params, files={"file": ("n.csv", content, "text/csv")}
+    )
+    assert response.json()["duplicate_count"] == 1
+    second_company = add_contract(factory, employee_id)
+    response = client.post(
+        "/api/v1/imports/novelties", params=params, files={"file": ("n.csv", content, "text/csv")}
+    )
+    assert response.json()["errors"][0]["code"] == "empresa_ambigua"
+    with factory() as session:
+        with pytest.raises(ValueError, match="empresa única"):
+            _novelties_for_employees(session, 1, second_company, [employee_id], date(2026, 1, 31))
+    with factory.begin() as session:
+        session.scalar(select(PayrollNovelty)).company_id = first_company
+        session.add(
+            PayrollNovelty(
+                organization_id=1,
+                employee_id=employee_id,
+                company_id=second_company,
+                period="202601",
+                code="second",
+                source="manual",
+            )
+        )
+    with factory() as session:
+        first = _novelties_for_employees(
+            session, 1, first_company, [employee_id], date(2026, 1, 31)
+        )
+        second = _novelties_for_employees(
+            session, 1, second_company, [employee_id], date(2026, 1, 31)
+        )
+        assert [row["code"] for row in first[employee_id]] == ["legacy"]
+        assert [row["code"] for row in second[employee_id]] == ["second"]

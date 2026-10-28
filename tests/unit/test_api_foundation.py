@@ -176,7 +176,9 @@ def test_formula_draft_validation_approval_payroll_and_role_guards(api) -> None:
         payroll_run = db.get(PayrollRun, run.json()["id"])
         payroll_run.status = "CALCULATED"
         db.commit()
-    assert client.post(f"/api/v1/payroll-runs/{run.json()['id']}/approve").json()["status"] == "APPROVED"
+    # A state flag alone is insufficient evidence of a calculation.
+    assert client.post(f"/api/v1/payroll-runs/{run.json()['id']}/approve").status_code == 409
+    assert client.get(f"/api/v1/payroll-runs/{run.json()['id']}").json()["status"] == "CALCULATED"
 
     viewer_response = client.post(
         "/api/v1/auth/login", json={"email": "viewer@example.test", "password": "a-long-test-password"}

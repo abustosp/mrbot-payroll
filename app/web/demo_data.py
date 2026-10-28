@@ -139,6 +139,7 @@ class Receipt:
     non_remunerative_total: Decimal = D("0.00")
     deductions_total: Decimal = D("0.00")
     contributions_total: Decimal = D("0.00")
+    payroll_id: str = ""
 
     def to_pdf_context(self) -> dict[str, Any]:
         """Contexto canonico aceptado por ``app.exporters.pdf.receipts``."""
@@ -175,6 +176,7 @@ def _sum(items: list[PayrollConcept], kind: str) -> Decimal:
 def _build_receipt(
     *,
     receipt_id: str,
+    payroll_id: str,
     number: str,
     company: Company,
     employee_id: str,
@@ -192,6 +194,7 @@ def _build_receipt(
     net = remunerative + non_remunerative - deductions
     return Receipt(
         id=receipt_id,
+        payroll_id=payroll_id,
         number=number,
         company_id=company.id,
         employee_id=employee.id,
@@ -598,6 +601,7 @@ def _seed_receipts() -> list[Receipt]:
     return [
         _build_receipt(
             receipt_id="rec-2026-09-001",
+            payroll_id="pay-2026-09",
             number="R-2026-09-0001",
             company=andes,
             employee_id="emp-001",
@@ -621,6 +625,7 @@ def _seed_receipts() -> list[Receipt]:
         ),
         _build_receipt(
             receipt_id="rec-2026-09-002",
+            payroll_id="pay-2026-09",
             number="R-2026-09-0002",
             company=andes,
             employee_id="emp-002",
@@ -644,6 +649,7 @@ def _seed_receipts() -> list[Receipt]:
         ),
         _build_receipt(
             receipt_id="rec-2026-09-003",
+            payroll_id="pay-2026-09",
             number="R-2026-09-0003",
             company=andes,
             employee_id="emp-003",
@@ -665,6 +671,7 @@ def _seed_receipts() -> list[Receipt]:
         ),
         _build_receipt(
             receipt_id="rec-2026-10-004",
+            payroll_id="pay-2026-10",
             number="R-2026-10-0004",
             company=pampa,
             employee_id="emp-004",
@@ -785,7 +792,7 @@ class DemoDataStore:
     def get_proposal(self, proposal_id: str) -> AIProposal | None:
         return next((proposal for proposal in self.proposals if proposal.id == proposal_id), None)
 
-    def set_proposal_status(self, proposal_id: str, status: str) -> AIProposal | None:
+    def set_proposal_status(self, proposal_id: str, status: str, *, user_id: int | None = None) -> AIProposal | None:
         allowed = {"draft", "in_review", "approved", "rejected"}
         if status not in allowed:
             raise ValueError(f"Estado de propuesta no valido: {status}")
@@ -804,11 +811,13 @@ class DemoDataStore:
         status: str = "",
         limit: int | None = None,
         offset: int = 0,
+        payroll_id: str = "",
     ) -> list[Receipt]:
         matched = [
             receipt
             for receipt in self.receipts
             if (not company_id or receipt.company_id == company_id)
+            and (not payroll_id or receipt.payroll_id == payroll_id)
             and (not period or receipt.period == period)
             and (not status or receipt.status == status)
             and _matches(query, receipt.number, receipt.employee.get("name", ""), receipt.employee_id)

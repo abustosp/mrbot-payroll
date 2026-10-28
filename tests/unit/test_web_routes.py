@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from collections.abc import Generator
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +12,9 @@ from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
 import app.main as main_module
+import app.web.routes as web_routes
 from app.config import Settings, get_settings
+from app.exporters.pdf.receipts import PdfRendererUnavailable
 from app.web.demo_data import DemoDataStore
 from app.web.routes import router
 
@@ -39,6 +42,7 @@ def test_dashboard_renders_shell_and_metrics(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["cache-control"] == "private, no-store"
     html = response.text
     assert "Payroll Argentina" in html
     assert "Dashboard" in html
@@ -254,6 +258,17 @@ def test_receipts_zip(client: TestClient) -> None:
         assert len(reader.pages) >= 1
         assert "María Fernanda Gómez" in (reader.pages[0].extract_text() or "")
 
+
+def test_receipts_zip_respects_search_and_status(client: TestClient) -> None:
+    response = client.get("/recibos/lote.zip", params={"q": "R-2026-09-0001", "status": "issued"})
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == ["R-2026-09-0001.pdf"]
+    no_match = client.get("/recibos/lote.zip", params={"q": "R-2026-09-0001", "status": "pending"}, follow_redirects=False)
+    assert no_match.status_code == 303
+    assert "q=R-2026-09-0001" in no_match.headers["location"]
+    assert "status=pending" in no_match.headers["location"]
+
     missing = client.get(
         "/recibos/lote.zip", params={"period": "1999-01"}, follow_redirects=False
     )
@@ -264,6 +279,37 @@ def test_receipts_zip(client: TestClient) -> None:
     followed = client.get("/recibos/lote.zip", params={"period": "1999-01"})
     assert followed.status_code == 200
     assert "No hay recibos para los filtros indicados." in followed.text
+
+
+def test_receipts_follow_payroll_not_just_company_and_period(client: TestClient, app: FastAPI) -> None:
+    store: DemoDataStore = app.state.payroll_data_source
+    store.receipts.append(replace(
+        store.receipts[0], id="other", number="OTRA-CORRIDA", payroll_id="otra-corrida"
+    ))
+    detail = client.get("/liquidaciones/pay-2026-09")
+    assert "R-2026-09-0001" in detail.text
+    assert "OTRA-CORRIDA" not in detail.text
+    assert "payroll_id=pay-2026-09" in detail.text
+    listing = client.get("/recibos", params={"payroll_id": "pay-2026-09"})
+    assert "R-2026-09-0001" in listing.text
+    assert "OTRA-CORRIDA" not in listing.text
+    assert 'name="payroll_id" value="pay-2026-09"' in listing.text
+    archive = client.get("/recibos/lote.zip", params={"payroll_id": "pay-2026-09"})
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as zipped:
+        assert len(zipped.namelist()) == 3
+        assert "OTRA-CORRIDA.pdf" not in zipped.namelist()
+
+
+def test_pdf_unavailable_redirects_with_error(client: TestClient, monkeypatch) -> None:
+    def unavailable(*args, **kwargs):
+        raise PdfRendererUnavailable("El generador PDF no está disponible.")
+
+    monkeypatch.setattr(web_routes, "render_receipt_pdf", unavailable)
+    monkeypatch.setattr(web_routes, "render_receipts_zip", unavailable)
+    for path in ("/recibos/rec-2026-09-001/pdf", "/recibos/lote.zip"):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 303
+        assert "error=" in response.headers["location"]
 
 
 def test_personal_data_is_escaped_in_web_and_receipt(client: TestClient, app: FastAPI) -> None:
@@ -427,7 +473,7 @@ def test_404_suggests_contextual_section(
 
 @pytest.mark.parametrize(
     "path",
-    ["/empresas", "/empleados", "/convenios", "/liquidaciones", "/propuestas-ia"],
+    ["/empresas", "/empleados", "/convenios", "/propuestas-ia"],
 )
 def test_future_actions_are_focusable_with_visible_note(
     client: TestClient, path: str

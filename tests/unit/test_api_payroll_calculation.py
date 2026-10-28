@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.auth.security import hash_password, sign_session
 from app.config import get_settings
 from app.database import Base
-from app.database.models import PayrollResult, PayrollRun, User
+from app.database.models import PayrollApproval, PayrollResult, PayrollRun, PayrollTrace, User
 from app.database.session import get_db
 from app.main import app
 from scripts.seed_demo import seed
@@ -68,6 +68,21 @@ def test_calculation_requires_editor_and_rejects_approved_runs(tmp_path: Path) -
                 json={"email": "admin@example.com", "password": "admin"},
             ).raise_for_status()
             assert client.post(f"/api/v1/payroll-runs/{run_id}/calculate").status_code == 200
+            with factory() as session:
+                review = session.scalar(select(PayrollTrace).where(PayrollTrace.event == "CALCULATION_REVIEW"))
+                original_review = dict(review.detail)
+                review_id = review.id
+            for warning_type in ("settlement_missing_rules", "settlement_incomplete"):
+                with factory.begin() as session:
+                    session.get(PayrollTrace, review_id).detail = {
+                        **original_review, "warnings": [{"type": warning_type}],
+                    }
+                assert client.post(f"/api/v1/payroll-runs/{run_id}/approve").status_code == 409
+                with factory() as session:
+                    assert session.get(PayrollRun, run_id).status == "CALCULATED"
+                    assert session.scalar(select(func.count()).select_from(PayrollApproval)) == 0
+            with factory.begin() as session:
+                session.get(PayrollTrace, review_id).detail = original_review
             client.post(f"/api/v1/payroll-runs/{run_id}/approve").raise_for_status()
             rejected = client.post(f"/api/v1/payroll-runs/{run_id}/calculate")
             assert rejected.status_code == 409

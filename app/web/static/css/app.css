@@ -998,6 +998,7 @@ table.data-table .nowrap {
 }
 
 .btn[disabled],
+.btn[aria-disabled="true"],
 .btn.disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -1852,11 +1853,13 @@ table.data-table .nowrap {
 
 @media (max-width: 991px) {
   .app-sidebar {
+    visibility: hidden;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
   }
 
   body.sidebar-open .app-sidebar {
+    visibility: visible;
     transform: translateX(0);
     box-shadow: var(--shadow-float);
   }

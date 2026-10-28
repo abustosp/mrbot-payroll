@@ -10,10 +10,45 @@
 
 {% block page_actions %}
   <a class="btn btn--outline" href="{{ url_for('payrolls_list') }}">{{ icon("arrow-left") }} Volver</a>
-  <a class="btn btn--primary" href="{{ url_for('receipts_list') }}?company_id={{ payroll.company_id }}&period={{ payroll.period }}">{{ icon("receipts") }} Ver recibos</a>
+  <a class="btn btn--primary" href="{{ url_for('receipts_list') }}?payroll_id={{ payroll.id | urlencode }}">{{ icon("receipts") }} Ver recibos</a>
 {% endblock %}
 
 {% block content %}
+  {% if request.query_params.get("error") %}<div class="callout" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
+  {% if request.query_params.get("notice") %}<div class="callout" role="status">{{ request.query_params.get("notice") }}</div>{% endif %}
+  {% if demo_mode %}<div class="callout">Modo demo: los datos se presentan en solo lectura.</div>{% else %}
+  <section class="card"><div class="card-header"><h2 class="card-title">Acciones de liquidación</h2></div><div class="card-body">
+    {% if payroll.status == 'draft' and current_user.role in ['admin', 'editor'] %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('payroll_novelties', run_id=payroll.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="novelties-file">Novedades CSV o XLSX</label> <input type="file" id="novelties-file" name="file" accept=".csv,.xlsx,.xlsm" required>
+      <button type="submit" class="btn btn--outline">Revisar archivo</button>
+      <p class="muted">Columnas: Legajo; Periodo; Tipo; Cantidad; Importe; Observacion. Se confirmará después de la revisión.</p>
+    </form>
+    <form method="post" action="{{ url_for('payroll_action', run_id=payroll.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="calculate"><button class="btn btn--primary">Calcular</button></form>
+    {% elif payroll.status in ['calculated', 'review', 'error'] and current_user.role == 'admin' %}
+    <form method="post" action="{{ url_for('payroll_action', run_id=payroll.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reopen"><button class="btn btn--outline">Reabrir para recalcular</button></form>
+    {% if payroll.status in ['calculated', 'review'] and payroll.employee_count and not approval_blocked %}<form method="post" action="{{ url_for('payroll_action', run_id=payroll.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="approve"><button class="btn btn--primary">Aprobar</button></form>{% endif %}
+    {% if approval_blocked %}<p role="alert">La aprobación está bloqueada: complete las reglas y resuelva las advertencias de alcance del cálculo.</p>{% endif %}
+    {% endif %}
+    {% if payroll.status in ['calculated', 'review', 'approved', 'closed'] %}<p><a href="{{ url_for('payroll_download', run_id=payroll.id, kind='resultados') }}">Descargar resultados CSV</a> · <a href="{{ url_for('payroll_download', run_id=payroll.id, kind='f931') }}">Descargar planilla interna F.931</a></p>{% endif %}
+  </div></section>
+  {% if traces %}<section class="card"><div class="card-header"><h2 class="card-title">Revisión y trazas</h2></div><div class="card-body">
+  {% for trace, employee in traces %}
+    {% if trace.event == 'CALCULATION_REVIEW' %}
+      {% for alert in trace.detail.errors %}<p role="alert"><strong>Error:</strong> {{ alert.employee_code|default('') }} {{ alert.message }}</p>{% endfor %}
+      {% for alert in trace.detail.warnings %}<p><strong>Advertencia:</strong> {{ alert.employee_code|default('') }} {{ alert.message }}</p>{% endfor %}
+      {% if not trace.detail.errors and not trace.detail.warnings %}<p>Sin errores ni advertencias.</p>{% endif %}
+    {% else %}
+      <details><summary>{{ employee.employee_code if employee else 'Corrida' }} · {{ trace.event }}</summary>
+      {% if trace.detail.message %}<p>{{ trace.detail.message }}</p>{% endif %}
+      {% for formula in trace.detail.formula_versions|default([]) %}<p>Fórmula {{ formula.code }} · versión {{ formula.version }}</p>{% endfor %}
+      {% for line in trace.detail.lines|default([]) %}<p>{{ line }}</p>{% endfor %}
+      </details>
+    {% endif %}
+  {% endfor %}</div></section>{% endif %}
+  {% endif %}
+
   <section class="stats-grid">
     <article class="stat-card">
       <div class="stat-icon">{{ icon("money") }}</div>
@@ -217,7 +252,7 @@
       <section class="card">
         <div class="card-body">
           <div class="callout">
-            <strong>Trazabilidad:</strong> esta vista presenta importes consolidados. La aprobación y el cierre se realizan en el servicio de liquidaciones, no en la capa web.
+            <strong>Trazabilidad:</strong> los importes y las trazas provienen del cálculo de la liquidación.
           </div>
         </div>
       </section>

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
 from app.database.models import (
+    Company,
     Employee,
     EmploymentContract,
     FormulaDefinition,
@@ -21,6 +22,7 @@ from app.database.models import (
     NormativeParameter,
     PayrollConcept,
     PayrollItem,
+    PayrollNovelty,
     PayrollResult,
     PayrollRun,
     PayrollTrace,
@@ -466,6 +468,33 @@ def test_active_employee_without_contract_is_listed(
     assert "contrato" in omitted[0]["message"]
 
 
+def test_employee_assigned_to_another_company_does_not_block_run(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    factory, context = payroll_db
+    with factory.begin() as session:
+        other = Company(organization_id=context["organization_id"], cuit="30999999999", legal_name="Otra")
+        session.add(other)
+        session.flush()
+        employee = Employee(
+            organization_id=context["organization_id"], employee_code="OTRO",
+            first_name="Otro", last_name="Empleado", active=True,
+        )
+        session.add(employee)
+        session.flush()
+        session.add_all([
+            EmploymentContract(employee_id=employee.id, company_id=context["company_id"],
+                               valid_from=date(2024, 1, 1), valid_to=date(2025, 12, 31)),
+            EmploymentContract(employee_id=employee.id, company_id=other.id,
+                               valid_from=date(2026, 1, 1)),
+        ])
+
+    result = _calculate(factory, _create_run(factory, context))
+    assert result["status"] == "CALCULATED"
+    assert result["summary"]["employees_total"] == 2
+    assert result["summary"]["calculated"] == 2
+
+
 def _add_unconsumed_novelty(
     factory: sessionmaker[Session], context: dict[str, object]
 ) -> None:
@@ -777,3 +806,120 @@ def test_colliding_normative_parameter_is_warned(
     shadowed = [w for w in result["warnings"] if w["type"] == "parameter_shadowed"]
     assert {w["employee_code"] for w in shadowed} == {"E-001", "E-002"}
     assert all(w["code"] == "sueldo_basico" for w in shadowed)
+
+
+def test_scoped_parameters_apply_and_persist_for_each_employee(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    from app.database.models import AgreementCategory, CollectiveAgreement
+
+    factory, context = payroll_db
+    employee_ids = context["employee_ids"]
+    assert isinstance(employee_ids, list)
+    with factory.begin() as session:
+        agreement_130 = session.scalar(select(CollectiveAgreement).where(CollectiveAgreement.code == "130/75"))
+        category_b = session.scalar(select(AgreementCategory).where(
+            AgreementCategory.agreement_id == agreement_130.id, AgreementCategory.code == "ADMIN_B"))
+        assert agreement_130 is not None and category_b is not None
+        second = session.scalar(select(EmploymentContract).where(EmploymentContract.employee_id == employee_ids[1]))
+        assert second is not None
+        for code in ("389/04", "999/99"):
+            agreement = CollectiveAgreement(code=code, year=2026, name=code)
+            session.add(agreement)
+            session.flush()
+            category = AgreementCategory(agreement_id=agreement.id, code="ADMIN_B", name="B")
+            session.add(category)
+            session.flush()
+            if code == "389/04":
+                second.agreement_id, second.category_id, second.monthly_salary = agreement.id, category.id, Decimal("900000")
+            else:
+                employee = Employee(organization_id=context["organization_id"], employee_code="E-GLOBAL",
+                                    first_name="Global", last_name="Test", hire_date=date(2020, 1, 1), active=True)
+                session.add(employee)
+                session.flush()
+                session.add(EmploymentContract(employee_id=employee.id, company_id=context["company_id"],
+                    agreement_id=agreement.id, category_id=category.id, valid_from=date(2020, 1, 1),
+                    monthly_salary=Decimal("900000"), active=True))
+                global_id = employee.id
+        employee = Employee(organization_id=context["organization_id"], employee_code="E-130-B",
+                            first_name="Convenio", last_name="Test", hire_date=date(2020, 1, 1), active=True)
+        session.add(employee)
+        session.flush()
+        session.add(EmploymentContract(employee_id=employee.id, company_id=context["company_id"],
+            agreement_id=agreement_130.id, category_id=category_b.id, valid_from=date(2020, 1, 1),
+            monthly_salary=Decimal("900000"), active=True))
+        agreement_id = employee.id
+        session.add(PayrollConcept(organization_id=context["organization_id"], code="SCOPE_TEST",
+                                   name="Scope test", nature="REMUNERATIVE"))
+        formula = FormulaDefinition(organization_id=context["organization_id"], code="SCOPE_TEST")
+        session.add(formula)
+        session.flush()
+        session.add(FormulaVersion(formula_id=formula.id, version=1, status="APPROVED",
+            valid_from=date(2026, 1, 1), expression={"parameter": "scope_test_rate"}))
+        rows = []
+        for agreement, category, value in (("", "", "10"), ("130/75", "", "20"),
+                                           ("130/75", "ADMIN_A", "30"), ("389/04", "", "40")):
+            parameter = NormativeParameter(code="scope_test_rate", value=Decimal(value),
+                agreement_code=agreement, category_code=category, valid_from=date(2026, 1, 1), version=1)
+            session.add(parameter)
+            rows.append(parameter)
+        session.flush()
+        expected_versions = {(row.id, row.agreement_code, row.category_code, row.value) for row in rows}
+    run_id = _create_run(factory, context)
+    result = _calculate(factory, run_id)
+    assert result["status"] == "CALCULATED", result["errors"]
+    with factory() as session:
+        actual = dict(session.execute(select(PayrollResult.employee_id, PayrollItem.amount)
+            .join(PayrollItem, PayrollItem.payroll_result_id == PayrollResult.id)
+            .where(PayrollResult.payroll_run_id == run_id, PayrollItem.code == "SCOPE_TEST")).all())
+        assert actual == {employee_ids[0]: Decimal("30"), employee_ids[1]: Decimal("40"),
+                          agreement_id: Decimal("20"), global_id: Decimal("10")}
+        run = session.get(PayrollRun, run_id)
+        snapshot = session.get(Ruleset, run.ruleset_id).rules["parameter_versions"]
+        actual_versions = {(row["id"], row["agreement_code"], row["category_code"], Decimal(row["value"]))
+                           for row in snapshot if row["code"] == "scope_test_rate"}
+        assert actual_versions == expected_versions
+
+
+def test_scoped_parameter_overlap_is_employee_error(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    factory, context = payroll_db
+    employee_ids = context["employee_ids"]
+    assert isinstance(employee_ids, list)
+    with factory.begin() as session:
+        for start, value in ((date(2026, 1, 1), "1"), (date(2026, 6, 1), "2")):
+            session.add(NormativeParameter(code="overlap_test", value=Decimal(value),
+                agreement_code="130/75", category_code="ADMIN_A", valid_from=start))
+    run_id = _create_run(factory, context)
+    result = _calculate(factory, run_id)
+    assert result["status"] == "ERROR"
+    assert any(error["employee_id"] == employee_ids[0] and "vigencias superpuestas" in error["message"]
+               for error in result["errors"])
+    assert [row["employee_id"] for row in result["results"]] == [employee_ids[1]]
+    with factory() as session:
+        assert session.scalar(select(PayrollTrace.id).where(PayrollTrace.payroll_run_id == run_id,
+            PayrollTrace.employee_id == employee_ids[0], PayrollTrace.event == "EMPLOYEE_ERROR")) is not None
+
+
+def test_ambiguous_legacy_novelty_becomes_reviewable_error(payroll_db) -> None:
+    factory, context = payroll_db
+    run_id = _create_run(factory, context)
+    assert _calculate(factory, run_id)["status"] == "CALCULATED"
+    with factory.begin() as session:
+        other = Company(organization_id=context["organization_id"], cuit="30999888777", legal_name="Otra")
+        session.add(other)
+        session.flush()
+        employee_id = context["employee_ids"][0]
+        session.add(EmploymentContract(employee_id=employee_id, company_id=other.id, valid_from=date(2026, 1, 1)))
+        session.add(PayrollNovelty(organization_id=context["organization_id"], employee_id=employee_id,
+            period="202606", code="LEGACY", kind="AUXILIARY", quantity=Decimal("1"), source="historical"))
+    result = _calculate(factory, run_id)
+    assert result["status"] == "ERROR" and result["results"] == []
+    assert "no tiene empresa" in result["errors"][0]["message"]
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(PayrollResult).where(PayrollResult.payroll_run_id == run_id)) == 0
+        assert session.get(PayrollRun, run_id).ruleset_id is None
+        review = session.scalar(select(PayrollTrace).where(PayrollTrace.payroll_run_id == run_id,
+            PayrollTrace.event == "CALCULATION_REVIEW"))
+        assert review.detail["errors"] == result["errors"]

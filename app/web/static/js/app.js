@@ -11,6 +11,7 @@
   var sidebar = document.getElementById("app-sidebar");
 
   function setSidebar(open) {
+    var wasOpen = body.classList.contains("sidebar-open");
     body.classList.toggle("sidebar-open", open);
     if (toggle) {
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
@@ -18,7 +19,9 @@
     }
     if (sidebar) {
       sidebar.classList.toggle("is-open", open);
-      sidebar.setAttribute("aria-hidden", open ? "false" : "true");
+    }
+    if (wasOpen && !open && toggle && window.matchMedia("(max-width: 991px)").matches) {
+      toggle.focus();
     }
   }
 
