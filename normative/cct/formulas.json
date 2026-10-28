@@ -65,7 +65,7 @@
   },
   {
     "code": "CCT_130_75_PRESENTISMO",
-    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual más las sumas no remunerativas mensuales con idéntico tratamiento (Acuerdo 07/2026); se abona con hasta 1 ausencia injustificada en el mes (no computan enfermedad, accidente, vacaciones o licencia legal/convencional)",
+    "description": "Asignación mensual por asistencia y puntualidad CCT 130/75 (Art. 40): doceava parte (8.3333%) de la remuneración mensual más las sumas no remunerativas mensuales con idéntico tratamiento desde el Acuerdo 07/2026 (vigencia haberes julio 2026); hasta 06/2026 la base era (básico + antigüedad) / 12 según la guía de liquidación; se abona con hasta 1 ausencia injustificada en el mes (no computan enfermedad, accidente, vacaciones o licencia legal/convencional)",
     "formula": {
       "operator": "divide",
       "arguments": [
@@ -105,9 +105,9 @@
       "CCT_130_75_SUMA_NR_MENSUAL"
     ],
     "nature": "REMUNERATIVE",
-    "valid_from": "1975-06-01",
+    "valid_from": "2026-07-01",
     "valid_to": null,
-    "source": "documento: CCT 130/75; articulo: Art. 40 (no mas de una ausencia en el mes; no computan enfermedad, accidente, vacaciones o licencia legal/convencional); url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9; referencia: 05_Textos_Ordenados_Completos_y_Actas_Oficiales/CCT_130_75_Comercio_Texto_Ordenado_y_Serie_2020_2026.md Art. 40 (hasta una ausencia injustificada); base con sumas NR: Acuerdo 07/2026 (src-130-002, src-130-003), ver normative/cct/evidence/cct_130_75/notes.md §3",
+    "source": "documento: CCT 130/75; articulo: Art. 40 (no mas de una ausencia en el mes; no computan enfermedad, accidente, vacaciones o licencia legal/convencional); url: https://www.trabajo.gba.gov.ar/delegaciones/biblioteca_deles/CCT%20130-1975.pdf; sha256: 85ad67c9fc049dfd222bb04fefee2e76fc70a9893841f4e7e5a93d0c15d183a9; referencia: 05_Textos_Ordenados_Completos_y_Actas_Oficiales/CCT_130_75_Comercio_Texto_Ordenado_y_Serie_2020_2026.md Art. 40 (hasta una ausencia injustificada); base con sumas NR: Acuerdo 07/2026 actas 23/07/2026 y 28/07/2026, vigencia haberes julio 2026 (src-130-002, src-130-003), ver normative/cct/evidence/cct_130_75/notes.md §3; base pre-07/2026 (basico + antiguedad) / 12: guia 920015926-Liquidacion-de-Sueldos.pdf pp. 47-48",
     "version": 3,
     "status": "APPROVED",
     "tests": [
@@ -1546,6 +1546,179 @@
         "parameters": {},
         "concepts": {
           "SUELDO_BASICO": "1000000.00"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_130_75_HORA_CONFORMADA",
+    "description": "Hora conformada CCT 130/75 (guia liquidacion pp. 47-48): (SUELDO_BASICO + antiguedad + presentismo) / 200",
+    "formula": {
+      "operator": "divide",
+      "arguments": [
+        {
+          "operator": "add",
+          "arguments": [
+            {
+              "concept": "SUELDO_BASICO"
+            },
+            {
+              "concept": "CCT_130_75_ANTIGUEDAD"
+            },
+            {
+              "concept": "CCT_130_75_PRESENTISMO"
+            }
+          ]
+        },
+        {
+          "constant": "200"
+        }
+      ]
+    },
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "SUELDO_BASICO",
+      "CCT_130_75_ANTIGUEDAD",
+      "CCT_130_75_PRESENTISMO"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "guia: 920015926-Liquidacion-de-Sueldos.pdf pp. 47-48 (oraculo: (34308.14 + 6518.55 + 3402.22) / 200 = 221.14)",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {},
+        "parameters": {},
+        "concepts": {
+          "SUELDO_BASICO": "34308.14",
+          "CCT_130_75_ANTIGUEDAD": "6518.55",
+          "CCT_130_75_PRESENTISMO": "3402.22"
+        },
+        "expected": "221.14"
+      }
+    ]
+  },
+  {
+    "code": "CCT_130_75_HORA_EXTRA_50",
+    "description": "Horas extra al 50% CCT 130/75 sobre hora conformada (LCT Art. 201): HORA_CONFORMADA x 1.5 por hora",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "CCT_130_75_HORA_CONFORMADA"
+        },
+        {
+          "constant": "1.5"
+        },
+        {
+          "variable": "horas_extra_50_cantidad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "horas_extra_50_cantidad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "CCT_130_75_HORA_CONFORMADA"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "guia: 920015926-Liquidacion-de-Sueldos.pdf pp. 47-48 (oraculo: 4 x 221.14 x 1.5 = 1326.84); recargo: Ley 20744 Art. 201",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "horas_extra_50_cantidad": 4
+        },
+        "parameters": {},
+        "concepts": {
+          "CCT_130_75_HORA_CONFORMADA": "221.14"
+        },
+        "expected": "1326.84"
+      },
+      {
+        "variables": {
+          "horas_extra_50_cantidad": 0
+        },
+        "parameters": {},
+        "concepts": {
+          "CCT_130_75_HORA_CONFORMADA": "221.14"
+        },
+        "expected": "0.00"
+      }
+    ]
+  },
+  {
+    "code": "CCT_130_75_HORA_EXTRA_100",
+    "description": "Horas extra al 100% CCT 130/75 sobre hora conformada (LCT Art. 201): HORA_CONFORMADA x 2 por hora",
+    "formula": {
+      "operator": "multiply",
+      "arguments": [
+        {
+          "concept": "CCT_130_75_HORA_CONFORMADA"
+        },
+        {
+          "constant": "2"
+        },
+        {
+          "variable": "horas_extra_100_cantidad"
+        }
+      ]
+    },
+    "conditions": [
+      {
+        "field": "horas_extra_100_cantidad",
+        "operator": "greater_than",
+        "value": 0
+      }
+    ],
+    "rounding": {
+      "decimals": 2,
+      "mode": "HALF_UP"
+    },
+    "depends_on": [
+      "CCT_130_75_HORA_CONFORMADA"
+    ],
+    "nature": "REMUNERATIVE",
+    "valid_from": "1975-06-01",
+    "valid_to": null,
+    "source": "guia: 920015926-Liquidacion-de-Sueldos.pdf pp. 47-48 (oraculo: 2 x 221.14 x 2 = 884.56); recargo: Ley 20744 Art. 201",
+    "version": 1,
+    "status": "APPROVED",
+    "tests": [
+      {
+        "variables": {
+          "horas_extra_100_cantidad": 2
+        },
+        "parameters": {},
+        "concepts": {
+          "CCT_130_75_HORA_CONFORMADA": "221.14"
+        },
+        "expected": "884.56"
+      },
+      {
+        "variables": {
+          "horas_extra_100_cantidad": 0
+        },
+        "parameters": {},
+        "concepts": {
+          "CCT_130_75_HORA_CONFORMADA": "221.14"
         },
         "expected": "0.00"
       }

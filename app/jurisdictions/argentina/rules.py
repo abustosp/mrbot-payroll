@@ -21,11 +21,24 @@ def calculate_contributions(
     remunerative_base: Decimal,
     period: date | str,
     parameters: Iterable[ParameterVersion],
+    *,
+    health_minimum_base: Decimal | None = None,
 ) -> dict[str, dict[str, Decimal]]:
-    """Calculate demo/configured worker and employer amounts from versioned rates."""
+    """Calculate demo/configured worker and employer amounts from versioned rates.
+
+    ``health_minimum_base`` is the full-time basic used as a floor for the
+    obra social lines only (guia p. 33: 3% empleado / 6% empleador sobre el
+    100% del basico aun en media jornada); retirement and PAMI stay
+    proportional to ``remunerative_base``.
+    """
     base = Decimal(str(remunerative_base))
     if not base.is_finite() or base < 0:
         raise ValueError("La base remunerativa debe ser un Decimal finito no negativo.")
+    health_floor: Decimal | None = None
+    if health_minimum_base is not None:
+        health_floor = Decimal(str(health_minimum_base))
+        if not health_floor.is_finite() or health_floor < 0:
+            raise ValueError("El piso de obra social debe ser un Decimal finito no negativo.")
     effective_date = parse_period(period)
     versions = tuple(parameters)
     validate_no_overlaps(versions)
@@ -61,7 +74,10 @@ def calculate_contributions(
                 raise LookupError(f"Falta el parámetro vigente {code} para {effective_date:%Y%m}.")
             if not Decimal(0) <= match.value <= Decimal(1):
                 raise ValueError(f"La alícuota {code} debe ser una fracción entre 0 y 1.")
-            result[group][code] = money(base * match.value)
+            amount = base
+            if code.endswith("health_rate") and health_floor is not None:
+                amount = max(base, health_floor)
+            result[group][code] = money(amount * match.value)
     return result
 
 

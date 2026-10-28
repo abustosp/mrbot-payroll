@@ -198,12 +198,25 @@
           <span>Neto a cobrar</span>
           <strong>{{ receipt.net | money }}</strong>
         </div>
+        <div class="summary-row letters">
+          <span>Son pesos</span>
+          <strong>{{ receipt.net_en_letras }}</strong>
+        </div>
       </div>
     </div>
 
     <div class="note-box">
       <strong>Contribuciones y aportes:</strong> {{ receipt.employer_note }}
     </div>
+
+    {% if receipt.lugar_pago or receipt.fecha_pago or receipt.banco_deposito %}
+    <div class="note-box">
+      <strong>Lugar y fecha de pago:</strong>
+      {%- if receipt.lugar_pago %} {{ receipt.lugar_pago }}{% endif %}
+      {%- if receipt.fecha_pago %} · {{ receipt.fecha_pago }}{% endif %}
+      {%- if receipt.banco_deposito %} · Depósito: {{ receipt.banco_deposito }}{% endif %}
+    </div>
+    {% endif %}
 
     <p class="legend">{{ receipt.legend }}</p>
 

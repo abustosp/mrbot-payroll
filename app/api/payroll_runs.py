@@ -6,11 +6,30 @@ from sqlalchemy.orm import Session
 from app.api.common import commit_or_conflict, get_scoped, page
 from app.api.schemas import PayrollRunInput, PayrollRunRead
 from app.auth.dependencies import require_role, require_user
-from app.database.models import AuditLog, Company, PayrollApproval, PayrollRun, User
+from app.database.models import (
+    AuditLog,
+    Company,
+    Employee,
+    PayrollApproval,
+    PayrollResult,
+    PayrollRun,
+    User,
+)
 from app.database.session import get_db
+from app.exporters.tabular import normalize_format, table_response
 from app.services.payroll_calculation import PayrollRunStateError, calculate_payroll_run
 
 router = APIRouter(prefix="/payroll-runs", tags=["payroll-runs"])
+
+RUN_EXPORT_COLUMNS = [
+    "id", "code", "company_id", "period_start", "period_end", "run_type",
+    "status", "ruleset_id",
+]
+
+RESULT_EXPORT_COLUMNS = [
+    "id", "employee_id", "employee_code", "remunerative", "non_remunerative",
+    "deductions", "contributions", "gross", "net", "employer_cost",
+]
 
 
 @router.get("")
@@ -24,6 +43,69 @@ def list_payroll_runs(
     result = page(db, statement, limit, offset)
     result["items"] = [PayrollRunRead.model_validate(item) for item in result["items"]]
     return result
+
+
+@router.get("/export")
+def export_payroll_runs(
+    format: str = Query(default="csv", max_length=10),
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    """Descarga todas las liquidaciones de la organización en csv, xlsx o json."""
+
+    try:
+        fmt = normalize_format(format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    items = db.scalars(
+        select(PayrollRun).where(
+            PayrollRun.organization_id == user.organization_id
+        ).order_by(PayrollRun.id)
+    ).all()
+    rows = [PayrollRunRead.model_validate(item).model_dump(mode="json") for item in items]
+    return table_response(rows, RUN_EXPORT_COLUMNS, "liquidaciones", fmt)
+
+
+@router.get("/{run_id}/results/export")
+def export_payroll_results(
+    run_id: int,
+    format: str = Query(default="csv", max_length=10),
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    """Descarga los resultados calculados de una liquidación en csv, xlsx o json."""
+
+    try:
+        fmt = normalize_format(format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    run = get_scoped(db, PayrollRun, run_id, user.organization_id)
+    results = db.scalars(
+        select(PayrollResult).where(
+            PayrollResult.payroll_run_id == run.id
+        ).order_by(PayrollResult.id)
+    ).all()
+    codes = dict(
+        db.execute(
+            select(Employee.id, Employee.employee_code).where(
+                Employee.organization_id == user.organization_id
+            )
+        ).all()
+    )
+    rows = [
+        {
+            "id": result.id,
+            "employee_id": result.employee_id,
+            "employee_code": codes.get(result.employee_id, ""),
+            "remunerative": str(result.remunerative),
+            "non_remunerative": str(result.non_remunerative),
+            "deductions": str(result.deductions),
+            "contributions": str(result.contributions),
+            "gross": str(result.gross),
+            "net": str(result.net),
+            "employer_cost": str(result.employer_cost),
+        }
+        for result in results
+    ]
+    return table_response(rows, RESULT_EXPORT_COLUMNS, f"liquidacion-{run.code}", fmt)
 
 
 @router.post("", response_model=PayrollRunRead, status_code=status.HTTP_201_CREATED)

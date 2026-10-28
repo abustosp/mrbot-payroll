@@ -18,6 +18,7 @@ from app.importers.mapping import (
     resolve_mapping,
 )
 from app.importers.models import (
+    ConceptRow,
     DuplicateRow,
     EmployeeRow,
     ImportKind,
@@ -56,16 +57,21 @@ _KIND_ALIASES = {
     "novelty": "novelties",
     "novedades": "novelties",
     "novedad": "novelties",
+    "concepts": "concepts",
+    "concept": "concepts",
+    "conceptos": "concepts",
+    "concepto": "concepts",
 }
 
 
 def normalize_kind(kind: str) -> ImportKind:
-    """Canonicaliza ``kind`` a ``employees`` o ``novelties``."""
+    """Canonicaliza ``kind`` a ``employees``, ``novelties`` o ``concepts``."""
     text = normalize_text(kind).replace(" ", "_")
     canonical = _KIND_ALIASES.get(text)
     if canonical is None:
         raise ValueError(
-            "Tipo de importacion invalido. Se esperaba 'employees' o 'novelties'."
+            "Tipo de importacion invalido. Se esperaba 'employees', "
+            "'novelties' o 'concepts'."
         )
     return cast(ImportKind, canonical)
 
@@ -98,6 +104,7 @@ _EXPECTED_HEADERS = {
     # B-47: ejemplo de cabecera valida para guiar el primer intento.
     "employees": "Legajo;Apellido;Nombre;CUIL;Fecha de ingreso",
     "novelties": "Legajo;Periodo;Tipo;Cantidad;Importe;Observacion",
+    "concepts": "Codigo;Nombre;Naturaleza;Descripcion",
 }
 
 
@@ -404,6 +411,8 @@ def _prepare_novelty(
 
 
 def _duplicate_key(kind: ImportKind, row: RowModel) -> str:
+    if kind == "concepts":
+        return f"codigo:{str(row['codigo']).strip().casefold()}"
     legajo = str(row["legajo"]).strip().casefold()
     if kind == "employees":
         return f"legajo:{legajo}"
@@ -417,10 +426,29 @@ def _duplicate_key(kind: ImportKind, row: RowModel) -> str:
 def _duplicate_message(kind: ImportKind) -> str:
     if kind == "employees":
         return "Fila duplicada: ya existe una fila valida con el mismo legajo."
+    if kind == "concepts":
+        return "Fila duplicada: ya existe una fila valida con el mismo codigo."
     return (
         "Fila duplicada: ya existe una fila valida con el mismo legajo, "
         "periodo y tipo de novedad."
     )
+
+
+def _prepare_concept(
+    raw: Mapping[str, Any],
+    mapping: Mapping[str, str | None],
+    row: int,
+    missing: set[str],
+) -> tuple[ConceptRow | None, list[RowError]]:
+    data: dict[str, Any] = {}
+    for field in ("codigo", "nombre", "naturaleza", "descripcion"):
+        value = _get_value(raw, field, mapping)
+        if value is not None and not (isinstance(value, str) and not value.strip()):
+            data[field] = value
+    try:
+        return ConceptRow(**data), []
+    except ValidationError as exc:
+        return None, model_validation_errors(exc, row)
 
 
 def _analyze_records(
@@ -428,9 +456,14 @@ def _analyze_records(
     kind: ImportKind,
     mapping: Mapping[str, str | None],
     missing: list[str],
-) -> tuple[int, list[EmployeeRow | NoveltyRow], list[RowError], list[DuplicateRow]]:
+) -> tuple[
+    int,
+    list[EmployeeRow | NoveltyRow | ConceptRow],
+    list[RowError],
+    list[DuplicateRow],
+]:
     total = len(records)
-    valid_rows: list[EmployeeRow | NoveltyRow] = []
+    valid_rows: list[EmployeeRow | NoveltyRow | ConceptRow] = []
     errors: list[RowError] = []
     duplicates: list[DuplicateRow] = []
     seen: dict[str, int] = {}
@@ -443,9 +476,11 @@ def _analyze_records(
 
     for row_number, raw in records:
         row_errors = [_missing_column_error(row_number, field, kind) for field in missing]
-        model: EmployeeRow | NoveltyRow | None
+        model: EmployeeRow | NoveltyRow | ConceptRow | None
         if kind == "employees":
             model, field_errors = _prepare_employee(raw, mapping, row_number, missing_set)
+        elif kind == "concepts":
+            model, field_errors = _prepare_concept(raw, mapping, row_number, missing_set)
         else:
             model, field_errors = _prepare_novelty(raw, mapping, row_number, missing_set)
         row_errors.extend(field_errors)

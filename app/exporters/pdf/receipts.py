@@ -72,6 +72,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
+from app.exporters.pdf.numero_letras import numero_a_letras
 from app.importers.parsing import parse_decimal as _parse_decimal_ar
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -396,6 +397,9 @@ def _normalize_context(context: Mapping[str, Any] | Any) -> dict[str, Any]:
     issue_date = _format_date(_first(source, "issue_date", "fecha_emision", "fecha"))
     period_start = _format_date(_first(source, "period_start", "periodo_desde"))
     period_end = _format_date(_first(source, "period_end", "periodo_hasta"))
+    lugar_pago = _text(_first(source, "lugar_pago", "lugar_de_pago", "payment_place"))
+    fecha_pago = _format_date(_first(source, "fecha_pago", "payment_date"))
+    banco_deposito = _text(_first(source, "banco_deposito", "banco", "bank"))
     is_demo = _is_demo_context(source)
 
     return {
@@ -432,6 +436,10 @@ def _normalize_context(context: Mapping[str, Any] | Any) -> dict[str, Any]:
         "contributions_total": totals["contribution"],
         "gross_total": totals["remunerative"] + totals["non_remunerative"],
         "net": net,
+        "net_en_letras": numero_a_letras(net),
+        "lugar_pago": lugar_pago,
+        "fecha_pago": fecha_pago,
+        "banco_deposito": banco_deposito,
         "legend": _text(_first(source, "legend", "leyenda"), _DEFAULT_LEGEND),
         "employer_note": _text(
             _first(source, "employer_note", "nota_empleador"), _DEFAULT_EMPLOYER_NOTE

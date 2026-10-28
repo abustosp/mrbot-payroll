@@ -569,6 +569,18 @@ def _resolve_base_salary(
     return None
 
 
+def _resolve_workday_factor(contract: EmploymentContract) -> Decimal:
+    """Jornada del contrato como factor (48 h semanales = 1).
+
+    Sin ``weekly_hours`` cargadas se asume jornada completa; el motor
+    valida que el factor sea mayor que cero (fail-closed).
+    """
+
+    if contract.weekly_hours is None:
+        return Decimal("1")
+    return Decimal(contract.weekly_hours) / Decimal(48)
+
+
 def _run_calculation(
     db: Session,
     run: PayrollRun,
@@ -684,6 +696,7 @@ def _run_calculation(
         if agreement_code:
             run_agreement_codes.add(agreement_code)
         base_salary = _resolve_base_salary(contract, scales_by_category)
+        workday_factor = _resolve_workday_factor(contract)
 
         employee_novelties = novelties_by_employee.get(employee.id, [])
         # B-02: the scale base and its non-remunerative part travel as
@@ -699,6 +712,7 @@ def _run_calculation(
             "scale_id": scale.id if scale else None,
             "category_code": category.code if category else None,
             "base_salary": base_salary,
+            "workday_factor": workday_factor,
             "scale_additional": scale.additional if scale else None,
             "scale_amount_type": scale.amount_type if scale else None,
             "hire_date": employee.hire_date,
@@ -737,6 +751,7 @@ def _run_calculation(
                 {
                     "id": employee.id,
                     "base_salary": base_salary,
+                    "workday_factor": workday_factor,
                     "start_date": employee.hire_date or contract.valid_from,
                     "agreement_category": category.code,
                     "agreement_code": agreement_code,

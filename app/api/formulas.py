@@ -28,8 +28,13 @@ from app.database.models import (
     User,
 )
 from app.database.session import get_db
+from app.exporters.tabular import normalize_format, table_response
 
 router = APIRouter(prefix="/formulas", tags=["formulas"])
+
+FORMULA_EXPORT_COLUMNS = [
+    "id", "code", "description", "version", "status", "valid_from", "valid_to",
+]
 
 
 def latest_version(db: Session, formula: FormulaDefinition) -> FormulaVersion:
@@ -174,6 +179,29 @@ def list_formulas(
     result = page(db, statement, limit, offset)
     result["items"] = [formula_output(row, latest_version(db, row)) for row in result["items"]]
     return result
+
+
+@router.get("/export")
+def export_formulas(
+    format: str = Query(default="csv", max_length=10),
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    """Descarga todas las fórmulas de la organización en csv, xlsx o json."""
+
+    try:
+        fmt = normalize_format(format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    items = db.scalars(
+        select(FormulaDefinition).where(
+            FormulaDefinition.organization_id == user.organization_id
+        ).order_by(FormulaDefinition.id)
+    ).all()
+    rows = [
+        formula_output(row, latest_version(db, row)).model_dump(mode="json")
+        for row in items
+    ]
+    return table_response(rows, FORMULA_EXPORT_COLUMNS, "formulas", fmt)
 
 
 @router.post("", response_model=FormulaRead, status_code=status.HTTP_201_CREATED)

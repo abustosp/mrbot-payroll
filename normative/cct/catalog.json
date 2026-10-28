@@ -3859,7 +3859,10 @@
       "CCT_130_75_PRESENTISMO",
       "STD_HORAS_EXTRA_50",
       "STD_HORAS_EXTRA_100",
-      "CCT_130_75_SUMA_NR_MENSUAL"
+      "CCT_130_75_SUMA_NR_MENSUAL",
+      "CCT_130_75_HORA_CONFORMADA",
+      "CCT_130_75_HORA_EXTRA_50",
+      "CCT_130_75_HORA_EXTRA_100"
     ],
     "confidence": "medium",
     "notes": "Convenio de comercio y servicios, firmado por FAECYS y las cámaras CAC, CAME y UDECA; cobertura estimada por las partes en ~1.200.000 trabajadores, sin padrón estatal centralizado.",

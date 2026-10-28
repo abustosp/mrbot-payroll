@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.database import Base
 from app.database.models import (
     Employee,
+    EmploymentContract,
     FormulaDefinition,
     FormulaVersion,
     NormativeParameter,
@@ -155,6 +156,32 @@ def test_terminated_employee_is_excluded_even_when_active(
     assert result["summary"]["employees_total"] == 1
     assert result["summary"]["calculated"] == 1
     assert [row["employee_id"] for row in result["results"]] == [employee_ids[1]]
+
+
+def test_part_time_contract_travels_as_workday_factor(
+    payroll_db: tuple[sessionmaker[Session], dict[str, object]],
+) -> None:
+    # Guia p. 33: la jornada reducida debe viajar al motor para que los
+    # aportes de obra social puedan calcularse sobre el piso de jornada
+    # completa (contrato de 24 h semanales -> factor 0.5).
+    factory, context = payroll_db
+    employee_ids = context["employee_ids"]
+    assert isinstance(employee_ids, list)
+    with factory.begin() as session:
+        contract = session.scalar(
+            select(EmploymentContract).where(
+                EmploymentContract.employee_id == employee_ids[0]
+            )
+        )
+        assert contract is not None
+        contract.weekly_hours = Decimal("24")
+
+    result = _calculate(factory, _create_run(factory, context))
+
+    assert result["status"] == "CALCULATED"
+    traces = {row["employee_id"]: row["trace"] for row in result["results"]}
+    assert any("workday_factor=0.5" in line for line in traces[employee_ids[0]])
+    assert any("workday_factor=1" in line for line in traces[employee_ids[1]])
 
 
 def test_highest_approved_version_wins_in_calculation(

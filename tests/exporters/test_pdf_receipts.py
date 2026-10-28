@@ -236,6 +236,23 @@ def test_receipt_number_is_optional_for_drafts(context: dict) -> None:
     assert "María Fernanda Gómez" in html
 
 
+def test_render_receipt_html_incluye_neto_en_letras_y_pago(
+    context: dict,
+) -> None:
+    # Art. 140 LCT: el neto va en numeros y letras, con lugar y fecha de pago.
+    context["lugar_pago"] = "Córdoba"
+    context["fecha_pago"] = date(2026, 9, 30)
+    context["banco_deposito"] = "Banco Nación"
+
+    html = render_receipt_html(context)
+
+    assert "Son pesos" in html
+    assert "UN MILLON OCHOCIENTOS SETENTA Y CINCO MIL" in html
+    assert "Lugar y fecha de pago" in html
+    assert "Córdoba" in html
+    assert "Banco Nación" in html
+
+
 def test_unknown_item_kind_is_rejected(context: dict) -> None:
     context["items"][0]["kind"] = "inventado"
 

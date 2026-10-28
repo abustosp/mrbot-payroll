@@ -10,8 +10,13 @@ from app.api.schemas import ConceptInput, ConceptRead
 from app.auth.dependencies import require_role, require_user
 from app.database.models import FormulaDefinition, FormulaVersion, PayrollConcept, User
 from app.database.session import get_db
+from app.exporters.tabular import normalize_format, table_response
 
 router = APIRouter(prefix="/concepts", tags=["concepts"])
+
+CONCEPT_EXPORT_COLUMNS = [
+    "id", "code", "name", "nature", "description", "active",
+]
 
 
 @router.get("")
@@ -23,6 +28,26 @@ def list_concepts(
     result = page(db, statement, limit, offset)
     result["items"] = [ConceptRead.model_validate(item) for item in result["items"]]
     return result
+
+
+@router.get("/export")
+def export_concepts(
+    format: str = Query(default="csv", max_length=10),
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    """Descarga todos los conceptos de la organización en csv, xlsx o json."""
+
+    try:
+        fmt = normalize_format(format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    items = db.scalars(
+        select(PayrollConcept).where(
+            PayrollConcept.organization_id == user.organization_id
+        ).order_by(PayrollConcept.id)
+    ).all()
+    rows = [ConceptRead.model_validate(item).model_dump(mode="json") for item in items]
+    return table_response(rows, CONCEPT_EXPORT_COLUMNS, "conceptos", fmt)
 
 
 @router.post("", response_model=ConceptRead, status_code=status.HTTP_201_CREATED)

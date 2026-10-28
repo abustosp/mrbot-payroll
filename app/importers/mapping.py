@@ -34,9 +34,48 @@ NOVELTY_FIELDS = (
     "quincena",
 )
 
+CONCEPT_FIELDS = (
+    "codigo",
+    "nombre",
+    "naturaleza",
+    "descripcion",
+)
+
 REQUIRED_FIELDS = {
     "employees": ("legajo", "apellido", "nombre", "cuil", "fecha_ingreso"),
     "novelties": ("legajo", "periodo", "tipo"),
+    "concepts": ("codigo", "nombre"),
+}
+
+_CONCEPT_ALIASES = {
+    "codigo": (
+        "codigo",
+        "cod",
+        "code",
+        "codigo concepto",
+        "codigo de concepto",
+        "cod concepto",
+    ),
+    "nombre": (
+        "nombre",
+        "descripcion concepto",
+        "concepto",
+        "name",
+        "denominacion",
+    ),
+    "naturaleza": (
+        "naturaleza",
+        "tipo",
+        "kind",
+        "nature",
+        "naturaleza concepto",
+    ),
+    "descripcion": (
+        "descripcion",
+        "description",
+        "detalle",
+        "observacion",
+    ),
 }
 
 _EMPLOYEE_ALIASES = {
@@ -202,8 +241,16 @@ _TYPE_HEADERS: dict[str, tuple[str, str]] = {
 }
 _TYPE_HEADERS_COMPACT = {key.replace(" ", ""): value for key, value in _TYPE_HEADERS.items()}
 
-_ALIASES = {"employees": _EMPLOYEE_ALIASES, "novelties": _NOVELTY_ALIASES}
-_FIELDS = {"employees": EMPLOYEE_FIELDS, "novelties": NOVELTY_FIELDS}
+_ALIASES = {
+    "employees": _EMPLOYEE_ALIASES,
+    "novelties": _NOVELTY_ALIASES,
+    "concepts": _CONCEPT_ALIASES,
+}
+_FIELDS = {
+    "employees": EMPLOYEE_FIELDS,
+    "novelties": NOVELTY_FIELDS,
+    "concepts": CONCEPT_FIELDS,
+}
 
 
 def fields_for(kind: str) -> tuple[str, ...]:

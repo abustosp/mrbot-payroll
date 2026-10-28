@@ -29,7 +29,7 @@ from app.importers.parsing import (
     parse_quincena,
 )
 
-ImportKind = Literal["employees", "novelties"]
+ImportKind = Literal["employees", "novelties", "concepts"]
 
 
 class DictAccessMixin:
@@ -212,6 +212,48 @@ class NoveltyRow(RowModel):
         return quincena
 
 
+class ConceptRow(RowModel):
+    """Fila valida de un concepto de liquidacion."""
+
+    codigo: str = Field(min_length=1, max_length=40)
+    nombre: str = Field(min_length=1, max_length=160)
+    naturaleza: str = "REMUNERATIVE"
+    descripcion: str | None = Field(default=None, max_length=500)
+
+    @field_validator("codigo", mode="before")
+    @classmethod
+    def _normalize_codigo(cls, value: Any) -> str:
+        codigo = clean_text(value)
+        if codigo is None:
+            raise ValueError("El campo 'codigo' es obligatorio.")
+        if contains_html_chars(codigo):
+            raise ValueError("El campo 'codigo' contiene caracteres no permitidos (< >).")
+        return codigo
+
+    @field_validator("nombre", mode="before")
+    @classmethod
+    def _normalize_nombre(cls, value: Any) -> str:
+        return _required_text(value, "nombre")
+
+    @field_validator("naturaleza", mode="before")
+    @classmethod
+    def _normalize_naturaleza(cls, value: Any) -> str:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return "REMUNERATIVE"
+        naturaleza = normalize_naturaleza(value)
+        if naturaleza is None:
+            raise ValueError(
+                "La naturaleza no es valida (remunerativo/no remunerativo/"
+                "descuento/contribucion/auxiliar)."
+            )
+        return naturaleza
+
+    @field_validator("descripcion", mode="before")
+    @classmethod
+    def _normalize_descripcion(cls, value: Any) -> str | None:
+        return _reject_html_optional(value, "descripcion")
+
+
 class RowError(DictAccessMixin, BaseModel):
     """Error de una fila, opcionalmente asociado a un campo."""
 
@@ -236,7 +278,7 @@ class ImportOutcome(DictAccessMixin, BaseModel):
 
     kind: ImportKind
     total: int = Field(ge=0)
-    valid_rows: list[EmployeeRow | NoveltyRow] = Field(default_factory=list)
+    valid_rows: list[EmployeeRow | NoveltyRow | ConceptRow] = Field(default_factory=list)
     errors: list[RowError] = Field(default_factory=list)
     duplicates: list[DuplicateRow] = Field(default_factory=list)
     dry_run: bool = True

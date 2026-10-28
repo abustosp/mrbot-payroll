@@ -63,6 +63,22 @@ def test_demo_contributions_read_configured_versioned_rates() -> None:
     assert all(item.source == "demo-2026" for item in provider.parameters)
 
 
+def test_obra_social_usa_piso_jornada_completa_en_media_jornada() -> None:
+    # Guia p. 33: obra social (3% empleado / 6% empleador, Ley 23.660) se
+    # calcula sobre el 100% del basico aun en media jornada; jubilacion y
+    # PAMI siguen proporcionales a la base remunerativa real.
+    provider = ArgentinaProvider()
+    contributions = provider.calculate_contributions(
+        Decimal("500000"), "202606", health_minimum_base=Decimal("1000000")
+    )
+
+    assert contributions["employee"]["employee.health_rate"] == Decimal("30000.00")
+    assert contributions["employer"]["employer.health_rate"] == Decimal("60000.00")
+    assert contributions["employee"]["employee.retirement_rate"] == Decimal("55000.00")
+    assert contributions["employee"]["employee.pami_rate"] == Decimal("15000.00")
+    assert contributions["employer"]["employer.retirement_rate"] == Decimal("54000.00")
+
+
 def test_cct_presentismo_is_an_exact_twelfth() -> None:
     # B-06: Art. 40 DSL divides by 12; the 0.0833 demo rate underpaid $29.75
     # on a 892.500 base and must not come back.

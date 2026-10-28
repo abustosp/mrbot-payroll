@@ -503,6 +503,7 @@ def calculate_payroll(
     data = _normalise_employee(employee, period)
     trace: list[str] = [
         f"employee={data.id} period={period.isoformat()}",
+        f"workday_factor={data.workday_factor}",
     ]
 
     selected = _select_definitions(

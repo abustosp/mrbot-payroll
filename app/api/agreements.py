@@ -8,8 +8,13 @@ from app.api.schemas import AgreementInput, AgreementRead
 from app.auth.dependencies import require_role, require_user
 from app.database.models import CollectiveAgreement, User
 from app.database.session import get_db
+from app.exporters.tabular import normalize_format, table_response
 
 router = APIRouter(prefix="/agreements", tags=["agreements"])
+
+AGREEMENT_EXPORT_COLUMNS = [
+    "id", "code", "year", "name", "activity", "scope", "active",
+]
 
 
 def get_agreement(db: Session, agreement_id: int):
@@ -27,6 +32,24 @@ def list_agreements(
     result = page(db, select(CollectiveAgreement).order_by(CollectiveAgreement.id), limit, offset)
     result["items"] = [AgreementRead.model_validate(item) for item in result["items"]]
     return result
+
+
+@router.get("/export")
+def export_agreements(
+    format: str = Query(default="csv", max_length=10),
+    db: Session = Depends(get_db), _: User = Depends(require_user),
+):
+    """Descarga todos los convenios en csv, xlsx o json."""
+
+    try:
+        fmt = normalize_format(format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    items = db.scalars(
+        select(CollectiveAgreement).order_by(CollectiveAgreement.id)
+    ).all()
+    rows = [AgreementRead.model_validate(item).model_dump(mode="json") for item in items]
+    return table_response(rows, AGREEMENT_EXPORT_COLUMNS, "convenios", fmt)
 
 
 @router.post("", response_model=AgreementRead, status_code=status.HTTP_201_CREATED)

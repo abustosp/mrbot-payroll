@@ -42,11 +42,13 @@ from app.database.models import (
     Company,
     Employee,
     EmploymentContract,
+    PayrollConcept,
     PayrollNovelty,
     User,
 )
 from app.database.session import get_db
 from app.importers.models import (
+    ConceptRow,
     DuplicateRow,
     EmployeeRow,
     ImportPreview,
@@ -264,6 +266,68 @@ def _commit_employees(
     )
 
 
+def _commit_concepts(
+    db: Session,
+    user: User,
+    preview: ImportPreview,
+) -> dict[str, Any]:
+    """Persiste conceptos validos sin abortar el lote por filas con conflicto.
+
+    La idempotencia se garantiza por ``(organization_id, code)``: un codigo
+    ya existente se informa como duplicado y no se vuelve a crear.
+    """
+
+    result = import_rows(list(preview.valid_rows), "concepts")
+    result.total = preview.total
+    result.errors = [*preview.errors, *result.errors]
+    result.duplicates = [*preview.duplicates, *result.duplicates]
+    result.dry_run = False
+
+    existing_codes = set(
+        db.scalars(
+            select(PayrollConcept.code).where(
+                PayrollConcept.organization_id == user.organization_id
+            )
+        ).all()
+    )
+
+    created = 0
+    skipped = 0
+    for index, row in enumerate(result.valid_rows):
+        if not isinstance(row, ConceptRow):
+            continue
+        row_number = index + 2
+        if row.codigo in existing_codes:
+            skipped += 1
+            result.duplicates.append(
+                DuplicateRow(
+                    row=row_number,
+                    first_row=row_number,
+                    key=f"codigo:{row.codigo}",
+                    message=(
+                        "Ya existe un concepto con ese codigo en la organizacion; "
+                        "la fila se omite."
+                    ),
+                )
+            )
+            continue
+        db.add(
+            PayrollConcept(
+                organization_id=user.organization_id,
+                code=row.codigo,
+                name=row.nombre,
+                nature=row.naturaleza,
+                description=row.descripcion,
+                active=True,
+            )
+        )
+        existing_codes.add(row.codigo)
+        created += 1
+
+    commit_or_conflict(db)
+    return _serialize(result, created=created, skipped=skipped)
+
+
 def _commit_novelties(
     db: Session,
     user: User,
@@ -474,6 +538,39 @@ def import_novelties(
     if dry_run:
         return _serialize(preview)
     return _commit_novelties(db, user, preview, company_id)
+
+
+@router.post(
+    "/concepts",
+    description=(
+        "Importa conceptos (HTTP 200 con valid_rows/errors[]/duplicates[]/warnings[]; "
+        "no 422 por fila. Cabecera valida: "
+        "Codigo;Nombre;Naturaleza;Descripcion. Naturaleza: remunerativo, "
+        "no remunerativo, descuento, contribucion o auxiliar)."
+    ),
+)
+def import_concepts(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict[str, Any]:
+    """Analiza o persiste conceptos desde un CSV/XLSX.
+
+    Con ``dry_run=true`` (por defecto) devuelve solo el preview. Con
+    ``dry_run=false`` crea los conceptos validos y devuelve el resultado del
+    commit junto con los conteos de creados y omitidos. Los codigos ya
+    existentes se informan como duplicados y no interrumpen el resto del lote.
+    """
+
+    if not dry_run:
+        _ensure_commit_role(user)
+
+    content, filename = _read_upload(file)
+    preview = _analyze(content, filename, "concepts")
+    if dry_run:
+        return _serialize(preview)
+    return _commit_concepts(db, user, preview)
 
 
 __all__ = ["MAX_IMPORT_BYTES", "router"]

@@ -264,9 +264,16 @@ class ArgentinaProvider:
         return matches[0]
 
     def calculate_contributions(
-        self, remunerative_base: Decimal, period: date | str
+        self,
+        remunerative_base: Decimal,
+        period: date | str,
+        *,
+        health_minimum_base: Decimal | None = None,
     ) -> dict[str, dict[str, Decimal]]:
-        return calculate_contributions(remunerative_base, period, self.parameters)
+        return calculate_contributions(
+            remunerative_base, period, self.parameters,
+            health_minimum_base=health_minimum_base,
+        )
 
     def calculate_income_tax(self, taxable_base: Decimal, period: date | str) -> Decimal:
         return calculate_income_tax(taxable_base, period, self.income_tax_brackets)
