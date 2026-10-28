@@ -19,3 +19,5 @@ build/
 reports/
 .orchestration/
 normative/cct/evidence/*/pdfs/
+.playwright-mcp
+
