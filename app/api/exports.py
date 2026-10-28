@@ -105,9 +105,10 @@ def export_lsd_liquidations(
         "Borrador interno sin validez ante ARCA (descarga "
         "*-borrador-sin-validez-arca.txt + header X-Sin-Validez-ARCA). "
         "Ejemplo de payload valido: "
-        '{"concepts": [{"arca_code": "001", "employer_code": "BASICO", '
-        '"description": "Sueldo basico"}]} '
-        "(arca_code de 3 digitos, employer_code hasta 10, description hasta 50)."
+        '{"concepts": [{"arca_code": "110000", "employer_code": "BASICO", '
+        '"description": "Sueldo basico", "sipa_ap": "1"}]} '
+        "(arca_code de 6 digitos, employer_code hasta 10, description hasta 150; "
+        "banderas 0/1, resto en blanco)."
     ),
 )
 def export_lsd_concepts(

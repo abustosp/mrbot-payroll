@@ -1,7 +1,15 @@
-"""Fixed-width Libro de Sueldos Digital MVP serializer.
+"""Fixed-width Libro de Sueldos Digital serializer.
 
-The layouts preserve the requested record widths and are explicitly versioned.
-They are for preview and internal validation; they do not claim ARCA acceptance.
+Layouts mirror the official AFIP build tools for "Libro de Sueldos Digital"
+(Herramientas de trabajo: LSD-ARMADO-TXT-Liquidaciones.xlsx and
+LSD-ARMADO-TXT-Conceptos.xlsx, sheet "Interfase"): 01 (35), 02 (115),
+03 (51), 04 (370), 05 (65), 06 (93) and conceptos (195, no record-type
+prefix). Lines are ASCII, encoded as Latin-1 with CRLF separators.
+
+The output is a draft for internal validation; it does not claim ARCA
+acceptance and does not replace the official validations. The generator only
+emits "SJ" shipments, so reg-01 "Días base" is always numeric (the blank form
+is reserved for "RE" rectification-only files, which are not generated here).
 """
 
 from __future__ import annotations
@@ -15,7 +23,7 @@ from typing import Any
 from app.jurisdictions.argentina.validation import normalize_cuit_cuil, validate_period
 
 ENCODING = "latin-1"
-LAYOUT_VERSION = "mvp-2026.1"
+LAYOUT_VERSION = "afip-2025.09"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,11 +102,15 @@ _RECORDS: dict[str, RecordLayout] = {
         _field("cuil", 11, "cuil", required=True),
         _field("employee_id", 10),
         _field("branch", 50),
-        _field("bank_account", 22),
+        # Official tool right-aligns CBU with spaces; rubric date is
+        # space-padded (not zero-padded) when present.
+        _field("bank_account", 22, align="right", fill=" "),
         _field("days", 3, "integer"),
-        _field("pay_date", 8, "date"),
+        # The official tool zero-pads an empty pay date; rubric date is
+        # space-padded instead.
+        _field("pay_date", 8, "date", fill="0"),
         _field("rubric_date", 8, "date"),
-        _field("payment_method", 1),
+        _field("payment_method", 1, align="right", fill="0"),
     ), 115),
     "03": RecordLayout("03", (
         _field("record_type", 2, required=True),
@@ -108,20 +120,33 @@ _RECORDS: dict[str, RecordLayout] = {
         _field("unit", 1),
         _field("amount", 15, "amount", required=True),
         _field("debit_credit", 1),
-        _field("adjustment_period", 6, "period"),
+        # Blank adjustment period renders as spaces in the official tool.
+        _field("adjustment_period", 6, "period", fill=" "),
     ), 51),
     "04": RecordLayout("04", (
         _field("record_type", 2, required=True), _field("cuil", 11, "cuil", required=True),
-        _field("spouse", 1), _field("children", 2, "integer"), _field("agreement", 1),
-        _field("life_insurance", 1), _field("reduction", 1), _field("employer_type", 1),
-        _field("operation_type", 1), _field("employment_status", 2), _field("condition", 2),
-        _field("activity", 3), _field("contract_mode", 3), _field("disability", 2),
-        _field("locality", 2), _field("situation_1", 2), _field("start_day_1", 2, "integer"),
-        _field("situation_2", 2), _field("start_day_2", 2, "integer"),
-        _field("situation_3", 2), _field("start_day_3", 2, "integer"),
+        # Single-char numeric flags are zero-padded in the official tool.
+        _field("spouse", 1, align="right", fill="0"),
+        _field("children", 2, "integer"), _field("agreement", 1, align="right", fill="0"),
+        _field("life_insurance", 1, align="right", fill="0"),
+        _field("reduction", 1, align="right", fill="0"),
+        _field("employer_type", 1, align="right", fill="0"),
+        _field("operation_type", 1, align="right", fill="0"),
+        _field("employment_status", 2, align="right", fill="0"),
+        _field("condition", 2),
+        # condition/contract_mode/disability are left-aligned space-padded in
+        # the official tool; activity/locality/health_plan are zero-padded.
+        _field("activity", 3, align="right", fill="0"), _field("contract_mode", 3),
+        _field("disability", 2),
+        _field("locality", 2, align="right", fill="0"),
+        # Situation codes and start days are zero-padded numerics.
+        _field("situation_1", 2, "integer"), _field("start_day_1", 2, "integer"),
+        _field("situation_2", 2, "integer"), _field("start_day_2", 2, "integer"),
+        _field("situation_3", 2, "integer"), _field("start_day_3", 2, "integer"),
         _field("worked_days", 2, "integer"), _field("worked_hours", 3, "integer"),
         _field("additional_contribution_rate", 5, "amount"),
-        _field("differential_task_rate", 5, "amount"), _field("health_plan", 6),
+        _field("differential_task_rate", 5, "amount"),
+        _field("health_plan", 6, align="right", fill="0"),
         _field("dependents", 2, "integer"), _field("additional_health_contribution", 15, "amount"),
         _field("additional_health_employer", 15, "amount"),
         _field("differential_health_base_employee", 15, "amount"),
@@ -133,25 +158,47 @@ _RECORDS: dict[str, RecordLayout] = {
         _field("differential_social_security_employer", 15, "amount"),
         _field("taxable_base_10", 15, "amount"), _field("deduction_amount", 15, "amount"),
     ), 370),
-    # shortcut: the official MVP field semantics for records 05/06 are not
-    # available in the repository; preserve widths with explicit configurable payload fields.
+    # Record 05 "Trabajadores Eventuales": categoria (Simplificacion Registral),
+    # puesto, fechas del periodo trabajado, remuneracion (= REM 9 del reg 04)
+    # y CUIT del empleador eventual. Dates render zero-padded when empty.
     "05": RecordLayout("05", (
         _field("record_type", 2, required=True), _field("cuil", 11, "cuil", required=True),
-        _field("event_code", 10), _field("start_date", 8, "date"),
-        _field("end_date", 8, "date"), _field("amount", 15, "amount"),
-        _field("payload", 11),
+        _field("category", 6, align="right", fill="0"),
+        _field("position", 4, align="right", fill="0"),
+        _field("start_date", 8, "date", fill="0"),
+        _field("end_date", 8, "date", fill="0"),
+        _field("amount", 15, "amount"),
+        _field("employer_cuit", 11, "cuit"),
     ), 65),
+    # Record 06 "Observaciones": fixed 93 positions, no period field; the
+    # official tool left-pads the free text with zeros.
     "06": RecordLayout("06", (
         _field("record_type", 2, required=True), _field("cuil", 11, "cuil", required=True),
-        _field("period", 6, "period"), _field("observation", 89),
-    ), 108),
-    # shortcut: the 195-position concept layout retains common mapping fields;
-    # exact flags, codes, and offsets must come from an approved official layout.
+        _field("observation", 80, align="right", fill="0"),
+    ), 93),
+    # Concept master (Interfase sheet): 6-char ARCA code, 10-char employer
+    # code, 150-char description, repeat flag, subsystem flags in fixed
+    # positions with reserved blanks, no record-type prefix.
     "concept": RecordLayout("concept", (
-        _field("record_type", 2, required=True), _field("arca_code", 3, required=True),
-        _field("employer_code", 10, required=True), _field("description", 50, required=True),
-        _field("repeat_flag", 1), _field("subsystem_flags", 8), _field("is_base", 1),
-        _field("reserved", 120),
+        _field("arca_code", 6, required=True),
+        _field("employer_code", 10, required=True),
+        _field("description", 150, required=True),
+        _field("repeat_flag", 1, "flag"),
+        _field("sipa_ap", 1, "flag"), _field("sipa_contrib", 1, "flag"),
+        _field("inssjyp_ap", 1, "flag"), _field("inssjyp_contrib", 1, "flag"),
+        _field("os_ap", 1, "flag"), _field("os_contrib", 1, "flag"),
+        _field("fsr_ap", 1, "flag"), _field("fsr_contrib", 1, "flag"),
+        _field("renatea_ap", 1, "flag"), _field("renatea_contrib", 1, "flag"),
+        _field("reserved_178", 1),
+        _field("aaff_contrib", 1, "flag"),
+        _field("reserved_180", 1),
+        _field("fne_contrib", 1, "flag"),
+        _field("reserved_182", 1),
+        _field("lrt_contrib", 1, "flag"),
+        _field("dif_ap", 1, "flag"),
+        _field("reserved_185", 1),
+        _field("esp_ap", 1, "flag"),
+        _field("reserved_187_195", 9),
     ), 195),
 }
 
@@ -230,11 +277,13 @@ def render_record(
 ) -> str:
     layout = _get_layout(record_type, layout_version, layouts)
     data = dict(values)
-    data.setdefault("record_type", "01" if record_type == "concept" else record_type)
-    expected_type = "01" if record_type == "concept" else record_type
-    if str(data["record_type"]) != expected_type:
-        raise ValueError(f"record_type no coincide con el layout {record_type}.")
     accepted = {field.name for field in layout.fields}
+    if "record_type" in accepted:
+        data.setdefault("record_type", record_type)
+        if str(data["record_type"]) != record_type:
+            raise ValueError(f"record_type no coincide con el layout {record_type}.")
+    # Layouts without a record_type field (e.g. "concept") carry no prefix;
+    # a record_type key there is rejected as unknown below.
     unknown = set(data) - accepted
     if unknown:
         raise ValueError(f"Campos no definidos en layout {record_type}: {', '.join(sorted(unknown))}")
@@ -257,7 +306,8 @@ def _record_parts(record: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
         values = dict(nested)
     else:
         values = {key: value for key, value in record.items() if key not in {"type", "values"}}
-    values.setdefault("record_type", "01" if record_type == "concept" else record_type)
+    if record_type != "concept":
+        values.setdefault("record_type", record_type)
     return record_type, values
 
 
@@ -266,7 +316,7 @@ def _validate_liquidation_coherence(records: Sequence[tuple[str, Mapping[str, An
         raise ValueError("La liquidación debe comenzar con un único registro 01.")
     header = records[0][1]
     cuit = normalize_cuit_cuil(header.get("cuit"))
-    period = validate_period(header.get("period", ""))
+    validate_period(header.get("period", ""))
     worker_count = int(str(header.get("worker_count", "")))
     seen: set[str] = set()
     current: str | None = None
@@ -297,9 +347,6 @@ def _validate_liquidation_coherence(records: Sequence[tuple[str, Mapping[str, An
                 raise ValueError(f"El registro {kind} debe seguir al registro 04 del trabajador.")
         else:
             raise ValueError(f"Tipo de registro no admitido en liquidación: {kind}.")
-        if "period" in values and kind == "06" and values.get("period") not in (None, ""):
-            if validate_period(values["period"]) != period:
-                raise ValueError("El período del registro 06 no coincide con la cabecera.")
     if current is not None and (not saw_concept or not saw_base):
         raise ValueError(f"Trabajador {current}: requiere conceptos y un registro 04.")
     if len(seen) != worker_count:
@@ -385,11 +432,23 @@ def generate_liquidation_file(
         for event in worker.get("eventual_records", ()):
             records.append({"type": "05", "cuil": cuil, **event})
         for observation in worker.get("observations", ()):
-            records.append({
-                "type": "06", "cuil": cuil, "period": canonical_period,
-                "observation": observation,
-            })
+            records.append({"type": "06", "cuil": cuil, "observation": observation})
     return generate_file(records, layout_version=layout_version)
+
+
+_CONCEPT_FLAGS = (
+    "repeat_flag",
+    "sipa_ap", "sipa_contrib",
+    "inssjyp_ap", "inssjyp_contrib",
+    "os_ap", "os_contrib",
+    "fsr_ap", "fsr_contrib",
+    "renatea_ap", "renatea_contrib",
+    "aaff_contrib",
+    "fne_contrib",
+    "lrt_contrib",
+    "dif_ap",
+    "esp_ap",
+)
 
 
 def generate_concepts_file(
@@ -399,14 +458,10 @@ def generate_concepts_file(
         render_record(
             "concept",
             {
-                "record_type": "01",
                 "arca_code": concept.get("arca_code", ""),
                 "employer_code": concept.get("employer_code", ""),
                 "description": concept.get("description", ""),
-                "repeat_flag": concept.get("repeat_flag", "0"),
-                "subsystem_flags": concept.get("subsystem_flags", "00000000"),
-                "is_base": concept.get("is_base", "0"),
-                "reserved": concept.get("reserved", ""),
+                **{flag: concept.get(flag, "0") for flag in _CONCEPT_FLAGS},
             },
             layout_version=layout_version,
         )

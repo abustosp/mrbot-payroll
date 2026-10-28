@@ -80,16 +80,20 @@ def test_seed_login_calculate_recalculate_and_export(tmp_path: Path) -> None:
                 "/api/v1/exports/lsd/concepts",
                 json={
                     "concepts": [{
-                        "arca_code": "001",
+                        "arca_code": "110000",
                         "employer_code": "BASICO",
                         "description": "Sueldo basico demo",
+                        "sipa_ap": "1",
+                        "sipa_contrib": "1",
                     }]
                 },
             )
             assert concepts.status_code == 200, concepts.text
             assert concepts.headers["content-type"].startswith("text/plain")
             assert "charset=latin-1" in concepts.headers["content-type"]
-            assert concepts.content.decode("latin-1").startswith("01")
+            concept_line = concepts.content.decode("latin-1").splitlines()[0]
+            assert len(concept_line) == 195
+            assert concept_line.startswith("110000BASICO    ")
 
             workers = []
             for result in payload["results"]:

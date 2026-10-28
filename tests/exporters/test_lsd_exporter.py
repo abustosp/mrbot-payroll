@@ -40,7 +40,7 @@ CUIL_2 = make_identifier("27", 87654321)
         ("04", {"cuil": CUIL_1}),
         ("05", {"cuil": CUIL_1}),
         ("06", {"cuil": CUIL_1}),
-        ("concept", {"arca_code": "001", "employer_code": "BASICO", "description": "Basico"}),
+        ("concept", {"arca_code": "110000", "employer_code": "BASICO", "description": "Sueldo"}),
     ],
 )
 def test_layouts_have_declared_fixed_lengths(record_type: str, values: dict[str, str]) -> None:
@@ -105,14 +105,122 @@ def test_full_file_for_two_workers_is_latin1_and_length_coherent() -> None:
 
 def test_concepts_file_uses_195_positions_and_latin1_bytes() -> None:
     payload = generate_concepts_file([{
-        "arca_code": "001",
+        "arca_code": "110000",
         "employer_code": "BASICO",
         "description": "Sueldo basico",
         "repeat_flag": "1",
-        "subsystem_flags": "11110000",
-        "is_base": "1",
+        "sipa_ap": "1",
+        "sipa_contrib": "1",
+        "os_ap": "1",
+        "os_contrib": "1",
     }])
 
     assert len(payload.decode(ENCODING).splitlines()[0]) == RECORD_LENGTHS["concept"]
     assert payload.decode(ENCODING).isascii()
     assert LAYOUT_VERSIONS[LAYOUT_VERSION]["04"].length == 370
+
+
+def test_official_layout_offsets_match_afip_build_tools() -> None:
+    """Byte-exact offsets from the AFIP LSD-ARMADO-TXT planillas.
+
+    06 = 93 (2+11+80, obs left-padded with zeros, no period field);
+    concept = 195 with flags at fixed 1-based positions 167-186.
+    """
+    line06 = render_record("06", {"cuil": CUIL_1, "observation": "OBS"})
+    assert len(line06) == 93
+    assert line06[:13] == "06" + CUIL_1
+    assert line06[13:] == "0" * 77 + "OBS"
+
+    concept = generate_concepts_file([{
+        "arca_code": "110000",
+        "employer_code": "R00001",
+        "description": "Sueldo Basico",
+        "repeat_flag": "1",
+        "sipa_ap": "1",
+        "sipa_contrib": "1",
+        "inssjyp_ap": "1",
+        "inssjyp_contrib": "1",
+        "os_ap": "1",
+        "os_contrib": "1",
+        "fsr_ap": "1",
+        "fsr_contrib": "1",
+        "renatea_ap": "1",
+        "renatea_contrib": "1",
+        "aaff_contrib": "1",
+        "fne_contrib": "1",
+        "lrt_contrib": "1",
+        "dif_ap": "0",
+        "esp_ap": "0",
+    }]).decode(ENCODING).splitlines()[0]
+    assert len(concept) == 195
+    assert concept[0:6] == "110000"
+    assert concept[6:16] == "R00001    "
+    assert concept[16:166] == "Sueldo Basico" + " " * 137
+    assert concept[166] == "1"
+    assert concept[167:177] == "1" * 10
+    assert concept[177] == " "
+    assert concept[178] == "1"
+    assert concept[179] == " "
+    assert concept[180] == "1"
+    assert concept[181] == " "
+    assert concept[182] == "1"
+    assert concept[183] == "0"
+    assert concept[184] == " "
+    assert concept[185] == "0"
+    assert concept[186:] == " " * 9
+
+    line02 = render_record("02", {"cuil": CUIL_1, "bank_account": "123"})
+    assert len(line02) == 115
+    assert line02[73:95] == " " * 19 + "123"
+
+    line04 = render_record(
+        "04", {"cuil": CUIL_1, "activity": "1", "locality": "2", "health_plan": "3"}
+    )
+    assert len(line04) == 370
+    assert line04[25:28] == "001"
+    assert line04[33:35] == "02"
+    assert line04[62:68] == "000003"
+
+def test_official_empty_field_padding() -> None:
+    """Campos vacíos según la herramienta oficial: período de ajuste con
+    espacios; banderas numéricas, fechas de pago y códigos con ceros."""
+    line03 = render_record("03", {"cuil": CUIL_1, "concept_code": "X", "amount": "1.00"})
+    assert len(line03) == 51
+    assert line03[45:] == " " * 6
+
+    line04 = render_record("04", {"cuil": CUIL_1})
+    assert len(line04) == 370
+    assert line04[13] == "0"
+    assert line04[14:16] == "00"
+    assert line04[23:25] == "  "
+    assert line04[25:28] == "000"
+    assert line04[28:31] == "   "
+    assert line04[33:35] == "00"
+    assert line04[35:37] == "00"
+
+    line02 = render_record("02", {"cuil": CUIL_1})
+    assert len(line02) == 115
+    assert line02[98:106] == "00000000"
+    assert line02[106:114] == " " * 8
+    assert line02[114] == "0"
+
+
+    line05 = render_record(
+        "05",
+        {
+            "cuil": CUIL_1,
+            "category": "12",
+            "position": "3",
+            "start_date": "20260601",
+            "end_date": "20260630",
+            "amount": "100000.00",
+            "employer_cuit": EMPLOYER,
+        },
+    )
+    assert len(line05) == 65
+    assert line05[:13] == "05" + CUIL_1
+    assert line05[13:19] == "000012"
+    assert line05[19:23] == "0003"
+    assert line05[23:39] == "2026060120260630"
+    assert line05[39:54] == "000000010000000"
+    assert line05[54:] == EMPLOYER
