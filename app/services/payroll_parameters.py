@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 from app.database.models import NormativeParameter
 
 
-def load_parameters(db: Session, period: date) -> list[NormativeParameter]:
+def load_parameters(db: Session, period: date, organization_id: int | None = None) -> list[NormativeParameter]:
     return list(db.scalars(select(NormativeParameter).where(
         NormativeParameter.jurisdiction == "AR",
+        or_(NormativeParameter.organization_id.is_(None), NormativeParameter.organization_id == organization_id),
         NormativeParameter.valid_from <= period,
         or_(NormativeParameter.valid_to.is_(None), NormativeParameter.valid_to >= period),
     ).order_by(NormativeParameter.id)).all())
@@ -27,10 +28,10 @@ def resolve_parameters(
         if row.category_code and row.category_code != category_code:
             continue
         previous = selected.get(row.code)
-        priority = (bool(row.agreement_code), bool(row.category_code))
-        if previous is None or priority > (bool(previous.agreement_code), bool(previous.category_code)):
+        priority = (bool(row.agreement_code), bool(row.category_code), row.organization_id is not None)
+        if previous is None or priority > (bool(previous.agreement_code), bool(previous.category_code), previous.organization_id is not None):
             selected[row.code] = row
-        elif priority == (bool(previous.agreement_code), bool(previous.category_code)):
+        elif priority == (bool(previous.agreement_code), bool(previous.category_code), previous.organization_id is not None):
             raise ValueError(
                 f"Parámetro {row.code}: vigencias superpuestas en el mismo alcance "
                 f"({row.agreement_code or 'global'}/{row.category_code or 'todas'})."
@@ -40,7 +41,7 @@ def resolve_parameters(
 
 def parameter_snapshot(rows: list[NormativeParameter]) -> list[dict[str, object]]:
     return [{
-        "id": row.id, "code": row.code, "value": str(row.value),
+        "id": row.id, "organization_id": row.organization_id, "code": row.code, "value": str(row.value),
         "agreement_code": row.agreement_code, "category_code": row.category_code,
         "valid_from": row.valid_from.isoformat(),
         "valid_to": row.valid_to.isoformat() if row.valid_to else None,

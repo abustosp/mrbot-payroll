@@ -303,13 +303,10 @@ liquidar.
    sin alcance aplican a todos los convenios y solo generan el aviso
    `multi_cct_no_scope` con los códigos. Falta el modo estricto para
    multi-CCT (bloquear en vez de avisar).
-3. SAC, vacaciones y liquidación final se liquidan como `run_type` propio
-   (`SUPPORTED_RUN_TYPES`) con el motor de settlements: SAC toma la mejor
-   remuneración mensual del semestre del historial persistido y los meses por
-   fecha de ingreso; VACATIONS/FINAL leen inputs por empleado de novedades
-   `AUXILIARY` (`VAC_DIAS`, `VAC_PLUS_TASA`, `LIQ_DIAS_INTEGRACION`) y FINAL
-   exige los parámetros `liq_*` vigentes. Sin aportes ni contribuciones
-   (igual que la simulación de `/settlements`); neto igual a bruto.
+3. SAC, vacaciones y liquidación final usan el motor de settlements e insumos
+   persistidos por corrida y empleado. Para causales, condiciones, fuentes y
+   límites, consultar [Liquidaciones especiales](LIQUIDACIONES_ESPECIALES.md).
+
 4. Las novedades importadas se guardan como remunerativas y el período es
    `AAAAMM`; no cubren quincenas ni naturalezas no remunerativas.
 5. La validación contra ARCA sigue pendiente.

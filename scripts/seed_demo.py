@@ -297,6 +297,7 @@ def seed(session: Session) -> dict[str, object]:
     ):
         parameter = session.scalar(
             select(NormativeParameter).where(
+                NormativeParameter.organization_id.is_(None),
                 NormativeParameter.jurisdiction == "AR",
                 NormativeParameter.code == code,
                 NormativeParameter.agreement_code == "",

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="{{ url_for('payroll_detail', payroll_id=run.id) }}">Volver a la liquidación</a></p>
+{% if run.adjusts_run_id %}<div class="callout">Reemplazo interno completo de <a href="{{ url_for('payroll_detail', payroll_id=run.adjusts_run_id) }}">la liquidación {{ run.adjusts_run_id }}</a>. Motivo: {{ run.adjustment_reason }}</div>{% endif %}
+{% if run.status == 'ANNULLED' %}<div class="callout" role="alert">Anulada internamente: {{ run.annulled_reason }}. Sus resultados se conservan como historial y no se emiten recibos.</div>{% endif %}
+{% if run.run_type != 'MONTHLY' %}
+<section class="card"><div class="card-header"><h2 class="card-title">Insumos por empleado · {{ run.run_type }}</h2></div><div class="card-body">
+<p>Informe las bases y el devengamiento revisados. Guardar estos datos no calcula ni aprueba la liquidación. Las causas admitidas son renuncia y despido sin causa; otros regímenes requieren una regla específica.</p>
+<p>Para SAC o FINAL, cargue historial completo o una novedad SAC_BASE con importe y naturaleza AUXILIARY. Para vacaciones, cargue VAC_DIAS con cantidad y VAC_PLUS_TASA con importe explícito (incluso cero), ambas AUXILIARY. El archivo admite la columna opcional Naturaleza.</p>
+{% if run.status != 'DRAFT' %}<p>Reabra la liquidación antes de modificar insumos.</p>{% endif %}
+{% for employee in employees %}{% set saved = values.get(employee.id, {}) %}
+<details><summary>{{ employee.employee_code }} · {{ employee.last_name }}, {{ employee.first_name }}</summary>
+<form method="post" action="{{ url_for('payroll_operation', run_id=run.id, action='inputs') }}" class="stack">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="employee_id" value="{{ employee.id }}">
+<fieldset {% if run.status != 'DRAFT' or current_user.role == 'viewer' %}disabled{% endif %}>
+{% if run.run_type == 'FINAL' %}<div class="field"><label for="cause-{{ employee.id }}">Causa de egreso</label><select class="select" id="cause-{{ employee.id }}" name="cause"><option value="">Seleccione</option>{% for cause in ['RENUNCIA', 'DESPIDO_SIN_CAUSA'] %}<option {% if saved.get('cause') == cause %}selected{% endif %}>{{ cause }}</option>{% endfor %}</select></div>{% endif %}
+{% for name, label in input_fields %}
+{% if run.run_type == 'FINAL' or (run.run_type == 'SAC' and name == 'sac_excluded_days') or (run.run_type == 'VACATIONS' and name == 'vacation_base_salary') %}
+<div class="field"><label for="{{ name }}-{{ employee.id }}">{{ label }}</label><input class="input" id="{{ name }}-{{ employee.id }}" name="{{ name }}" type="number" min="0" step="any" value="{{ saved.get(name, '') }}"></div>
+{% endif %}{% endfor %}
+{% if run.run_type == 'FINAL' %}
+{% for name, label in [('probation','¿Dentro del período de prueba aplicable?'), ('without_notice','¿Egreso sin preaviso otorgado?'), ('other_entitlements_reviewed','¿Confirmó que no corresponden otros rubros indemnizatorios, agravantes ni un régimen especial fuera de este cálculo?')] %}
+<div class="field"><label for="{{ name }}-{{ employee.id }}">{{ label }}</label><select class="select" id="{{ name }}-{{ employee.id }}" name="{{ name }}"><option value="">Seleccione</option><option value="true" {% if saved.get(name) == true %}selected{% endif %}>Sí</option><option value="false" {% if saved.get(name) == false %}selected{% endif %}>No</option></select></div>
+{% endfor %}{% endif %}
+<button class="btn btn--primary" type="submit">Guardar insumos de {{ employee.employee_code }}</button>
+</fieldset></form></details>
+{% else %}<p>No hay empleados con contrato para la empresa y período.</p>{% endfor %}
+</div></section>{% endif %}
+{% if current_user.role == 'admin' and run.status in ['APPROVED','CLOSED','ANNULLED'] %}
+<section class="card"><div class="card-header"><h2 class="card-title">Corrección interna de una liquidación aprobada</h2></div><div class="card-body">
+<p>El reemplazo anula internamente la original y crea un borrador completo vinculado. Conserva los resultados anteriores. No es un ajuste, rectificativa ni anulación fiscal ante ARCA.</p>
+<form method="post" action="{{ url_for('payroll_operation', run_id=run.id, action='replace') }}" class="stack" onsubmit="return confirm('¿Crear un reemplazo completo y anular internamente la original?')">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="field"><label for="replacement-code">Código del reemplazo</label><input class="input" id="replacement-code" name="code" maxlength="80" required></div><div class="field"><label for="replacement-reason">Motivo de la corrección</label><textarea class="input" id="replacement-reason" name="reason" required minlength="5" maxlength="500"></textarea></div><button class="btn btn--primary">Crear reemplazo interno</button></form>
+{% if run.status != 'ANNULLED' %}<details><summary>Anular sin reemplazo</summary><form method="post" action="{{ url_for('payroll_operation', run_id=run.id, action='annul') }}" class="stack" onsubmit="return confirm('¿Anular internamente esta liquidación conservando su historial?')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label for="annul-reason">Motivo de anulación</label><textarea class="input" id="annul-reason" name="reason" required minlength="5" maxlength="500"></textarea><button class="btn btn--danger">Anular internamente</button></form></details>{% endif %}
+</div></section>{% endif %}
+{% endblock %}

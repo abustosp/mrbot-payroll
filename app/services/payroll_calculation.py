@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 from datetime import UTC, date, datetime
@@ -13,7 +14,9 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.core.payroll_engine.calculator import _definition_applies, calculate_payroll
+from app.core.payroll_engine.rounding import quantize
 from app.core.payroll_engine.settlements import (
+    SETTLEMENT_ROUNDING,
     calculate_final_settlement,
     calculate_sac,
     calculate_vacations,
@@ -41,11 +44,13 @@ from app.database.models import (
     PayrollNovelty,
     PayrollResult,
     PayrollRun,
+    PayrollSettlementInput,
     PayrollTrace,
     Ruleset,
     SalaryScale,
 )
 from app.services.payroll_parameters import load_parameters, parameter_snapshot, resolve_parameters
+from app.services.settlement_inputs import SettlementInputs
 
 
 class PayrollRunStateError(ValueError):
@@ -59,9 +64,8 @@ class PayrollNoveltyScopeError(ValueError):
 #: Run types calculated by the settlement engine instead of monthly formulas.
 SETTLEMENT_RUN_TYPES = ("SAC", "VACATIONS", "FINAL")
 
-#: Settlement inputs ride on AUXILIARY novelties of the run period so no new
-#: input table is needed. Missing inputs are employee errors (fail-closed);
-#: unknown codes still fall under the V2-09 unconsumed-novelty rule.
+#: SAC_BASE and VACATIONS novelties complement per-run employee inputs.
+#: Missing inputs fail closed; other novelties follow the V2-09 rule.
 SAC_BASE_CODE = "SAC_BASE"
 VAC_DAYS_CODE = "VAC_DIAS"
 VAC_PLUS_RATE_CODE = "VAC_PLUS_TASA"
@@ -72,11 +76,8 @@ FINAL_INTEGRATION_DAYS_CODE = "LIQ_DIAS_INTEGRACION"
 #: code maps to the engine parameter name expected by
 #: :func:`calculate_final_settlement`.
 FINAL_PARAMETER_CODES: dict[str, str] = {
-    "liq_preaviso_meses": "preaviso_months",
-    "liq_integracion_dias_base": "month_integration_days_base",
     "liq_vacaciones_dias_base": "vacation_days_base",
     "liq_vacaciones_plus_tasa": "vacation_plus_rate",
-    "liq_antiguedad_meses_por_anio": "seniority_months_per_year",
 }
 
 #: PayrollConcept codes every settlement run type persists. The organization
@@ -85,6 +86,7 @@ SETTLEMENT_CONCEPT_CODES: dict[str, tuple[str, ...]] = {
     "SAC": ("SAC",),
     "VACATIONS": ("VACACIONES",),
     "FINAL": (
+        "SUELDO_DIAS",
         "PREAVISO",
         "INTEGRACION_MES",
         "VACACIONES_NO_GOZADAS",
@@ -97,7 +99,7 @@ SETTLEMENT_CONCEPT_CODES: dict[str, tuple[str, ...]] = {
 SETTLEMENT_CONSUMED_CODES: dict[str, frozenset[str]] = {
     "SAC": frozenset({SAC_BASE_CODE}),
     "VACATIONS": frozenset({VAC_DAYS_CODE, VAC_PLUS_RATE_CODE}),
-    "FINAL": frozenset({VAC_DAYS_CODE, FINAL_INTEGRATION_DAYS_CODE, SAC_BASE_CODE}),
+    "FINAL": frozenset({SAC_BASE_CODE}),
 }
 
 #: Run statuses whose persisted results count as semester history for SAC.
@@ -365,9 +367,8 @@ def _snapshot_ruleset(
         "parameters": {code: str(value) for code, value in parameters.items()},
         "parameter_versions": parameter_snapshot(parameter_rows or []),
     }
-    # Shared code with a global version sequence (run codes can fill the
-    # 80-char column; the run links back through run.ruleset_id).
-    code = "payroll-run"
+    # Runs have independent version sequences; each run is serialized.
+    code = f"payroll-run-{run.id}"
     latest = db.scalar(select(func.max(Ruleset.version)).where(Ruleset.code == code))
     ruleset = Ruleset(
         code=code,
@@ -670,7 +671,7 @@ def _run_calculation(
     _clear_previous_results(db, run.id)
     formulas = [row for row in _applicable_formulas(db, run.organization_id, period)
                 if _run_type_matches(row[1].conditions, "MONTHLY", unscoped=True)]
-    parameter_rows = load_parameters(db, period)
+    parameter_rows = load_parameters(db, period, run.organization_id)
     parameters: dict[str, Decimal] = {}
     concept_rows = db.scalars(
         select(PayrollConcept).where(
@@ -1068,14 +1069,17 @@ def _completed_years(start: date, end: date) -> int:
 
 def _sac_inputs(
     db: Session, *, run: PayrollRun, employee: Employee, hire: date,
-    end: date, novelties: list[dict[str, object]],
+    end: date, novelties: list[dict[str, object]], excluded_days: int = 0,
 ) -> tuple[list[Decimal], Decimal | None, Decimal, list[str]]:
     semester_start, semester_end = _semester_bounds(end)
     start = max(hire, semester_start)
     if start > end:
         raise ValueError("La fecha de ingreso es posterior al fin del período SAC.")
     days = (end - start).days + 1
+    if excluded_days < 0 or excluded_days > days:
+        raise ValueError("Los días excluidos de SAC superan el período trabajado.")
     semester_days = (semester_end - semester_start).days + 1
+    days -= excluded_days
     months = Decimal(6) * Decimal(days) / Decimal(semester_days)
     rows = db.execute(
         select(PayrollRun.period_start, PayrollResult.remunerative)
@@ -1086,7 +1090,8 @@ def _sac_inputs(
                PayrollRun.status.in_(_SAC_HISTORY_STATUSES),
                PayrollResult.employee_id == employee.id,
                PayrollRun.period_start >= semester_start,
-               PayrollRun.period_start <= end)
+               PayrollRun.period_start <= end,
+               PayrollRun.period_end <= end)
         .order_by(PayrollRun.period_start)
     ).all()
     entries = _novelty_entries(novelties, SAC_BASE_CODE)
@@ -1105,7 +1110,7 @@ def _sac_inputs(
     if best is None and (missing or len(seen) != len(set(seen))):
         detail = ", ".join(f"{year:04d}-{month:02d}" for year, month in missing)
         raise ValueError(f"Historial mensual SAC incompleto o duplicado; faltantes: {detail or 'ninguno'}; cargar {SAC_BASE_CODE} explícito.")
-    trace = [f"SAC semestre={semester_start}/{semester_end}; trabajado={start}/{end}; días={days}/{semester_days}",
+    trace = [f"SAC semestre={semester_start}/{semester_end}; trabajado={start}/{end}; días={days}/{semester_days}; excluidos={excluded_days}",
              f"SAC historia={[(d.isoformat(), str(value)) for d, value in rows]}; faltantes={missing}; base explícita={best}"]
     return [value for _, value in rows], best, months, trace
 
@@ -1134,6 +1139,8 @@ def _required_novelty_quantity(
         raise ValueError(
             f"Se requiere exactamente una novedad {code} en el período."
         )
+    if entries[0].get("kind") != "AUXILIARY":
+        raise ValueError(f"La novedad {code} requiere kind AUXILIARY.")
     value = entries[0].get("quantity")
     if value is None:
         raise ValueError(f"La novedad {code} requiere quantity.")
@@ -1151,7 +1158,7 @@ def _compute_sac(
     base_salary: Decimal,
     hire: date,
     period: date,
-    novelties: list[dict[str, object]],
+    novelties: list[dict[str, object]], excluded_days: int = 0,
 ) -> tuple[Decimal, list[dict[str, Any]], list[str]]:
     """SAC from complete semester history or an explicitly supplied base.
 
@@ -1159,7 +1166,7 @@ def _compute_sac(
     """
 
     history, best, months, history_trace = _sac_inputs(
-        db, run=run, employee=employee, hire=hire, end=period, novelties=novelties,
+        db, run=run, employee=employee, hire=hire, end=period, novelties=novelties, excluded_days=excluded_days,
     )
     result = calculate_sac(history, period, months_worked=months, best_salary=best)
     items = [{
@@ -1176,23 +1183,24 @@ def _compute_sac(
 def _compute_vacations(
     *,
     base_salary: Decimal,
-    novelties: list[dict[str, object]],
+    novelties: list[dict[str, object]], vacation_base_salary: Decimal | None = None,
 ) -> tuple[Decimal, list[dict[str, Any]], list[str], list[str]]:
     """Vacation pay from the VAC_DIAS novelty.
 
-    Returns ``(amount, items, trace, warnings)``. The plus rate comes from an
-    optional VAC_PLUS_TASA novelty; omitting it liquidates zero plus with a
-    warning (same B-29 spirit as the engine default).
+    Returns ``(amount, items, trace, warnings)``. The applicable plus rate
+    must be supplied explicitly, including zero where appropriate.
     """
 
     days = _required_novelty_quantity(novelties, VAC_DAYS_CODE)
     plus_entries = _novelty_entries(novelties, VAC_PLUS_RATE_CODE)
-    if len(plus_entries) > 1:
+    if len(plus_entries) != 1:
         raise ValueError(
-            f"Se requiere como máximo una novedad {VAC_PLUS_RATE_CODE}."
+            f"Se requiere exactamente una novedad {VAC_PLUS_RATE_CODE}, incluso si la tasa es cero."
         )
     plus_rate: Decimal | None = None
     if plus_entries:
+        if plus_entries[0].get("kind") != "AUXILIARY":
+            raise ValueError(f"La novedad {VAC_PLUS_RATE_CODE} requiere kind AUXILIARY.")
         raw_amount = plus_entries[0].get("amount")
         if raw_amount is None:
             raise ValueError(f"La novedad {VAC_PLUS_RATE_CODE} requiere amount.")
@@ -1202,7 +1210,7 @@ def _compute_vacations(
         plus_rate = amount
     # LCT standard: daily value over 25 days (explicit, not a silent default).
     result = calculate_vacations(
-        base_salary, days, days_base=Decimal(25), plus_rate=plus_rate
+        vacation_base_salary if vacation_base_salary is not None else base_salary, days, days_base=Decimal(25), plus_rate=plus_rate
     )
     items = [{
         "code": "VACACIONES",
@@ -1225,7 +1233,7 @@ def _compute_final(
     termination: date,
     period: date,
     novelties: list[dict[str, object]],
-    parameters: dict[str, Decimal],
+    parameters: dict[str, Decimal], inputs: SettlementInputs,
 ) -> tuple[Decimal, Decimal, list[dict[str, Any]], list[str]]:
     """Final settlement for a termination inside the run period.
 
@@ -1233,39 +1241,79 @@ def _compute_final(
     legal parameters are employee errors; separate rules apply deductions.
     """
 
-    missing = [code for code in FINAL_PARAMETER_CODES if code not in parameters]
+    if not inputs.cause:
+        raise ValueError("Se requiere causa de desvinculación explícita.")
+    for field in ("worked_days", "worked_base_salary", "vacation_days", "vacation_base_salary", "sac_excluded_days"):
+        if getattr(inputs, field) is None:
+            raise ValueError(f"Se requiere insumo explícito {field}.")
+    assert inputs.worked_days is not None
+    assert inputs.worked_base_salary is not None
+    assert inputs.vacation_days is not None
+    assert inputs.vacation_base_salary is not None
+    assert inputs.sac_excluded_days is not None
+    if inputs.other_entitlements_reviewed is not True:
+        raise ValueError("Se requiere confirmar que no corresponden conceptos adicionales o regímenes especiales no implementados.")
+    if hire > termination:
+        raise ValueError("La fecha de ingreso es posterior a la desvinculación.")
+    available_days = (termination - max(hire, termination.replace(day=1))).days + 1
+    allowed_days = 30 if termination.day == calendar.monthrange(termination.year, termination.month)[1] and hire <= termination.replace(day=1) else min(30, available_days)
+    if inputs.worked_days > allowed_days:
+        raise ValueError("Los días trabajados superan los días disponibles en el mes.")
+    missing = [code for code in ("liq_vacaciones_dias_base", "liq_vacaciones_plus_tasa") if code not in parameters]
     if missing:
-        raise ValueError(
-            "Faltan parámetros normativos AR vigentes: "
-            f"{', '.join(missing)}."
-        )
-    engine_parameters = {
-        engine_key: parameters[db_code]
-        for db_code, engine_key in FINAL_PARAMETER_CODES.items()
-    }
-    integration_days = _required_novelty_quantity(
-        novelties, FINAL_INTEGRATION_DAYS_CODE
-    )
-    vacation_days = _required_novelty_quantity(novelties, VAC_DAYS_CODE)
-    years = _completed_years(hire, termination)
+        raise ValueError(f"Faltan parámetros normativos AR vigentes: {', '.join(missing)}.")
+    preaviso = integration = years = seniority_base = Decimal(0)
+    if inputs.cause == "DESPIDO_SIN_CAUSA":
+        # Article 245 was amended in March 2026; older dismissals need a separate regime.
+        if termination < date(2026, 3, 6):
+            raise ValueError("El régimen indemnizatorio anterior al 06/03/2026 no está implementado.")
+        for field in ("probation", "without_notice", "preaviso_months", "integration_days", "notice_base_salary"):
+            if getattr(inputs, field) is None:
+                raise ValueError(f"Se requiere insumo explícito {field}.")
+        assert inputs.preaviso_months is not None
+        assert inputs.integration_days is not None
+        preaviso = inputs.preaviso_months
+        integration = Decimal(inputs.integration_days)
+        remaining_days = calendar.monthrange(termination.year, termination.month)[1] - termination.day
+        if inputs.probation and (preaviso or integration):
+            raise ValueError("En período de prueba no corresponde preaviso ni integración bajo este régimen.")
+        expected_integration = remaining_days if inputs.without_notice and not inputs.probation else 0
+        if integration != expected_integration:
+            raise ValueError(f"La integración debe ser {expected_integration} días según preaviso y fecha.")
+        completed = _completed_years(hire, termination)
+        fifth_year = date(hire.year + 5, hire.month, min(hire.day, calendar.monthrange(hire.year + 5, hire.month)[1]))
+        max_notice = Decimal(2 if termination > fifth_year else 1)
+        if preaviso > max_notice or (inputs.without_notice and not inputs.probation and preaviso != max_notice):
+            raise ValueError("El preaviso no coincide con la antigüedad y la notificación informadas.")
+        if not inputs.probation:
+            if inputs.indemnity_base_salary is None or inputs.indemnity_cap is None:
+                raise ValueError("Se requieren base indemnizatoria y tope explícitos.")
+            anniversary_year = hire.year + completed
+            anniversary = date(anniversary_year, hire.month, min(hire.day, calendar.monthrange(anniversary_year, hire.month)[1]))
+            m = anniversary.month + 3
+            y = anniversary.year + (m - 1) // 12
+            m = (m - 1) % 12 + 1
+            three_months = date(y, m, min(anniversary.day, calendar.monthrange(y, m)[1]))
+            years = Decimal(max(1, completed + (termination > three_months)))
+            seniority_base = max(min(inputs.indemnity_base_salary, inputs.indemnity_cap),
+                                 inputs.indemnity_base_salary * Decimal("0.67"))
     history, best, months, history_trace = _sac_inputs(
         db, run=run, employee=employee, hire=hire, end=termination, novelties=novelties,
+        excluded_days=inputs.sac_excluded_days,
     )
-    result = calculate_final_settlement(
-        {
-            "period": period,
-            "monthly_salary": base_salary,
-            "integration_days": integration_days,
-            "vacation_days": vacation_days,
-            "sac_months_worked": Decimal(months),
-            "years_of_service": Decimal(years),
-            "seniority_base_salary": base_salary,
-            "sac_remunerations": history,
-            "sac_best_salary": best,
-        },
-        engine_parameters,
-    )
-    items = [{
+    result = calculate_final_settlement({
+        "period": period, "monthly_salary": inputs.notice_base_salary if inputs.notice_base_salary is not None else inputs.worked_base_salary,
+        "integration_days": integration, "vacation_days": inputs.vacation_days,
+        "vacation_base_salary": inputs.vacation_base_salary,
+        "sac_months_worked": months, "years_of_service": years,
+        "seniority_base_salary": seniority_base,
+        "sac_remunerations": history, "sac_best_salary": best,
+    }, {"preaviso_months": preaviso, "month_integration_days_base": Decimal(30),
+        "vacation_days_base": parameters["liq_vacaciones_dias_base"],
+        "vacation_plus_rate": parameters["liq_vacaciones_plus_tasa"],
+        "seniority_months_per_year": Decimal(1)})
+
+    items: list[dict[str, Any]] = [{
         "code": item.code,
         "name": item.name,
         "nature": item.nature.value,
@@ -1273,12 +1321,22 @@ def _compute_final(
         "unit_value": None,
         "amount": item.amount,
     } for item in result.items]
-    return (
-        result.remunerative_total,
-        result.non_remunerative_total,
-        items,
-        history_trace + result.trace,
-    )
+    # Omit compensation components that do not apply to this termination.
+    items = [item for item in items if not (item["code"] in {"PREAVISO", "INTEGRACION_MES", "INDEMNIZACION_ANTIGUEDAD"} and item["amount"] == 0)]
+    # Notice, month integration and unused vacations compensate termination.
+    for item in items:
+        if item["code"] in {"PREAVISO", "INTEGRACION_MES", "VACACIONES_NO_GOZADAS"}:
+            item["nature"] = ConceptNature.NON_REMUNERATIVE.value
+    worked_amount = quantize(inputs.worked_base_salary / Decimal(30) * inputs.worked_days, SETTLEMENT_ROUNDING)
+    items.insert(0, {"code": "SUELDO_DIAS", "name": "Sueldo días trabajados",
+        "nature": ConceptNature.REMUNERATIVE.value, "quantity": inputs.worked_days,
+        "unit_value": None, "amount": worked_amount})
+    remunerative = sum((item["amount"] for item in items if item["nature"] == ConceptNature.REMUNERATIVE.value), Decimal(0))
+    non_remunerative = sum((item["amount"] for item in items if item["nature"] == ConceptNature.NON_REMUNERATIVE.value), Decimal(0))
+    component_trace = [line for line in result.trace if not any(line.startswith(code + "=") for code in ("PREAVISO", "INTEGRACION_MES", "VACACIONES_NO_GOZADAS"))]
+    return remunerative, non_remunerative, items, history_trace + component_trace + [
+        f"causa={inputs.cause}; días trabajados={inputs.worked_days}; sueldo={worked_amount}",
+        f"base indemnizatoria={inputs.indemnity_base_salary}; tope={inputs.indemnity_cap}; base aplicada={seniority_base}; años={years}"]
 
 
 def _store_settlement_result(
@@ -1426,16 +1484,16 @@ def _run_settlement(
     """Calculate a SAC/VACATIONS/FINAL run with the settlement engine.
 
     Monthly formulas never run here: SAC is derived from persisted monthly
-    history, and VACATIONS/FINAL read per-employee inputs from AUXILIARY
-    novelties of the run period (documented codes). Anything missing is a
-    per-employee error (fail-closed); unknown novelties follow V2-09.
+    history, while each special run uses persisted per-employee inputs and
+    applicable AUXILIARY novelties. Missing inputs are employee errors;
+    unknown novelties follow V2-09.
     Approved deductions and contributions opt in using a run_type condition;
     missing rule types are reported for review.
     """
 
     period = run.period_end
     _clear_previous_results(db, run.id)
-    parameter_rows = load_parameters(db, period)
+    parameter_rows = load_parameters(db, period, run.organization_id)
     parameters: dict[str, Decimal] = {}
     concept_rows = db.scalars(
         select(PayrollConcept).where(
@@ -1462,6 +1520,8 @@ def _run_settlement(
     novelties_by_employee = _novelties_for_employees(
         db, run.organization_id, run.company_id, employee_ids, period
     )
+    settlement_inputs = {row.employee_id: row.values for row in db.scalars(
+        select(PayrollSettlementInput).where(PayrollSettlementInput.payroll_run_id == run.id)).all()}
     categories, scales_by_category, _agreement_ids, agreement_codes = (
         _preload_agreement_data(db, contracts_by_employee, period)
     )
@@ -1520,7 +1580,7 @@ def _run_settlement(
             "hire_date": employee.hire_date,
             "termination_date": employee.termination_date,
             "novelties": employee_novelties,
-            "settlement": {"run_type": run.run_type},
+            "settlement": {"run_type": run.run_type, "inputs": settlement_inputs.get(employee.id)},
         })
         try:
             category = categories.get(contract.category_id or -1)
@@ -1532,18 +1592,23 @@ def _run_settlement(
                     "No hay sueldo base: el contrato no fija monthly_salary "
                     "ni hay una escala salarial única vigente."
                 )
+            explicit_inputs = SettlementInputs.model_validate(settlement_inputs.get(employee.id, {}))
             if run.run_type == "SAC":
+                if explicit_inputs.sac_excluded_days is None:
+                    raise ValueError("Se requiere sac_excluded_days explícito, incluso si es cero.")
                 hire = employee.hire_date or contract.valid_from
                 remunerative, items, trace_lines = _compute_sac(
                     db, run=run, employee=employee,
                     base_salary=base_salary, hire=hire,
-                    period=period, novelties=employee_novelties,
+                    period=period, novelties=employee_novelties, excluded_days=explicit_inputs.sac_excluded_days,
                 )
                 non_remunerative = Decimal("0")
                 extra_warnings: list[str] = []
             elif run.run_type == "VACATIONS":
+                if explicit_inputs.vacation_base_salary is None:
+                    raise ValueError("Se requiere vacation_base_salary explícito, incluyendo remuneración variable.")
                 amount, items, trace_lines, extra_warnings = _compute_vacations(
-                    base_salary=base_salary, novelties=employee_novelties,
+                    base_salary=base_salary, novelties=employee_novelties, vacation_base_salary=explicit_inputs.vacation_base_salary,
                 )
                 remunerative, non_remunerative = amount, Decimal("0")
             else:
@@ -1557,7 +1622,7 @@ def _run_settlement(
                     base_salary=base_salary, hire=hire,
                     termination=employee.termination_date,
                     period=period, novelties=employee_novelties,
-                    parameters=employee_parameters,
+                    parameters=employee_parameters, inputs=explicit_inputs,
                 )
                 extra_warnings = []
             trace_lines.append(f"scope run_type={run.run_type}")
@@ -1584,6 +1649,7 @@ def _run_settlement(
                     "settlement_remunerative": remunerative,
                     "settlement_non_remunerative": non_remunerative,
                     "settlement_gross": remunerative + non_remunerative,
+                    **{f"settlement_{code}": Decimal(0) for code in SETTLEMENT_CONCEPT_CODES[run.run_type]},
                     **{f"settlement_{item['code']}": item["amount"] for item in items},
                 })
                 formula_novelties = [entry for entry in employee_novelties if entry.get("code") in unconsumed]
@@ -1604,10 +1670,6 @@ def _run_settlement(
                     warnings.append({"type": "settlement_missing_rules", "employee_id": employee.id,
                         "employee_code": employee.employee_code, "code": nature.value,
                         "message": f"No hay reglas {nature.value} explícitas para {run.run_type}; importe cero sin verificar."})
-            if run.run_type == "FINAL":
-                warnings.append({"type": "settlement_incomplete", "employee_id": employee.id,
-                    "employee_code": employee.employee_code, "code": "FINAL",
-                    "message": "La liquidación final incluye solo los componentes configurados; requiere revisión de los conceptos y condiciones aplicables."})
             if remunerative + non_remunerative - deductions < 0:
                 raise ValueError("El resultado de la liquidación tiene un neto negativo.")
             row_hash = _store_settlement_result(

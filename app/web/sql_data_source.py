@@ -1042,7 +1042,7 @@ class SqlAlchemyDataSource:
             statement = (
                 select(PayrollResult, PayrollRun)
                 .join(PayrollRun, PayrollRun.id == PayrollResult.payroll_run_id)
-                .where(PayrollRun.organization_id == organization_id)
+                .where(PayrollRun.organization_id == organization_id, PayrollRun.status != "ANNULLED")
                 .order_by(PayrollRun.period_start.desc(), PayrollResult.id.desc())
             )
             if requested_company is not None:
@@ -1099,6 +1099,7 @@ class SqlAlchemyDataSource:
                 .where(
                     PayrollResult.id == result_id,
                     PayrollRun.organization_id == organization_id,
+                    PayrollRun.status != "ANNULLED",
                 )
             ).first()
             return self._receipts(session, [row])[0] if row else None

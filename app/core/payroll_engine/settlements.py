@@ -590,7 +590,7 @@ def calculate_final_settlement(
         rounding,
     )
     vacation = calculate_vacations(
-        monthly_salary,
+        inputs.get("vacation_base_salary", monthly_salary),
         vacation_days,
         days_base=vacation_days_base,
         plus_rate=vacation_plus_rate,

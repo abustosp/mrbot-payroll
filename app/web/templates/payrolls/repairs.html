@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+{% for kind in ['notice','error'] %}{% if request.query_params.get(kind) %}<div class="callout" role="alert">{{ request.query_params.get(kind) }}</div>{% endif %}{% endfor %}
+<section class="card"><div class="card-header"><h2 class="card-title">Novedades sin empresa</h2></div><div class="card-body">
+<p>Se muestran hasta 100 novedades pendientes. La empresa debe tener un contrato para ese empleado y mes. Si hay una liquidación aprobada, cerrada o en cálculo que pudiera usar el dato, primero debe resolver ese estado.</p>
+{% for novelty, employee in rows %}<details><summary>{{ employee.employee_code }} · {{ novelty.period }} · {{ novelty.code }} · {{ novelty.amount if novelty.amount is not none else novelty.quantity }}</summary>
+<form method="post" action="{{ url_for('novelty_repair', novelty_id=novelty.id) }}" class="stack"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="field"><label for="repair-company-{{ novelty.id }}">Empresa</label><select class="select" id="repair-company-{{ novelty.id }}" name="company_id" required>{% for company in companies %}<option value="{{ company.id }}">{{ company.legal_name }}</option>{% endfor %}</select></div><div class="field"><label for="repair-reason-{{ novelty.id }}">Motivo de la asignación</label><textarea class="input" id="repair-reason-{{ novelty.id }}" name="reason" required minlength="5" maxlength="500"></textarea></div><button class="btn btn--primary">Asignar empresa y registrar auditoría</button></form></details>
+{% else %}<p>No hay novedades históricas sin empresa.</p>{% endfor %}
+</div></section>
+{% endblock %}

@@ -1205,6 +1205,7 @@ def _assert_no_parameter_overlap(
 ) -> None:
     rows = session.scalars(
         select(NormativeParameter).where(
+            NormativeParameter.organization_id.is_(None),
             NormativeParameter.jurisdiction == spec.jurisdiction,
             NormativeParameter.code == spec.code,
             NormativeParameter.agreement_code == spec.agreement_code,
@@ -1312,6 +1313,7 @@ def _build_plans(
     for parameter in package.parameters:
         existing_parameter = session.scalar(
             select(NormativeParameter).where(
+                NormativeParameter.organization_id.is_(None),
                 NormativeParameter.jurisdiction == parameter.jurisdiction,
                 NormativeParameter.code == parameter.code,
                 NormativeParameter.agreement_code == parameter.agreement_code,

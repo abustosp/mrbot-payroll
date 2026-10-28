@@ -1,12 +1,15 @@
 # ruff: noqa: B008 -- FastAPI resolves Depends defaults at request time.
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.common import commit_or_conflict, get_scoped, page
 from app.api.schemas import PayrollRunInput, PayrollRunRead
 from app.auth.dependencies import require_role, require_user
+from app.database.base import utc_now
 from app.database.models import (
     AuditLog,
     Company,
@@ -26,6 +29,54 @@ from app.services.payroll_calculation import (
 )
 
 router = APIRouter(prefix="/payroll-runs", tags=["payroll-runs"])
+
+
+class AnnulInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("El motivo es obligatorio")
+        return value
+
+
+class ReplaceInput(AnnulInput):
+    code: str = Field(min_length=1, max_length=80)
+
+    @field_validator("code")
+    @classmethod
+    def nonblank_code(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("El código es obligatorio")
+        return value
+
+
+def _lock_run(db: Session, run_id: int, organization_id: int) -> PayrollRun:
+    run = get_scoped(db, PayrollRun, run_id, organization_id)
+    db.scalar(select(Company).where(Company.id == run.company_id).with_for_update())
+    db.execute(update(Company).where(Company.id == run.company_id).values(active=Company.active))
+    db.execute(update(PayrollRun).where(PayrollRun.id == run.id).values(status=PayrollRun.status))
+    db.refresh(run)
+    return run
+
+
+def _annul(db: Session, run: PayrollRun, user: User, reason: str) -> None:
+    if run.status not in {"APPROVED", "CLOSED"}:
+        raise HTTPException(status_code=409, detail="Solo se anulan liquidaciones aprobadas o cerradas")
+    before = run.status
+    run.status = "ANNULLED"
+    run.annulled_reason = reason
+    run.annulled_by = user.id
+    run.annulled_at = utc_now()
+    db.add(AuditLog(
+        organization_id=user.organization_id, user_id=user.id, action="payroll_run.annulled",
+        entity_type="PayrollRun", entity_id=str(run.id),
+        before={"status": before}, after={"status": "ANNULLED", "reason": reason},
+    ))
 
 RUN_EXPORT_COLUMNS = [
     "id", "code", "company_id", "period_start", "period_end", "run_type",
@@ -64,7 +115,8 @@ def export_payroll_runs(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     items = db.scalars(
         select(PayrollRun).where(
-            PayrollRun.organization_id == user.organization_id
+            PayrollRun.organization_id == user.organization_id,
+            PayrollRun.status != "ANNULLED",
         ).order_by(PayrollRun.id)
     ).all()
     rows = [PayrollRunRead.model_validate(item).model_dump(mode="json") for item in items]
@@ -84,6 +136,8 @@ def export_payroll_results(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     run = get_scoped(db, PayrollRun, run_id, user.organization_id)
+    if run.status == "ANNULLED":
+        raise HTTPException(status_code=409, detail="La liquidación está anulada")
     results = db.scalars(
         select(PayrollResult).where(
             PayrollResult.payroll_run_id == run.id
@@ -190,6 +244,10 @@ def update_payroll_run(
     row = get_scoped(db, PayrollRun, run_id, user.organization_id)
     if row.status != "DRAFT":
         raise HTTPException(status_code=409, detail="Solo se editan liquidaciones en borrador")
+    if row.adjusts_run_id is not None and any(
+        getattr(row, key) != value for key, value in payload.model_dump().items()
+    ):
+        raise HTTPException(status_code=409, detail="El reemplazo conserva empresa, período, tipo y código")
     company = db.scalar(
         select(Company).where(
             Company.id == payload.company_id,
@@ -218,6 +276,8 @@ def delete_payroll_run(
     row = get_scoped(db, PayrollRun, run_id, user.organization_id)
     if row.status != "DRAFT":
         raise HTTPException(status_code=409, detail="Solo se eliminan liquidaciones en borrador")
+    if row.adjusts_run_id is not None:
+        raise HTTPException(status_code=409, detail="No se elimina el borrador de reemplazo")
     claimed = db.execute(
         delete(PayrollRun).where(PayrollRun.id == row.id, PayrollRun.status == "DRAFT")
     )
@@ -261,6 +321,53 @@ def approve_payroll_run(
     return row
 
 
+@router.post("/{run_id}/annul", response_model=PayrollRunRead)
+def annul_payroll_run(
+    run_id: int, payload: AnnulInput, db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    row = _lock_run(db, run_id, user.organization_id)
+    _annul(db, row, user, payload.reason)
+    commit_or_conflict(db)
+    db.refresh(row)
+    return row
+
+
+@router.post("/{run_id}/replace", response_model=PayrollRunRead)
+def replace_payroll_run(
+    run_id: int, payload: ReplaceInput, db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    """Create a complete replacement, never an arbitrary monetary delta."""
+    row = _lock_run(db, run_id, user.organization_id)
+    existing = db.scalar(select(PayrollRun).where(PayrollRun.adjusts_run_id == row.id))
+    if existing is not None:
+        if existing.code == payload.code and existing.adjustment_reason == payload.reason:
+            return existing
+        raise HTTPException(status_code=409, detail="La liquidación ya tiene un reemplazo")
+    if row.status != "ANNULLED":
+        _annul(db, row, user, payload.reason)
+    replacement = PayrollRun(
+        organization_id=row.organization_id, company_id=row.company_id, code=payload.code,
+        period_start=row.period_start, period_end=row.period_end, run_type=row.run_type,
+        status="DRAFT", created_by=user.id, adjusts_run_id=row.id, adjustment_reason=payload.reason,
+    )
+    db.add(replacement)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Código o reemplazo ya existente") from exc
+    db.add(AuditLog(
+        organization_id=user.organization_id, user_id=user.id, action="payroll_run.replacement_created",
+        entity_type="PayrollRun", entity_id=str(replacement.id),
+        after={"adjusts_run_id": row.id, "reason": payload.reason, "mode": "REPLACEMENT"},
+    ))
+    commit_or_conflict(db)
+    db.refresh(replacement)
+    return replacement
+
+
 @router.post("/{run_id}/reopen", response_model=PayrollRunRead)
 def reopen_payroll_run(
     run_id: int, db: Session = Depends(get_db), user: User = Depends(require_role("admin")),
@@ -268,7 +375,7 @@ def reopen_payroll_run(
     """Reopen a calculated run back to DRAFT (V2-25).
 
     Only CALCULATED/IN_REVIEW/ERROR runs reopen; the transition is recorded
-    in the audit log. Approved runs need an annulment instead (PENDING).
+    in the audit log. Approved runs need an annulment instead.
     """
     row = get_scoped(db, PayrollRun, run_id, user.organization_id)
     if row.status not in {"CALCULATED", "IN_REVIEW", "ERROR"}:

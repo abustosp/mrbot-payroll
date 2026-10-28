@@ -1,0 +1,105 @@
+{
+  "generated_at_utc": "2026-10-28T19:50:52.682300+00:00",
+  "layout": "afip-2025.09",
+  "sources": [
+    {
+      "id": "lsd-liq-pdf",
+      "url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSDiseInterfazLiquidacion.pdf",
+      "sha256": "09006c128f5d797ce5fecc317e58924ac0a753adcf6e89a535be74e7ea03f7e7"
+    },
+    {
+      "id": "lsd-con-pdf",
+      "url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSDiseInterfazConceptos.pdf",
+      "sha256": "a93c65b4da08f9f582165670e4a7da3a8d0d705fc7e5e2e4e0ce753d90731137"
+    },
+    {
+      "id": "lsd-det-pdf",
+      "url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSDetalleConceptos.pdf",
+      "sha256": "cd3d268bb517c88588727bfd6aa24005a40f58b90f92bbf1b1dbf5576896dfb7"
+    },
+    {
+      "id": "lsd-tool-liq",
+      "url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSD-ARMADO-TXT-Liquidaciones.zip",
+      "sha256": "0965e03c1e455b2ba306371b3bc2d56fa387fa0beed9cdd3ae70fb36f3848aac"
+    },
+    {
+      "id": "lsd-tool-con",
+      "url": "https://www.afip.gob.ar/LibrodeSueldosDigital/documentos/nuevos/LSD-ARMADO-TXT-Conceptos.zip",
+      "sha256": "3e7fa0831228263173edaf9f02adb1e8f386d78f1cbb2e7e7bc1899b7c1c7428"
+    }
+  ],
+  "spreadsheet_recalculated": true,
+  "expected_source": "recalculated_spreadsheet",
+  "libreoffice_version": "LibreOffice 24.2.7.2 420(Build:2)",
+  "comparisons": [
+    {
+      "record_type": "01",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 35,
+      "exporter_length": 35,
+      "official": "0130000000007SJ202606M0000130000001",
+      "exporter": "0130000000007SJ202606M0000130000001"
+    },
+    {
+      "record_type": "02",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 115,
+      "exporter_length": 115,
+      "official": "0220123456786E-001     CENTRAL                                           123456789012345678901203020260630        3",
+      "exporter": "0220123456786E-001     CENTRAL                                           123456789012345678901203020260630        3"
+    },
+    {
+      "record_type": "03",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 51,
+      "exporter_length": 51,
+      "official": "0320123456786BASICO    00125H000000001234567C      ",
+      "exporter": "0320123456786BASICO    00125H000000001234567C      "
+    },
+    {
+      "record_type": "04",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 370,
+      "exporter_length": 370,
+      "official": "042012345678610211010011 0028  0 0301010000000030000002500012512345601000000000002015000000000003025000000000004050000000000005075000000000006010000000000000000000000001234567000000000100025000000000200025000000000300025000000000400025000000000500025000000000600025000000000700025000000000800025000000000900025000000000007035000000000008045000000001000025000000000009055",
+      "exporter": "042012345678610211010011 0028  0 0301010000000030000002500012512345601000000000002015000000000003025000000000004050000000000005075000000000006010000000000000000000000001234567000000000100025000000000200025000000000300025000000000400025000000000500025000000000600025000000000700025000000000800025000000000900025000000000007035000000000008045000000001000025000000000009055"
+    },
+    {
+      "record_type": "05",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 65,
+      "exporter_length": 65,
+      "official": "05201234567860000120003202606012026063000000000123456730000000007",
+      "exporter": "05201234567860000120003202606012026063000000000123456730000000007"
+    },
+    {
+      "record_type": "06",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 93,
+      "exporter_length": 93,
+      "official": "0620123456786000000000000000000000000000000000000000000000000000000000000000000CASO SINTETICO",
+      "exporter": "0620123456786000000000000000000000000000000000000000000000000000000000000000000CASO SINTETICO"
+    },
+    {
+      "record_type": "concept",
+      "matched": true,
+      "golden_matched": true,
+      "official_length": 195,
+      "exporter_length": 195,
+      "official": "110000BASICO    Sueldo basico                                                                                                                                         11111111111 1 1 10 0         ",
+      "exporter": "110000BASICO    Sueldo basico                                                                                                                                         11111111111 1 1 10 0         "
+    }
+  ],
+  "adjustment_period_probe": {
+    "input": "202605",
+    "official_prefix": "0320123456786BASICO    00125H000000001234567C                         ",
+    "official_length": 202650,
+    "expected_length": 51
+  }
+}

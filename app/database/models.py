@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -287,12 +288,14 @@ class NormativeDocument(Base):
 class NormativeParameter(Base):
     __tablename__ = "normative_parameters"
     __table_args__ = (
-        UniqueConstraint("jurisdiction", "code", "agreement_code", "category_code", "valid_from", "version"),
+        Index("uq_parameter_global", "jurisdiction", "code", "agreement_code", "category_code", "valid_from", "version", unique=True, sqlite_where=text("organization_id IS NULL"), postgresql_where=text("organization_id IS NULL")),
+        Index("uq_parameter_organization", "organization_id", "jurisdiction", "code", "agreement_code", "category_code", "valid_from", "version", unique=True, sqlite_where=text("organization_id IS NOT NULL"), postgresql_where=text("organization_id IS NOT NULL")),
         CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="inclusive_validity"),
         CheckConstraint("category_code = '' OR agreement_code <> ''", name="parameter_category_scope"),
         Index("ix_parameter_lookup", "jurisdiction", "code", "valid_from", "valid_to"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
     jurisdiction: Mapped[str] = mapped_column(String(80), default="AR", nullable=False)
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     agreement_code: Mapped[str] = mapped_column(String(40), default="", server_default="", nullable=False)
@@ -324,8 +327,9 @@ class PayrollRun(Base):
     __tablename__ = "payroll_runs"
     __table_args__ = (
         UniqueConstraint("organization_id", "code"),
-        CheckConstraint("status IN ('DRAFT', 'VALIDATING', 'CALCULATED', 'IN_REVIEW', 'APPROVED', 'CLOSED', 'ERROR')", name="valid_status"),
+        CheckConstraint("status IN ('DRAFT', 'VALIDATING', 'CALCULATED', 'IN_REVIEW', 'APPROVED', 'CLOSED', 'ERROR', 'ANNULLED')", name="valid_status"),
         CheckConstraint("period_end >= period_start", name="valid_period"),
+        UniqueConstraint("adjusts_run_id", name="uq_payroll_runs_adjusts_run_id"),
         Index("ix_payroll_run_company_period", "company_id", "period_start", "period_end"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -341,6 +345,21 @@ class PayrollRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     inputs_hash: Mapped[str | None] = mapped_column(String(128))
     results_hash: Mapped[str | None] = mapped_column(String(128))
+    adjusts_run_id: Mapped[int | None] = mapped_column(ForeignKey("payroll_runs.id"))
+    adjustment_reason: Mapped[str | None] = mapped_column(Text)
+    annulled_reason: Mapped[str | None] = mapped_column(Text)
+    annulled_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    annulled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PayrollSettlementInput(Base):
+    """Explicit, audited inputs for one employee in a special payroll run."""
+    __tablename__ = "payroll_settlement_inputs"
+    __table_args__ = (UniqueConstraint("payroll_run_id", "employee_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    payroll_run_id: Mapped[int] = mapped_column(ForeignKey("payroll_runs.id", ondelete="CASCADE"), nullable=False)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), nullable=False)
+    values: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
 class PayrollResult(Base):

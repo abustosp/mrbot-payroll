@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.common import commit_or_conflict, get_scoped, page
@@ -103,7 +103,7 @@ def _validation_context(
     """Build the B-08 validation context: known inputs + vigente definitions."""
     variables = _known_variables()
     parameters: dict[str, Any] = {}
-    for row in db.scalars(select(NormativeParameter)).all():
+    for row in db.scalars(select(NormativeParameter).where(or_(NormativeParameter.organization_id.is_(None), NormativeParameter.organization_id == organization_id))).all():
         parameters.setdefault(row.code, Decimal("0"))
     # Parameters are also visible as plain variables in the calculator.
     for name, value in parameters.items():
@@ -166,6 +166,21 @@ def _validation_context(
         ),
         definitions,
     )
+
+
+def _validate_candidate(definition: FormulaContract, context: FormulaContext, definitions: list[FormulaContract]) -> list[str]:
+    # run_type is a routing marker consumed by the payroll service, not a DSL condition.
+    markers = [c for c in definition.conditions if c.get("field") == "run_type"]
+    errors = []
+    if len(markers) > 1 or any(set(c) != {"field", "operator", "value"} or c.get("operator") != "eq" or c.get("value") not in ("MONTHLY", "SAC", "VACATIONS", "FINAL") for c in markers):
+        errors.append("run_type debe ser una única condición eq con MONTHLY, SAC, VACATIONS o FINAL")
+    if markers and markers[0].get("value") in ("SAC", "VACATIONS", "FINAL"):
+        names: tuple[str, ...] = ("remunerative", "non_remunerative", "gross")
+        names += {"SAC": ("SAC",), "VACATIONS": ("VACACIONES",), "FINAL": ("SUELDO_DIAS", "PREAVISO", "INTEGRACION_MES", "VACACIONES_NO_GOZADAS", "SAC_PROPORCIONAL", "INDEMNIZACION_ANTIGUEDAD")}[markers[0]["value"]]
+        special = {f"settlement_{name}": Decimal("0") for name in names}
+        context = FormulaContext(variables={**context.variables, **special}, parameters={**context.parameters, **special}, concepts=context.concepts, functions=context.functions)
+    candidate = definition.model_copy(update={"conditions": [c for c in definition.conditions if c.get("field") != "run_type"]})
+    return errors + validate_formula_dsl(candidate, context, definitions)
 
 
 @router.get("")
@@ -252,7 +267,7 @@ def create_formula(
             valid_from=payload.valid_from,
             valid_to=payload.valid_to,
         )
-        warnings = validate_formula_dsl(definition, context, definitions)
+        warnings = _validate_candidate(definition, context, definitions)
     except ValueError as exc:
         warnings = [f"DSL inválido: {exc}"]
     commit_or_conflict(db)
@@ -289,7 +304,7 @@ def _validated_fields(
             valid_from=payload.valid_from,
             valid_to=payload.valid_to,
         )
-        errors = validate_formula_dsl(definition, context, definitions)
+        errors = _validate_candidate(definition, context, definitions)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"DSL inválido: {exc}") from exc
     if errors:
@@ -396,7 +411,7 @@ def validate_formula(
             valid_from=version.valid_from,
             valid_to=version.valid_to,
         )
-        errors = validate_formula_dsl(definition, context, definitions)
+        errors = _validate_candidate(definition, context, definitions)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"DSL inválido: {exc}") from exc
     if errors:
@@ -430,6 +445,8 @@ def set_formula_scope(
     row = get_scoped(db, FormulaDefinition, formula_id, user.organization_id)
     agreement = (payload.agreement_code or "").strip() or None
     category = (payload.category_code or "").strip() or None
+    if (agreement, category) != (row.agreement_code, row.category_code) and db.scalar(select(FormulaVersion.id).where(FormulaVersion.formula_id == row.id, FormulaVersion.status == "APPROVED")) is not None:
+        raise HTTPException(status_code=409, detail="No se puede cambiar el alcance de una fórmula con versiones aprobadas; cree otra fórmula.")
     if agreement is not None and (
         db.scalar(
             select(CollectiveAgreement.id).where(CollectiveAgreement.code == agreement)

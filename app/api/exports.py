@@ -142,6 +142,8 @@ def _build_receipt_context(
     company = db.get(Company, run.company_id) if run else None
     if run is None or employee is None or company is None:
         raise HTTPException(status_code=404, detail="Datos del recibo no encontrados")
+    if run.status == "ANNULLED":
+        raise HTTPException(status_code=409, detail="La liquidación está anulada")
 
     contract = db.scalar(
         select(EmploymentContract)

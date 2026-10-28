@@ -25,6 +25,7 @@ from app.database.models import (
     PayrollNovelty,
     PayrollResult,
     PayrollRun,
+    PayrollSettlementInput,
     SalaryScale,
     User,
 )
@@ -101,7 +102,7 @@ def settlement_db(
             ))
             employees[code] = employee
         for concept_code in (
-            "SAC", "VACACIONES", "PREAVISO", "INTEGRACION_MES",
+            "SAC", "VACACIONES", "SUELDO_DIAS", "PREAVISO", "INTEGRACION_MES",
             "VACACIONES_NO_GOZADAS", "SAC_PROPORCIONAL",
             "INDEMNIZACION_ANTIGUEDAD",
         ):
@@ -158,6 +159,16 @@ def _create_run(
         )
         session.add(run)
         session.flush()
+        if run_type in {"SAC", "VACATIONS", "FINAL"}:
+            for code, employee in context["employees"].items():
+                salary = "600000" if code == "E-2" else "1200000"
+                values = {"sac_excluded_days": 0, "vacation_base_salary": salary}
+                if run_type == "FINAL":
+                    values.update(cause="DESPIDO_SIN_CAUSA", worked_days="20", worked_base_salary=salary,
+                        notice_base_salary=salary, vacation_days="14", other_entitlements_reviewed=True,
+                        probation=False, without_notice=True, preaviso_months="2", integration_days=10,
+                        indemnity_base_salary=salary, indemnity_cap=salary)
+                session.add(PayrollSettlementInput(payroll_run_id=run.id, employee_id=employee.id, values=values))
         return run.id
 
 
@@ -323,6 +334,7 @@ def test_vacations_from_novelty_days(
 ) -> None:
     """Vacaciones: días por novedad VAC_DIAS; plus opcional por VAC_PLUS_TASA."""
     factory, context = settlement_db
+    _add_novelty(factory, context, "E-1", "VAC_PLUS_TASA", "202606", amount="0")
     _add_novelty(factory, context, "E-1", "VAC_DIAS", "202606", quantity="10")
     _add_novelty(factory, context, "E-2", "VAC_DIAS", "202606", quantity="10")
     _add_novelty(
@@ -370,10 +382,6 @@ def test_final_settlement_terminated_only(
     """FINAL: solo desvinculados en el período; los activos no molestan."""
     factory, context = settlement_db
     _add_monthly_history(factory, context, "E-3", date(2026, 3, 1), "1000000")
-    _add_novelty(factory, context, "E-3", "VAC_DIAS", "202606", quantity="14")
-    _add_novelty(
-        factory, context, "E-3", "LIQ_DIAS_INTEGRACION", "202606", quantity="10"
-    )
 
     _add_novelty(factory, context, "E-3", "SAC_BASE", "202606", amount="1000000")
     run_id = _create_run(
@@ -384,13 +392,12 @@ def test_final_settlement_terminated_only(
     assert result["status"] == "CALCULATED", result["errors"]
     assert result["summary"]["employees_total"] == 1
     row = result["results"][0]
-    # PREAVISO 1200000 + INTEGRACION 400000 + VACACIONES 672000
-    # + SAC 472375.69 (171/181 días) + ANTIGUEDAD 7200000.
-    assert row["gross"] == "9944375.69"
-    assert row["remunerative"] == "2744375.69"
-    assert row["non_remunerative"] == "7200000.00"
+    # 7 años indemnizables: seis completos y fracción mayor a tres meses.
+    assert row["gross"] == "13144375.69"
+    assert row["remunerative"] == "1272375.69"
+    assert row["non_remunerative"] == "11872000.00"
     assert [item["code"] for item in row["items"]] == [
-        "PREAVISO", "INTEGRACION_MES", "VACACIONES_NO_GOZADAS",
+        "SUELDO_DIAS", "PREAVISO", "INTEGRACION_MES", "VACACIONES_NO_GOZADAS",
         "SAC_PROPORCIONAL", "INDEMNIZACION_ANTIGUEDAD",
     ]
 
@@ -403,13 +410,9 @@ def test_final_without_legal_parameters_is_employee_error(
     with factory.begin() as session:
         session.execute(
             NormativeParameter.__table__.delete().where(
-                NormativeParameter.code == "liq_preaviso_meses"
+                NormativeParameter.code == "liq_vacaciones_dias_base"
             )
         )
-    _add_novelty(factory, context, "E-3", "VAC_DIAS", "202606", quantity="14")
-    _add_novelty(
-        factory, context, "E-3", "LIQ_DIAS_INTEGRACION", "202606", quantity="10"
-    )
 
     run_id = _create_run(
         factory, context, "final-sin-param", "FINAL",
@@ -419,7 +422,7 @@ def test_final_without_legal_parameters_is_employee_error(
 
     assert result["status"] == "ERROR"
     assert any(
-        "liq_preaviso_meses" in error["message"] for error in result["errors"]
+        "liq_vacaciones_dias_base" in error["message"] for error in result["errors"]
     )
 
 
@@ -513,6 +516,7 @@ def test_special_rules_are_explicit_scoped_and_snapshotted(settlement_db):
                 conditions=[{"field": "run_type", "operator": "eq", "value": condition}]))
     for employee in ("E-1", "E-2"):
         _add_novelty(factory, context, employee, "VAC_DIAS", "202606", quantity="5")
+        _add_novelty(factory, context, employee, "VAC_PLUS_TASA", "202606", amount="0")
     run_id = _create_run(factory, context, "special-rules", "VACATIONS", date(2026, 6, 1), date(2026, 6, 30))
     result = _calculate(factory, run_id)
     assert result["status"] == "CALCULATED", result["errors"]
@@ -555,3 +559,79 @@ def test_sac_missing_history_reports_months(settlement_db):
     assert result["status"] == "ERROR"
     error = next(error for error in result["errors"] if error["employee_id"] == context["employees"]["E-1"].id)
     assert "2026-01" in error["message"] and "SAC_BASE" in error["message"]
+
+
+def test_final_cause_caps_and_unpaid_leave(settlement_db):
+    from app.services.payroll_calculation import _compute_final
+    from app.services.settlement_inputs import SettlementInputs
+    factory, context = settlement_db
+    base = dict(cause="RENUNCIA", worked_days="20", worked_base_salary="1200000",
+                vacation_days="10", vacation_base_salary="1500000", sac_excluded_days=10,
+                other_entitlements_reviewed=True)
+    with factory() as db:
+        employee = db.get(Employee, context["employees"]["E-3"].id)
+        run = PayrollRun(organization_id=context["organization_id"], company_id=context["company_id"],
+            run_type="FINAL", period_start=date(2026, 6, 1), period_end=date(2026, 6, 30), status="DRAFT", code="x")
+        args = dict(db=db, run=run, employee=employee, base_salary=Decimal("1200000"),
+            hire=date(2020, 3, 15), termination=date(2026, 6, 20), period=date(2026, 6, 30),
+            novelties=[{"code": "SAC_BASE", "kind": "AUXILIARY", "amount": Decimal("1200000")}],
+            parameters={"liq_vacaciones_dias_base": Decimal(25), "liq_vacaciones_plus_tasa": Decimal(0)})
+        _, _, items, trace = _compute_final(**args, inputs=SettlementInputs(**base))
+        by_code = {i["code"]: i for i in items}
+        assert set(by_code) == {"SUELDO_DIAS", "SAC_PROPORCIONAL", "VACACIONES_NO_GOZADAS"}
+        assert by_code["VACACIONES_NO_GOZADAS"]["amount"] == Decimal("600000.00")
+        assert by_code["SAC_PROPORCIONAL"]["amount"] == Decimal("533701.66")
+        assert any("excluidos=10" in line for line in trace)
+        dismissal = SettlementInputs(**(base | dict(cause="DESPIDO_SIN_CAUSA", probation=False,
+            without_notice=True, preaviso_months="2", integration_days=10, notice_base_salary="1200000",
+            indemnity_base_salary="1200000", indemnity_cap="400000")))
+        _, _, items, _ = _compute_final(**args, inputs=dismissal)
+        by_code = {i["code"]: i for i in items}
+        assert by_code["INDEMNIZACION_ANTIGUEDAD"]["amount"] == Decimal("5628000.00")
+        assert by_code["INDEMNIZACION_ANTIGUEDAD"]["quantity"] == 7
+        assert by_code["PREAVISO"]["amount"] == Decimal("2400000.00")
+        args["termination"] = date(2026, 6, 15)
+        dismissal = dismissal.model_copy(update={"integration_days": 15, "worked_days": Decimal(15)})
+        _, _, items, _ = _compute_final(**args, inputs=dismissal)
+        assert next(i for i in items if i["code"] == "INDEMNIZACION_ANTIGUEDAD")["quantity"] == 6
+        with pytest.raises(ValueError, match="integración"):
+            _compute_final(**args, inputs=dismissal.model_copy(update={"integration_days": 0}))
+        with pytest.raises(ValueError, match="causa"):
+            _compute_final(**args, inputs=SettlementInputs())
+
+
+def test_settlement_input_api_scope_csrf_audit_and_immutability(settlement_db):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.settlements import router
+    from app.auth.security import sign_session
+    from app.config import get_settings
+    from app.database.models import AuditLog
+    from app.database.session import get_db
+    from app.web.auth import create_csrf_token
+    factory, context = settlement_db
+    run_id = _create_run(factory, context, "input-api", "SAC", date(2026, 6, 1), date(2026, 6, 30))
+    employee_id = context["employees"]["E-1"].id
+    application = FastAPI()
+    application.include_router(router, prefix="/api/v1")
+    def db_override():
+        with factory() as db:
+            yield db
+    application.dependency_overrides[get_db] = db_override
+    settings = get_settings()
+    with TestClient(application) as client:
+        client.cookies.set(settings.session_cookie, sign_session(context["admin_id"], settings.secret_key))
+        url = f"/api/v1/settlements/runs/{run_id}/employees/{employee_id}/inputs"
+        assert client.put(url, json={"sac_excluded_days": 5}).status_code == 403
+        csrf = create_csrf_token(settings.secret_key, context["admin_id"])
+        client.cookies.set("payroll_csrf", csrf)
+        headers = {"X-CSRF-Token": csrf}
+        assert client.put(url, json={"sac_excluded_days": 5}, headers=headers).status_code == 200
+        assert client.get(url).json()["sac_excluded_days"] == 5
+        assert client.put(url.replace(f"employees/{employee_id}", "employees/999999"),
+                          json={"sac_excluded_days": 5}, headers=headers).status_code == 404
+        with factory.begin() as db:
+            db.get(PayrollRun, run_id).status = "APPROVED"
+            assert db.query(AuditLog).filter_by(action="settlement_inputs.updated").count() == 1
+        assert client.put(url, json={"sac_excluded_days": 0}, headers=headers).status_code == 409

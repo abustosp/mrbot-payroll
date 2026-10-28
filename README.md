@@ -32,14 +32,14 @@ demo y no constituye una implementación lista para producción.
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
 | Importadores CSV/XLSX | Implementado | API con dry-run; alta idempotente de empleados y novedades |
 | Paquetes normativos CCT | Implementado | 11 CCT, 254 documentos y 786 escalas verificadas (778 desde 2020 y 8 históricas) |
-| Liquidaciones especiales | Implementado con revisión | SAC proporcional por días e historial o base explícita; descuentos/contribuciones por fórmulas aprobadas específicas; final incompleta bloqueada para aprobación |
+| Liquidaciones especiales | Implementado con insumos revisados | SAC con días excluidos, vacaciones con base variable, FINAL por renuncia o despido sin causa; descuentos/contribuciones por fórmulas aprobadas específicas |
 | Reporte F.931 | Implementado como planilla interna | XLSX de control, sin formato oficial ni presentación ARCA |
 | Docker y ejecutable | Configuración inicial | No hay builds verificados en este repositorio |
 
 La autenticación, la API, el motor de fórmulas, el cálculo, el flujo de IA, la
 importación, la evidencia CCT y los reportes internos existen. Lo que sigue
-pendiente es completar los escenarios de liquidación final según causa,
-validar los formatos contra ARCA y completar el endurecimiento para producción.
+pendiente es ampliar liquidación final a otros regímenes y causas,
+validar aceptación en el portal de ARCA y completar el endurecimiento para producción.
 Los parámetros ya se resuelven por convenio/categoría y los tipos de corrida
 están disponibles en la UI SQL.
 
@@ -247,6 +247,9 @@ organización no se devuelve ninguna fila). No exponer la UI a Internet.
 | `/empleados` y `/empleados/{id}` | Legajos |
 | `/convenios` y `/convenios/{id}` | Convenios y propuestas |
 | `/liquidaciones` y `/liquidaciones/{id}` | Historial y detalle |
+| `/liquidaciones/{id}/operaciones` | Insumos especiales y correcciones internas auditadas |
+| `/configuracion` | Conceptos, versiones de fórmulas y parámetros de la organización |
+| `/novedades/reparar` | Asignar empresa a novedades históricas (admin) |
 | `/propuestas-ia` y `/propuestas-ia/{id}` | Bandeja de revisión (demo y SQL) |
 | `/recibos` y `/recibos/{id}` | Recibos |
 | `/recibos/{id}/vista` | HTML del recibo |
@@ -426,8 +429,9 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
   (`SAC`/`VACATIONS`/`FINAL`) en la UI SQL, además de la API de simulación,
   con revisión de errores y trazas. Las corridas especiales
   requieren fórmulas aprobadas específicas de descuentos y contribuciones;
-  no se aprueban si faltan esas reglas. FINAL conserva alcance parcial y no
-  admite aprobación hasta completar sus escenarios.
+  no se aprueban si faltan esas reglas. FINAL admite renuncia y despido sin
+  causa dentro del alcance documentado en `docs/LIQUIDACIONES_ESPECIALES.md`;
+  los casos fuera de ese alcance requieren tratamiento específico.
 - El reporte F.931 es una planilla interna de control, no el formato oficial.
 - El cálculo cubre una corrida mensual básica. No incluye retroactivos
   complejos ni asientos contables.
@@ -445,6 +449,10 @@ Para reemplazar la demo y validar las salidas, ver `docs/NORMATIVE_DATA.md`.
 - `docs/AUDIT_2026-10-26.md`: hallazgos de la auditoría y correcciones aplicadas.
 - `docs/AUDIT_E2E_2026-10-28.md`: auditoría con especialistas, correcciones E2E y pendientes priorizados.
 - `docs/MEJORAS_LIQUIDACION_2026-10-28.md`: continuación implementada, referencias PDF/ERP, migraciones y límites restantes.
+- `docs/PENDIENTES_IMPLEMENTADOS_2026-10-28.md`: cierre de la siguiente etapa, correcciones internas, configuración web, PostgreSQL y validación local LSD.
+- `docs/LIQUIDACIONES_ESPECIALES.md`: insumos, causas y límites normativos soportados.
+- `docs/POSTGRES_VALIDATION.md`: pruebas de concurrencia y benchmark reproducible.
+- `docs/VALIDACION_ARCA.md`: comparación con planillas oficiales y alcance de la evidencia.
 - `docs/NORMATIVE_DATA.md`: datos demo, versionado y validación pendiente.
 - `docs/OPERATIONS.md`: salud, backups y operación.
 - `docs/IMPLEMENTATION_CONTRACTS.md`: contratos entre módulos.

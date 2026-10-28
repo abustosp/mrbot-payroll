@@ -29,17 +29,20 @@ si se omite, debe existir una sola empresa contractual.
 from __future__ import annotations
 
 import io
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import Field
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.common import commit_or_conflict
-from app.auth.dependencies import require_user
+from app.api.payroll_runs import AnnulInput
+from app.auth.dependencies import require_role, require_user
 from app.database.models import (
     AuditLog,
     Company,
@@ -74,6 +77,24 @@ NOVELTY_SOURCE = "import"
 # REMUNERATIVE). Sin migracion: la quincena no se persiste; el preview avisa
 # con quincena_pendiente.
 NOVELTY_KIND = "REMUNERATIVE"
+
+
+class RepairNoveltyInput(AnnulInput):
+    company_id: int = Field(gt=0)
+
+
+def _invalidate_runs(db: Session, user: User, runs: Sequence[PayrollRun], reason: str) -> None:
+    for run in runs:
+        if run.status in {"CALCULATED", "IN_REVIEW", "ERROR"}:
+            before = run.status
+            run.status = "DRAFT"
+            run.inputs_hash = run.results_hash = run.ruleset_id = None
+            _clear_previous_results(db, run.id)
+            db.add(AuditLog(
+                organization_id=user.organization_id, user_id=user.id,
+                action="payroll_run.reopened", entity_type="PayrollRun", entity_id=str(run.id),
+                before={"status": before}, after={"status": "DRAFT", "reason": reason},
+            ))
 
 
 class _NamedBytesIO(io.BytesIO):
@@ -356,6 +377,14 @@ def _commit_novelties(
             select(Employee).where(Employee.organization_id == user.organization_id)
         ).all()
     }
+    # ponytail: serialize novelty batches per organization to keep company locks
+    # ordered; narrow to candidate companies if batch throughput becomes limiting.
+    company_ids = db.scalars(select(Company.id).where(
+        Company.organization_id == user.organization_id,
+    ).order_by(Company.id)).all()
+    for locked_id in company_ids:
+        db.scalar(select(Company).where(Company.id == locked_id).with_for_update())
+        db.execute(update(Company).where(Company.id == locked_id).values(active=Company.active))
     periods = sorted({row.periodo for row in result.valid_rows if isinstance(row, NoveltyRow)})
     existing: set[tuple[int, int | None, str, str]] = set()
     if periods:
@@ -469,12 +498,6 @@ def _commit_novelties(
             )
             continue
 
-        # Serialize creation of new runs for this company with the import.
-        db.scalar(select(Company).where(Company.id == resolved_company).with_for_update())
-        db.execute(
-            update(Company).where(Company.id == resolved_company).values(active=Company.active)
-        )
-
         # Lock even DRAFT rows: calculation/approval claims use conditional
         # updates on these same rows, so they cannot race this transaction.
         runs = db.scalars(
@@ -549,23 +572,7 @@ def _commit_novelties(
             continue
 
         existing.add(key)
-        for run in runs:
-            if run.status in {"CALCULATED", "IN_REVIEW", "ERROR"}:
-                before = run.status
-                run.status = "DRAFT"
-                run.inputs_hash = run.results_hash = run.ruleset_id = None
-                _clear_previous_results(db, run.id)
-                db.add(
-                    AuditLog(
-                        organization_id=user.organization_id,
-                        user_id=user.id,
-                        action="payroll_run.reopened",
-                        entity_type="PayrollRun",
-                        entity_id=str(run.id),
-                        before={"status": before},
-                        after={"status": "DRAFT", "reason": "novelty_import"},
-                    )
-                )
+        _invalidate_runs(db, user, runs, "novelty_import")
         created += 1
 
     commit_or_conflict(db)
@@ -576,6 +583,66 @@ def _commit_novelties(
         company_id=company_id,
         source=NOVELTY_SOURCE,
     )
+
+
+@router.post("/novelties/{novelty_id}/repair")
+def repair_novelty_company(
+    novelty_id: int, payload: RepairNoveltyInput, db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+) -> dict[str, Any]:
+    """Assign an ambiguous legacy novelty without altering approved snapshots."""
+    novelty = db.scalar(select(PayrollNovelty).join(Employee).where(
+        PayrollNovelty.id == novelty_id,
+        PayrollNovelty.organization_id == user.organization_id,
+        Employee.organization_id == user.organization_id,
+    ))
+    if novelty is None:
+        raise HTTPException(status_code=404, detail="Novedad no encontrada")
+    year, month = int(novelty.period[:4]), int(novelty.period[4:])
+    month_start = date(year, month, 1)
+    next_month = date(year + (month == 12), month % 12 + 1, 1)
+    companies = set(db.scalars(select(EmploymentContract.company_id).join(Company).where(
+        EmploymentContract.employee_id == novelty.employee_id,
+        Company.organization_id == user.organization_id,
+        EmploymentContract.valid_from < next_month,
+        or_(EmploymentContract.valid_to.is_(None), EmploymentContract.valid_to >= month_start),
+    )))
+    if payload.company_id not in companies:
+        raise HTTPException(status_code=422, detail="La empresa debe pertenecer a la organización y tener contrato en el mes")
+
+    # A NULL legacy novelty could have affected any contractual company.
+    for company_id in sorted(companies):
+        db.scalar(select(Company).where(Company.id == company_id).with_for_update())
+        db.execute(update(Company).where(Company.id == company_id).values(active=Company.active))
+    db.refresh(novelty)
+    if novelty.company_id is not None:
+        raise HTTPException(status_code=409, detail="La novedad ya tiene empresa asignada")
+    runs = db.scalars(select(PayrollRun).where(
+        PayrollRun.organization_id == user.organization_id,
+        PayrollRun.company_id.in_(companies),
+        PayrollRun.period_end >= month_start, PayrollRun.period_end < next_month,
+    ).order_by(PayrollRun.id).with_for_update()).all()
+    for run in runs:
+        db.execute(update(PayrollRun).where(PayrollRun.id == run.id).values(status=PayrollRun.status))
+        db.refresh(run)
+    if any(run.status in {"APPROVED", "CLOSED", "VALIDATING"} for run in runs):
+        raise HTTPException(status_code=409, detail="Hay liquidaciones aprobadas, cerradas o en cálculo para el mes")
+    collision = db.scalar(select(PayrollNovelty.id).where(
+        PayrollNovelty.id != novelty.id, PayrollNovelty.employee_id == novelty.employee_id,
+        PayrollNovelty.company_id == payload.company_id, PayrollNovelty.period == novelty.period,
+        PayrollNovelty.code == novelty.code, PayrollNovelty.source == novelty.source,
+    ))
+    if collision is not None:
+        raise HTTPException(status_code=409, detail="Ya existe una novedad con la misma clave en la empresa")
+    novelty.company_id = payload.company_id
+    _invalidate_runs(db, user, runs, "novelty_company_repair")
+    db.add(AuditLog(
+        organization_id=user.organization_id, user_id=user.id, action="payroll_novelty.company_repaired",
+        entity_type="PayrollNovelty", entity_id=str(novelty.id),
+        before={"company_id": None}, after={"company_id": payload.company_id, "reason": payload.reason},
+    ))
+    commit_or_conflict(db)
+    return {"id": novelty.id, "company_id": payload.company_id}
 
 
 @router.post(

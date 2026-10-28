@@ -13,15 +13,89 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require_user
+from app.api.common import commit_or_conflict, get_scoped
+from app.auth.dependencies import require_role, require_user
+from app.config import get_settings
 from app.core.payroll_engine import settlements as settlement_engine
 from app.core.payroll_engine.settlements import SettlementError
-from app.database.models import User
+from app.database.models import (
+    AuditLog,
+    Employee,
+    EmploymentContract,
+    PayrollRun,
+    PayrollSettlementInput,
+    User,
+)
+from app.database.session import get_db
+from app.services.settlement_inputs import SettlementInputs
 
 router = APIRouter(prefix="/settlements", tags=["settlements"])
+
+
+@router.get("/runs/{run_id}/employees/{employee_id}/inputs", response_model=SettlementInputs)
+def get_settlement_inputs(run_id: int, employee_id: int, db: Session = Depends(get_db),
+                          user: User = Depends(require_user)):
+    run = get_scoped(db, PayrollRun, run_id, user.organization_id)
+    _scoped_employee(db, run, employee_id)
+    row = db.scalar(select(PayrollSettlementInput).where(
+        PayrollSettlementInput.payroll_run_id == run.id,
+        PayrollSettlementInput.employee_id == employee_id))
+    return SettlementInputs.model_validate(row.values if row else {})
+
+
+def _scoped_employee(db: Session, run: PayrollRun, employee_id: int) -> Employee:
+    employee = db.scalar(select(Employee).join(EmploymentContract,
+        EmploymentContract.employee_id == Employee.id).where(
+        Employee.id == employee_id, Employee.organization_id == run.organization_id,
+        EmploymentContract.company_id == run.company_id,
+        EmploymentContract.valid_from <= run.period_end,
+        (EmploymentContract.valid_to.is_(None) | (EmploymentContract.valid_to >= run.period_start))))
+    if employee is None:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado en la empresa y período")
+    return employee
+
+
+@router.put("/runs/{run_id}/employees/{employee_id}/inputs", response_model=SettlementInputs)
+def put_settlement_inputs(run_id: int, employee_id: int, payload: SettlementInputs, request: Request,
+                          db: Session = Depends(get_db), user: User = Depends(require_role("admin", "editor"))):
+    from app.web.auth import enforce_csrf
+    enforce_csrf(request, "", get_settings(), user.id)
+    return save_settlement_inputs(db, run_id, employee_id, payload, user)
+
+
+def save_settlement_inputs(db: Session, run_id: int, employee_id: int,
+                           payload: SettlementInputs, user: User) -> SettlementInputs:
+    run = get_scoped(db, PayrollRun, run_id, user.organization_id)
+    if run.run_type not in {"SAC", "VACATIONS", "FINAL"}:
+        raise HTTPException(status_code=422, detail="La corrida no admite insumos de liquidación especial")
+    _scoped_employee(db, run, employee_id)
+    claim = db.execute(update(PayrollRun).where(PayrollRun.id == run.id,
+        PayrollRun.status == "DRAFT").values(status="DRAFT", inputs_hash=None, results_hash=None, ruleset_id=None))
+    if not isinstance(claim, CursorResult) or claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Reabra la corrida antes de modificar insumos")
+    row = db.scalar(select(PayrollSettlementInput).where(
+        PayrollSettlementInput.payroll_run_id == run.id, PayrollSettlementInput.employee_id == employee_id))
+    values = payload.model_dump(mode="json", exclude_none=True)
+    before = dict(row.values) if row else None
+    if row is None:
+        db.add(PayrollSettlementInput(payroll_run_id=run.id, employee_id=employee_id, values=values))
+    else:
+        row.values = values
+    from app.services.payroll_calculation import _clear_previous_results
+    _clear_previous_results(db, run.id)
+    db.add(AuditLog(organization_id=user.organization_id, user_id=user.id,
+        action="settlement_inputs.updated", entity_type="PayrollRun", entity_id=str(run.id),
+        before={"employee_id": employee_id, "values": before},
+        after={"employee_id": employee_id, "values": values}))
+    commit_or_conflict(db)
+    return payload
 
 
 class _ResponseModel(BaseModel):

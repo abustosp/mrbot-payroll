@@ -63,21 +63,12 @@ Los importes se serializan como string decimal para no perder precision.
 no mensuales usan el motor de settlements (`app/core/payroll_engine/settlements.py`),
 nunca formulas mensuales.
 
-- `SAC`: base = mejor `remunerative` de corridas `MONTHLY` persistidas del
-  semestre (estados `CALCULATED`/`IN_REVIEW`/`APPROVED`/`CLOSED`); sin
-  historial, la base actual del empleado. Meses = meses calendario desde el
-  maximo entre ingreso e inicio del semestre hasta el periodo (tope 6).
-- `VACATIONS`/`FINAL`: inputs por empleado en novedades `AUXILIARY` del
-  periodo (`VAC_DIAS` cantidad de dias, `VAC_PLUS_TASA` tasa opcional como
-  `amount`, `LIQ_DIAS_INTEGRACION` cantidad). `FINAL` exige ademas los
-  parametros AR `liq_preaviso_meses`, `liq_integracion_dias_base`,
-  `liq_vacaciones_dias_base`, `liq_vacaciones_plus_tasa`,
-  `liq_antiguedad_meses_por_anio`. Todo faltante es error por empleado.
-- Poblacion `FINAL`: desvinculados dentro del periodo; el resto no integra
-  la corrida (sin canal de errores). Conceptos requeridos por tipo en
-  `SETTLEMENT_CONCEPT_CODES` (misma regla que mensual sin concepto).
-- Novedades no consumidas siguen V2-09. No se calculan aportes ni
-  contribuciones (igual que `/settlements`); neto igual a bruto.
+- Los insumos explícitos de SAC, vacaciones y final se guardan por corrida y
+  empleado; las causales admitidas, reglas, límites y fuentes están en
+  [Liquidaciones especiales](LIQUIDACIONES_ESPECIALES.md).
+- Se reportan bajas sin contrato atribuible y novedades no consumidas. Las
+  deducciones y contribuciones requieren reglas específicas y faltantes bloquean
+  la aprobación.
 
 ### Argentina
 

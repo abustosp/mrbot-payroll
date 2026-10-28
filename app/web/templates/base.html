@@ -50,6 +50,10 @@
       </a>
 
       <p class="sidebar-heading">Operación</p>
+      <a href="{{ url_for('configuration_list') }}" class="nav-link {% if active_nav == 'configuration' %}is-active{% endif %}">
+        {{ icon("agreements", "nav-icon") }}<span>Conceptos y fórmulas</span>
+      </a>
+      {% if not demo_mode and current_user and current_user.role == 'admin' %}<a href="{{ url_for('novelty_repairs') }}" class="nav-link">{{ icon("employees", "nav-icon") }}<span>Reparar novedades</span></a>{% endif %}
       <a href="{{ url_for('payrolls_list') }}" class="nav-link {% if active_nav == 'payrolls' %}is-active{% endif %}" {% if active_nav == 'payrolls' %}aria-current="page"{% endif %}>
         {{ icon("payrolls", "nav-icon") }}<span>Liquidaciones</span>
       </a>

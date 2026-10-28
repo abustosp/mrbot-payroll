@@ -27,6 +27,7 @@ _STATUS_LABELS: dict[str, dict[str, str]] = {
         "review": "En revisión",
         "approved": "Aprobada",
         "closed": "Cerrada",
+        "annulled": "Anulada",
     },
     "proposal": {
         "draft": "Borrador",
@@ -57,6 +58,7 @@ _DEFAULT_LABELS = {
     "approved": "Aprobada",
     "rejected": "Rechazada",
     "closed": "Cerrada",
+    "annulled": "Anulada",
     "issued": "Emitido",
     "pending": "Pendiente",
     "ok": "Operativo",
@@ -81,6 +83,7 @@ _STATUS_CLASSES = {
     "inactive": "danger",
     "rejected": "danger",
     "cancelled": "danger",
+    "annulled": "danger",
     "error": "danger",
 }
 

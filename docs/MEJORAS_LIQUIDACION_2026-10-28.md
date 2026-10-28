@@ -1,5 +1,8 @@
 # Continuación de pendientes — 28 de octubre de 2026
 
+Estado histórico del commit `bf78542`. La siguiente etapa se registra en
+[Implementación de pendientes](PENDIENTES_IMPLEMENTADOS_2026-10-28.md).
+
 ## Resultado
 
 El circuito SQL ahora permite crear una liquidación, revisar y confirmar

@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "record_type": "01",
+      "values": {
+        "cuit": "30000000007",
+        "send_id": "SJ",
+        "period": "202606",
+        "liquidation_type": "M",
+        "liquidation_number": 1,
+        "base_days": 30,
+        "worker_count": 1
+      },
+      "expected": "0130000000007SJ202606M0000130000001"
+    },
+    {
+      "record_type": "02",
+      "values": {
+        "cuil": "20123456786",
+        "employee_id": "E-001",
+        "branch": "CENTRAL",
+        "bank_account": "1234567890123456789012",
+        "days": 30,
+        "pay_date": "20260630",
+        "rubric_date": "",
+        "payment_method": "3"
+      },
+      "expected": "0220123456786E-001     CENTRAL                                           123456789012345678901203020260630        3"
+    },
+    {
+      "record_type": "03",
+      "values": {
+        "cuil": "20123456786",
+        "concept_code": "BASICO",
+        "quantity": "1.25",
+        "unit": "H",
+        "amount": "12345.67",
+        "debit_credit": "C",
+        "adjustment_period": ""
+      },
+      "expected": "0320123456786BASICO    00125H000000001234567C      "
+    },
+    {
+      "record_type": "04",
+      "values": {
+        "cuil": "20123456786",
+        "spouse": "1",
+        "children": 2,
+        "agreement": "1",
+        "life_insurance": "1",
+        "reduction": "0",
+        "employer_type": "1",
+        "operation_type": "0",
+        "employment_status": "1",
+        "condition": "1",
+        "activity": "2",
+        "contract_mode": "8",
+        "disability": "0",
+        "locality": "3",
+        "situation_1": 1,
+        "start_day_1": 1,
+        "situation_2": 0,
+        "start_day_2": 0,
+        "situation_3": 0,
+        "start_day_3": 0,
+        "worked_days": 30,
+        "worked_hours": 0,
+        "additional_contribution_rate": "2.50",
+        "differential_task_rate": "1.25",
+        "health_plan": "123456",
+        "dependents": 1,
+        "additional_health_contribution": "20.15",
+        "additional_health_employer": "30.25",
+        "differential_health_base_employee": "40.50",
+        "differential_health_base_employer": "50.75",
+        "differential_work_risk_base": "60.10",
+        "maternity_remuneration": "0.00",
+        "gross_remuneration": "12345.67",
+        "taxable_base_1": "1000.25",
+        "taxable_base_2": "2000.25",
+        "taxable_base_3": "3000.25",
+        "taxable_base_4": "4000.25",
+        "taxable_base_5": "5000.25",
+        "taxable_base_6": "6000.25",
+        "taxable_base_7": "7000.25",
+        "taxable_base_8": "8000.25",
+        "taxable_base_9": "9000.25",
+        "taxable_base_10": "10000.25",
+        "differential_social_security_employee": "70.35",
+        "differential_social_security_employer": "80.45",
+        "deduction_amount": "90.55"
+      },
+      "expected": "042012345678610211010011 0028  0 0301010000000030000002500012512345601000000000002015000000000003025000000000004050000000000005075000000000006010000000000000000000000001234567000000000100025000000000200025000000000300025000000000400025000000000500025000000000600025000000000700025000000000800025000000000900025000000000007035000000000008045000000001000025000000000009055"
+    },
+    {
+      "record_type": "05",
+      "values": {
+        "cuil": "20123456786",
+        "category": "12",
+        "position": "3",
+        "start_date": "20260601",
+        "end_date": "20260630",
+        "amount": "12345.67",
+        "employer_cuit": "30000000007"
+      },
+      "expected": "05201234567860000120003202606012026063000000000123456730000000007"
+    },
+    {
+      "record_type": "06",
+      "values": {
+        "cuil": "20123456786",
+        "observation": "CASO SINTETICO"
+      },
+      "expected": "0620123456786000000000000000000000000000000000000000000000000000000000000000000CASO SINTETICO"
+    },
+    {
+      "record_type": "concept",
+      "values": {
+        "arca_code": "110000",
+        "employer_code": "BASICO",
+        "description": "Sueldo basico",
+        "repeat_flag": "1",
+        "sipa_ap": "1",
+        "sipa_contrib": "1",
+        "inssjyp_ap": "1",
+        "inssjyp_contrib": "1",
+        "os_ap": "1",
+        "os_contrib": "1",
+        "fsr_ap": "1",
+        "fsr_contrib": "1",
+        "renatea_ap": "1",
+        "renatea_contrib": "1",
+        "aaff_contrib": "1",
+        "fne_contrib": "1",
+        "lrt_contrib": "1",
+        "dif_ap": "0",
+        "esp_ap": "0"
+      },
+      "expected": "110000BASICO    Sueldo basico                                                                                                                                         11111111111 1 1 10 0         "
+    }
+  ]
+}

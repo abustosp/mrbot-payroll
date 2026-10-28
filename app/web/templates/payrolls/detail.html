@@ -9,6 +9,7 @@
 {% endblock %}
 
 {% block page_actions %}
+  {% if not demo_mode %}<a class="btn btn--outline" href="{{ url_for('payroll_operations', run_id=payroll.id) }}">Preparación y correcciones</a>{% endif %}
   <a class="btn btn--outline" href="{{ url_for('payrolls_list') }}">{{ icon("arrow-left") }} Volver</a>
   <a class="btn btn--primary" href="{{ url_for('receipts_list') }}?payroll_id={{ payroll.id | urlencode }}">{{ icon("receipts") }} Ver recibos</a>
 {% endblock %}

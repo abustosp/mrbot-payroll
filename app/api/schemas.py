@@ -294,4 +294,9 @@ class PayrollRunRead(ORMModel):
     run_type: str
     status: str
     ruleset_id: int | None
+    adjusts_run_id: int | None
+    adjustment_reason: str | None
+    annulled_reason: str | None
+    annulled_by: int | None
+    annulled_at: datetime | None
 

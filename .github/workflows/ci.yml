@@ -28,6 +28,35 @@ jobs:
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync mypy app scripts alembic
 
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: payroll_test
+          POSTGRES_PASSWORD: payroll_test_only
+          POSTGRES_DB: payroll_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U payroll_test -d payroll_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PAYROLL_TEST_POSTGRES_URL: postgresql+psycopg://payroll_test:payroll_test_only@127.0.0.1:5432/payroll_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --extra postgres
+      - run: uv run --no-sync python -m pytest tests/postgres
+
   docker:
     runs-on: ubuntu-latest
     steps:

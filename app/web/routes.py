@@ -159,6 +159,7 @@ PAYROLL_STATUS_OPTIONS = [
     ("error", "Con errores"),
     ("approved", "Aprobada"),
     ("closed", "Cerrada"),
+    ("annulled", "Anulada"),
 ]
 PROPOSAL_STATUS_OPTIONS = [
     ("", "Todas las propuestas"),
@@ -1120,6 +1121,13 @@ def web_js() -> FileResponse:
 
 
 router.include_router(protected_router)
+
+# Keep the whole web UI available when mounted under a prefix or in tests.
+from app.web.configuration import router as configuration_router  # noqa: E402
+from app.web.operations import router as operations_router  # noqa: E402
+
+router.include_router(configuration_router)
+router.include_router(operations_router)
 
 
 __all__ = ["router", "templates", "web_router"]
