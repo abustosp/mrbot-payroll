@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 import app.main as main_module
@@ -27,9 +30,18 @@ def test_development_allows_default_secret() -> None:
     assert Settings(environment="development").secret_key == "change-me-in-production"
 
 
-def test_health_ok_with_live_database() -> None:
-    with TestClient(app) as client:
-        response = client.get("/health")
+def test_health_ok_with_live_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """B-24: una base migrada real responde ok (aislada en tmp, sin depender de ./data)."""
+    probe = create_engine(f"sqlite:///{tmp_path / 'live.sqlite'}")
+    with probe.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('head')"))
+    monkeypatch.setattr(main_module, "engine", probe)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/health")
+    finally:
+        probe.dispose()
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 

@@ -120,11 +120,46 @@ def _normalize_condition(condition: dict[str, Any]) -> dict[str, Any]:
     return {"operator": operator, "arguments": [{"variable": field}, right]}
 
 
+def _check_expression_depth(expression: Any, path: str = "$") -> None:
+    """Iterative B-33 guard: reject over-nested trees before any recursion.
+
+    Counting follows :meth:`_Evaluator.evaluate` (one level per operator or
+    function nesting), so a tree rejected here would also be rejected there.
+    Iterative on purpose: neither this check nor the trace serialization may
+    exhaust the call stack, on any supported Python version.
+    """
+    stack: list[tuple[Any, int]] = [(expression, 0)]
+    while stack:
+        node, depth = stack.pop()
+        if isinstance(node, dict) and ("operator" in node or "function" in node):
+            if depth > MAX_DSL_DEPTH:
+                raise FormulaError(
+                    f"{path}: formula exceeds the maximum nesting depth of {MAX_DSL_DEPTH}"
+                )
+            arguments = node.get("arguments")
+            if isinstance(arguments, list):
+                stack.extend((argument, depth + 1) for argument in arguments)
+            else:
+                stack.extend(
+                    (value, depth) for key, value in node.items() if key != "arguments"
+                )
+        elif isinstance(node, dict):
+            stack.extend((value, depth) for value in node.values())
+        elif isinstance(node, list):
+            stack.extend((item, depth) for item in node)
+
+
 def _expression_text(expression: Any) -> str:
     try:
         return json.dumps(expression, ensure_ascii=False, sort_keys=True, default=str)
-    except (TypeError, ValueError):
-        return repr(expression)
+    except (TypeError, ValueError, RecursionError):
+        try:
+            preview = repr(expression)
+        except RecursionError:
+            return f"<formula deeper than {MAX_DSL_DEPTH} levels>"
+        if len(preview) > 2000:
+            return preview[:2000] + "…"
+        return preview
 
 
 class _Evaluator:
@@ -345,6 +380,7 @@ def _concept_alias_target(name: str) -> str | None:
 
 def evaluate_expression(expression: dict, context: FormulaContext) -> FormulaResult:
     """Evaluate one DSL tree without applying a formula-level rounding policy."""
+    _check_expression_depth(expression)
     evaluator = _Evaluator(context)
     evaluator.trace.append(f"Expression: {_expression_text(expression)}")
     result = evaluator.evaluate(expression)
@@ -355,6 +391,9 @@ def evaluate_expression(expression: dict, context: FormulaContext) -> FormulaRes
 
 def evaluate_formula(definition: FormulaDefinition, context: FormulaContext) -> FormulaResult:
     """Evaluate conditions and formula, then apply the definition's rounding policy."""
+    _check_expression_depth(definition.formula, f"formula {definition.code}")
+    for index, raw_condition in enumerate(definition.conditions):
+        _check_expression_depth(raw_condition, f"condition[{index}]")
     evaluator = _Evaluator(context)
     evaluator.trace.append(f"Formula {definition.code}: {_expression_text(definition.formula)}")
     dependencies = set(definition.depends_on) | _concept_dependencies(definition.formula)

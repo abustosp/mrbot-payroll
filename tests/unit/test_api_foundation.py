@@ -2,9 +2,10 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+import app.main as main_module
 from app.auth.service import seed_admin
 from app.database import Base, models  # noqa: F401
 from app.database.models import Organization, PayrollRun, User
@@ -13,9 +14,17 @@ from app.main import app
 
 
 @pytest.fixture
-def api(tmp_path) -> Generator[tuple[TestClient, sessionmaker[Session]], None, None]:
+def api(tmp_path, monkeypatch) -> Generator[tuple[TestClient, sessionmaker[Session]], None, None]:
     engine = create_engine(f"sqlite:///{tmp_path / 'api.db'}", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    # /health prueba alembic_version sobre el engine global de app.main, no sobre
+    # get_db: migrar el sqlite del fixture y apuntar el health a él para que el
+    # chequeo sea determinista (en CI no existe ./data/payroll.db).
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        if connection.execute(text("SELECT count(*) FROM alembic_version")).scalar() == 0:
+            connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('test-head')"))
+    monkeypatch.setattr(main_module, "engine", engine)
     local_session = sessionmaker(bind=engine, expire_on_commit=False)
 
     def override_db():
