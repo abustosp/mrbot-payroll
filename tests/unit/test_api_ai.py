@@ -4,7 +4,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.ai import MAX_AGREEMENT_TEXT_CHARS, router
+from app.ai.providers import MockProvider
+from app.api.ai import (
+    MAX_AGREEMENT_TEXT_CHARS,
+    AnalyzeAgreementRequest,
+    _mock_analysis_json,
+    get_ai_provider,
+    router,
+)
 from app.auth.dependencies import require_user
 from app.database.models import User
 from app.database.session import get_db
@@ -36,6 +43,12 @@ def ai_app() -> Iterator[FastAPI]:
     application = FastAPI()
     application.include_router(router)
     application.dependency_overrides[require_user] = lambda: _make_user("admin")
+
+    def override_ai_provider(payload: AnalyzeAgreementRequest) -> MockProvider:
+        # Respuestas deterministas: aisla del .env local y la red.
+        return MockProvider(_mock_analysis_json(payload.to_metadata()))
+
+    application.dependency_overrides[get_ai_provider] = override_ai_provider
     yield application
     application.dependency_overrides.clear()
 

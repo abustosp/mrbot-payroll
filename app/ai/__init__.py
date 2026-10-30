@@ -26,7 +26,8 @@ from app.ai.proposals import (
     propose_formula,
     reject_proposal,
 )
-from app.ai.providers import LLMProvider, MockProvider, OpenAICompatibleProvider
+from app.ai.providers import LLMProvider, MetaMuseProvider, MockProvider, OpenAICompatibleProvider
+from app.ai.scales import parse_scales
 from app.ai.schemas import (
     AgreementAnalysis,
     DocumentMetadata,
@@ -55,6 +56,7 @@ __all__ = [
     "ExtractedDocument",
     "LLMProvider",
     "LLMUsage",
+    "MetaMuseProvider",
     "MockProvider",
     "OpenAICompatibleProvider",
     "ParameterUnit",
@@ -76,6 +78,7 @@ __all__ = [
     "compute_content_hash",
     "detect_prompt_injection",
     "extract_text",
+    "parse_scales",
     "propose_all",
     "propose_formula",
     "reject_proposal",
