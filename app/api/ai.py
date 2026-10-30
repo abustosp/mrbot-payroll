@@ -10,6 +10,7 @@ operation.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -26,14 +27,17 @@ from app.ai import (
     DocumentMetadata,
     DocumentTooLargeError,
     LLMProvider,
+    MetaMuseProvider,
     MockProvider,
     OpenAICompatibleProvider,
     ProposedFormula,
+    ProposedParameter,
     ProviderConfigurationError,
     ProviderError,
     ValidationReport,
     analyze_agreement,
     approve_proposal,
+    parse_scales,
     validate_formula_proposal,
     validate_proposal,
 )
@@ -55,6 +59,7 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 # The API keeps a smaller ceiling than the pipeline default so a malformed or
 # abusive request is rejected before prompts, hashes and validation run.
 MAX_AGREEMENT_TEXT_CHARS = 100_000
+MAX_SCALE_ROWS = 1000
 _MOCK_EFFECTIVE_FROM = "2026-10-01"
 
 
@@ -113,6 +118,21 @@ class AnalyzeAgreementRequest(BaseModel):
             version=self.version,
             title=self.title,
         )
+
+
+class ParseScalesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    document_id: str = Field(min_length=1, max_length=200)
+    version: str = Field(default="1", min_length=1, max_length=100)
+    title: str | None = Field(default=None, max_length=500)
+    scales: list[dict] = Field(json_schema_extra={"maxItems": MAX_SCALE_ROWS})
+
+
+class ParseScalesResult(BaseModel):
+    parameters: list[ProposedParameter]
+    formulas: list[ProposedFormula]
+    skipped: list[str]
 
 
 def _mock_analysis_json(metadata: DocumentMetadata) -> str:
@@ -215,24 +235,42 @@ def get_ai_provider(
     payload: AnalyzeAgreementRequest,
     settings: Settings = Depends(get_settings),
 ) -> LLMProvider:
-    """Select the AI provider by environment.
+    """Select an explicit provider or fall back to the environment.
 
     ``development``/``test`` keep the deterministic mock so the suite and local
     runs stay offline. Any other environment requires a real provider: with a
     key it returns ``OpenAICompatibleProvider``, without one it fails with
-    503 explícito. Deployments and tests can still override this FastAPI
+    503 explícito. ``PAYROLL_AI_PROVIDER`` can select ``meta`` or ``mock``.
+    Settings (proceso o archivo .env) tiene prioridad; el entorno del proceso
+    se consulta como respaldo para compatibilidad.
+    Deployments and tests can still override this FastAPI
     dependency to inject any ``LLMProvider`` (D-4).
     """
 
-    if (settings.environment or "").strip().lower() in {"development", "dev", "test", "testing"}:
+    selected = (
+        getattr(settings, "ai_provider", "")
+        or os.environ.get("PAYROLL_AI_PROVIDER", "")
+        or ""
+    ).strip().lower()
+    if selected == "mock" or (
+        selected != "meta"
+        and (settings.environment or "").strip().lower() in {"development", "dev", "test", "testing"}
+    ):
         return MockProvider(_mock_analysis_json(payload.to_metadata()))
     try:
+        if selected == "meta":
+            return MetaMuseProvider(
+                api_key=getattr(settings, "meta_api_key", "") or None,
+                base_url=getattr(settings, "meta_base_url", "") or None,
+                model=getattr(settings, "meta_model", "") or None,
+            )
         return OpenAICompatibleProvider()
     except ProviderConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "Proveedor IA no configurado: defina PAYROLL_AI_API_KEY (o OPENAI_API_KEY) "
+                "Proveedor IA no configurado: defina PAYROLL_META_API_KEY o "
+                "PAYROLL_AI_API_KEY (o OPENAI_API_KEY) "
                 f"o despliegue en development/test para usar el mock. Detalle: {exc}"
             ),
         ) from exc
@@ -500,6 +538,27 @@ def publish_ai_proposal(
         formula_version_id=first_version.id,
         formula_status=first_version.status,
     )
+
+
+@router.post("/parse-scales", response_model=ParseScalesResult)
+def parse_scales_endpoint(
+    payload: ParseScalesRequest,
+    _user: User = Depends(require_user),
+) -> ParseScalesResult:
+    if len(payload.scales) > MAX_SCALE_ROWS:
+        raise HTTPException(status_code=413, detail=f"Maximo de {MAX_SCALE_ROWS} filas de escala.")
+    metadata = DocumentMetadata(
+        document_id=payload.document_id, version=payload.version, title=payload.title
+    )
+    parameters, formulas, skipped = parse_scales(payload.scales, metadata)
+    known_parameters = [parameter.code for parameter in parameters]
+    formulas = [
+        formula.model_copy(
+            update={"validation": validate_formula_proposal(formula, known_parameters=known_parameters)}
+        )
+        for formula in formulas
+    ]
+    return ParseScalesResult(parameters=parameters, formulas=formulas, skipped=skipped)
 
 
 @router.post("/analyze-agreement", response_model=AgreementAnalysis)

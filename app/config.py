@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     web_data_source: Literal["demo", "sql"] = "demo"
     web_auth_enabled: bool = True
     normative_cct_dir: Path = Path("normative/cct")
+    # Selección y credenciales del proveedor IA (también vía proceso: el
+    # entorno real tiene prioridad sobre el archivo .env en ambos casos).
+    ai_provider: str = ""
+    meta_api_key: str = ""
+    meta_base_url: str = ""
+    meta_model: str = ""
 
     @model_validator(mode="after")
     def _require_production_secret(self) -> "Settings":

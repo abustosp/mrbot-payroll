@@ -27,7 +27,10 @@ def test_production_rejects_empty_secret() -> None:
 
 
 def test_development_allows_default_secret() -> None:
-    assert Settings(environment="development").secret_key == "change-me-in-production"
+    assert (
+        Settings(environment="development", _env_file=None).secret_key
+        == "change-me-in-production"
+    )
 
 
 def test_health_ok_with_live_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

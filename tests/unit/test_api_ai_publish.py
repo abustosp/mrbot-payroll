@@ -9,6 +9,8 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from app.ai.providers import MockProvider
+from app.api.ai import AnalyzeAgreementRequest, _mock_analysis_json, get_ai_provider
 from app.auth.service import seed_admin
 from app.config import get_settings
 from app.database import Base, models  # noqa: F401
@@ -50,6 +52,13 @@ def api(tmp_path) -> Generator[tuple[TestClient, sessionmaker[Session], int], No
             yield db
 
     app.dependency_overrides[get_db] = override_db
+
+    def override_ai_provider(payload: AnalyzeAgreementRequest) -> MockProvider:
+        # Flujo de persistencia/aprobacion, no seleccion de proveedor: el mock
+        # deterministico aisla del .env local y la red.
+        return MockProvider(_mock_analysis_json(payload.to_metadata()))
+
+    app.dependency_overrides[get_ai_provider] = override_ai_provider
     with local_session() as db:
         admin = seed_admin(db, "admin@example.test", PASSWORD)
         admin_id = admin.id
