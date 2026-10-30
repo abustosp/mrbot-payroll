@@ -26,7 +26,7 @@ demo y no constituye una implementación lista para producción.
 | Cálculo persistente | Implementado | Servicio que calcula una corrida y guarda resultados y trazas |
 | Proveedor Argentina | Implementado como demo | CCT 130/75 acotado y parámetros ilustrativos |
 | IA supervisada | Implementado | Extracción, análisis, validación, persistencia y publicación manual como fórmula borrador |
-| API de IA | Implementado con `MockProvider` | Para un proveedor real hay que inyectar la dependencia en código |
+| API de IA | Implementado (`MockProvider` offline por defecto; Meta Muse vía entorno) | `PAYROLL_AI_PROVIDER=meta` + `PAYROLL_META_API_KEY` (o `MODEL_API_KEY`) activa Muse Spark sin tocar código |
 | UI web | Implementado | Demo por defecto; en SQL creación, novedades, cálculo, revisión y aprobación con login/CSRF |
 | Recibos PDF | Implementado | HTML, PDF individual y ZIP; sin validación legal |
 | TXT Libro de Sueldos Digital | MVP técnico | Ancho fijo y Latin-1; sin aceptación de ARCA |
@@ -215,11 +215,44 @@ escala, contrato y novedades del período, y deja la corrida en `CALCULATED` o
 `ERROR`. La aprobación posterior exige estado calculado o en revisión y rol
 `admin`.
 
-La API de IA usa `MockProvider` por defecto. Las propuestas se pueden persistir,
-aprobar y publicar manualmente como una `FormulaVersion` en estado `DRAFT`;
-nunca se aprueban ni se publican solas. Para un proveedor real hay que
-sobrescribir la dependencia `get_ai_provider` en código. Ver
-`docs/ARCHITECTURE.md`.
+La API de IA usa `MockProvider` por defecto en `development`/`test`, sin red.
+Las propuestas se pueden persistir, aprobar y publicar manualmente como una
+`FormulaVersion` en estado `DRAFT`; nunca se aprueban ni se publican solas.
+
+Para usar el modelo Meta obligatorio (Muse Spark) no hay que tocar código:
+`get_ai_provider` lee el entorno. En `.env`, descompletar dos líneas:
+
+```sh
+PAYROLL_AI_PROVIDER=meta
+PAYROLL_META_API_KEY=<tu-clave>  # o exportar MODEL_API_KEY=<tu-clave>
+```
+
+Opcional: `PAYROLL_META_MODEL` (por defecto `muse-spark-1.3-contributor`;
+estándar `muse-spark-1.3`) y `PAYROLL_META_BASE_URL` (por defecto
+`https://api.meta.ai/v1`). Sin `PAYROLL_AI_PROVIDER=meta` el modo
+`development`/`test` sigue usando el mock offline; con `=meta` se usa el
+proveedor real incluso en desarrollo. Fuera de `development`/`test`, pedir un
+proveedor real sin clave devuelve `503` explícito. También se puede seguir
+inyectando cualquier `LLMProvider` sobrescribiendo la dependencia
+`get_ai_provider` en tests o despliegues (D-4). Ver `docs/ARCHITECTURE.md`.
+
+Para demostrar una llamada viva a Muse Spark ante el jurado (requiere clave
+válida y red), con el servidor en marcha:
+
+```sh
+curl -c cookies.txt -X POST http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin"}'
+
+curl -b cookies.txt -X POST http://127.0.0.1:8000/api/v1/ai/analyze-agreement \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Artículo 15: adicional por antigüedad del 1% por año de servicio.","document_id":"CCT-130-75"}'
+```
+
+Una respuesta viva viene del modelo (`muse-spark-1.3-contributor` salvo
+`PAYROLL_META_MODEL`) e interpreta el texto enviado; la respuesta del mock
+offline, en cambio, lleva el aviso "Analisis mock deterministico para
+desarrollo y pruebas" y no interpreta el documento.
 
 ## Interfaz web
 

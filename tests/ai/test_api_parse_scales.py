@@ -99,3 +99,30 @@ def test_provider_selection_from_settings_dotenv(monkeypatch) -> None:
     # El entorno del proceso mapea a Settings (precedencia sobre .env).
     monkeypatch.setenv("PAYROLL_AI_PROVIDER", "mock")
     assert Settings().ai_provider == "mock"
+
+
+def test_provider_meta_uses_model_api_key_fallback_and_test_defaults_to_mock(
+    monkeypatch,
+) -> None:
+    for name in (
+        "PAYROLL_AI_PROVIDER",
+        "PAYROLL_META_API_KEY",
+        "PAYROLL_META_BASE_URL",
+        "PAYROLL_META_MODEL",
+        "PAYROLL_AI_API_KEY",
+        "OPENAI_API_KEY",
+        "MODEL_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    payload = AnalyzeAgreementRequest(text="text", document_id="doc")
+    # Sin seleccion explicita, el entorno test sigue offline con el mock.
+    assert isinstance(
+        get_ai_provider(payload, SimpleNamespace(environment="test")), MockProvider
+    )
+    # Con PAYROLL_AI_PROVIDER=meta basta la clave documentada MODEL_API_KEY.
+    monkeypatch.setenv("PAYROLL_AI_PROVIDER", "meta")
+    monkeypatch.setenv("MODEL_API_KEY", "jury-key")
+    provider = get_ai_provider(payload, SimpleNamespace(environment="development"))
+    assert isinstance(provider, MetaMuseProvider)
+    assert provider.model == "muse-spark-1.3-contributor"
+    provider.close()

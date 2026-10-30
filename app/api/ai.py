@@ -269,8 +269,8 @@ def get_ai_provider(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "Proveedor IA no configurado: defina PAYROLL_META_API_KEY o "
-                "PAYROLL_AI_API_KEY (o OPENAI_API_KEY) "
+                "Proveedor IA no configurado: defina PAYROLL_META_API_KEY "
+                "(o MODEL_API_KEY) o PAYROLL_AI_API_KEY (o OPENAI_API_KEY) "
                 f"o despliegue en development/test para usar el mock. Detalle: {exc}"
             ),
         ) from exc
