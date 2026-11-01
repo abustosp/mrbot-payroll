@@ -792,6 +792,36 @@ class DemoDataStore:
     def get_proposal(self, proposal_id: str) -> AIProposal | None:
         return next((proposal for proposal in self.proposals if proposal.id == proposal_id), None)
 
+    def add_proposal(
+        self,
+        *,
+        title: str,
+        agreement: str,
+        document: str,
+        summary: str,
+        rules: list[str] | None = None,
+        warnings: list[str] | None = None,
+        source_page: str = "",
+    ) -> AIProposal:
+        suffix = len(self.proposals) + 1
+        while any(proposal.id == f"prop-{suffix:03d}" for proposal in self.proposals):
+            suffix += 1
+        proposal = AIProposal(
+            id=f"prop-{suffix:03d}",
+            title=title,
+            agreement=agreement,
+            document=document,
+            status="draft",
+            confidence=Decimal("100.0"),
+            created_at=date.today(),
+            summary=summary,
+            rules=list(rules or []),
+            warnings=list(warnings or []),
+            source_page=source_page,
+        )
+        self.proposals.insert(0, proposal)
+        return proposal
+
     def set_proposal_status(self, proposal_id: str, status: str, *, user_id: int | None = None) -> AIProposal | None:
         allowed = {"draft", "in_review", "approved", "rejected"}
         if status not in allowed:

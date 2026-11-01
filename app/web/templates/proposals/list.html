@@ -6,10 +6,9 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Propuestas de IA</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar el analizador de convenios">
+  <a class="btn btn--primary" href="{{ url_for('proposal_new') }}">
     {{ icon("spark") }} Analizar convenio
-  </button>
-  <small class="muted">Próximamente: analizador de convenios</small>
+  </a>
 {% endblock %}
 
 {% block content %}
