@@ -473,7 +473,8 @@ def test_404_suggests_contextual_section(
 
 @pytest.mark.parametrize(
     "path",
-    ["/empresas", "/empleados", "/convenios", "/propuestas-ia"],
+    # "/propuestas-ia" ya tiene su analizador real en /propuestas-ia/nuevo.
+    ["/empresas", "/empleados", "/convenios"],
 )
 def test_future_actions_are_focusable_with_visible_note(
     client: TestClient, path: str

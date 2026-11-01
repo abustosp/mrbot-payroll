@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}Analizar convenio{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('proposals_list') }}">Propuestas de IA</a></li>
+  <li class="current" aria-current="page">Analizar convenio</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{{ url_for('proposals_list') }}">{{ icon("arrow-left") }} Volver</a>
+{% endblock %}
+
+{% block content %}
+  {% if provider_is_mock %}
+    <div class="alert alert--info">
+      {{ icon("spark") }}
+      <div><strong>Proveedor activo: {{ provider_label }}.</strong> El análisis es determinístico y no interpreta el documento. Para usar Muse Spark, defina <code>PAYROLL_AI_PROVIDER=meta</code> y <code>PAYROLL_META_API_KEY</code> (o <code>MODEL_API_KEY</code>) y reinicie.</div>
+    </div>
+  {% else %}
+    <div class="alert alert--success">
+      {{ icon("spark") }}
+      <div><strong>Proveedor activo: {{ provider_label }}.</strong> El documento se interpreta con el modelo real y la propuesta queda en borrador para revisión humana.</div>
+    </div>
+  {% endif %}
+
+  {% if error %}
+    <div class="alert alert--danger" role="alert">
+      {{ icon("alert") }}
+      <div>{{ error }}</div>
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Alta de convenio para liquidación</h2>
+        <p class="card-subtitle">Suba el PDF del convenio y sus escalas. Obtendrá conceptos, parámetros, fórmulas DSL y vigencias para liquidar sueldos.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('proposal_analyze') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="card-body">
+        <div class="filters-bar" style="border-bottom: 0;">
+          <div class="field">
+            <label for="analyze-document-id">Identificador del documento</label>
+            <input class="input" id="analyze-document-id" name="document_id" maxlength="200" required
+                   placeholder="CCT-130-75" value="{{ form.get('document_id', '') }}">
+          </div>
+          <div class="field">
+            <label for="analyze-version">Versión</label>
+            <input class="input" id="analyze-version" name="version" maxlength="100"
+                   value="{{ form.get('version', '1') }}">
+          </div>
+          <div class="field field--grow">
+            <label for="analyze-title">Título (opcional)</label>
+            <input class="input" id="analyze-title" name="title" maxlength="500"
+                   placeholder="Empleados de Comercio" value="{{ form.get('title', '') }}">
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom: 14px;">
+          <label for="analyze-convenio-file">PDF del convenio</label>
+          <input id="analyze-convenio-file" type="file" name="convenio_file" accept=".pdf,.txt,.md,.csv">
+          <small class="muted">PDF con texto seleccionable (o TXT/MD/CSV). Si es un escaneo sin texto, se necesita OCR.</small>
+        </div>
+        <div class="field" style="margin-bottom: 14px;">
+          <label for="analyze-convenio-text">O pegue el texto del convenio</label>
+          <textarea class="input" id="analyze-convenio-text" name="convenio_text" rows="6"
+                    placeholder="Artículo 15: adicional por antigüedad del 1% por año de servicio…">{{ form.get('convenio_text', '') }}</textarea>
+        </div>
+
+        <div class="field" style="margin-bottom: 14px;">
+          <label for="analyze-escalas-file">Escalas salariales (opcional)</label>
+          <input id="analyze-escalas-file" type="file" name="escalas_file" accept=".pdf,.txt,.md,.csv">
+          <small class="muted">Anexo de básicos por categoría. Se analiza junto al convenio.</small>
+        </div>
+        <div class="field" style="margin-bottom: 14px;">
+          <label for="analyze-escalas-text">O pegue las escalas</label>
+          <textarea class="input" id="analyze-escalas-text" name="escalas_text" rows="4"
+                    placeholder="Administrativo A: 1.200.000 desde 2026-04-01…">{{ form.get('escalas_text', '') }}</textarea>
+        </div>
+
+        <div class="callout callout--warning">
+          <strong>IA supervisada:</strong> el análisis crea una propuesta en borrador. Nada se publica ni se aprueba solo: revise la bandeja y publique como fórmula borrador desde el servicio de IA.
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn btn--primary" type="submit">{{ icon("spark") }} Analizar con {{ provider_label }}</button>
+        <a class="btn btn--ghost" href="{{ url_for('proposals_list') }}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

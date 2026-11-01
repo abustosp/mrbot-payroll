@@ -14,6 +14,8 @@ presentan los datos.
 from __future__ import annotations
 
 import hashlib
+import io
+import os
 import re
 from datetime import date
 from pathlib import Path
@@ -25,9 +27,12 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import ValidationError
+from pypdf import PdfReader
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.ai import AIError, analyze_agreement
+from app.api.common import commit_or_conflict
 from app.api.imports import _read_upload, import_novelties
 from app.api.payroll_runs import (
     approve_payroll_run,
@@ -39,7 +44,7 @@ from app.api.payroll_runs import (
 from app.api.reports import export_f931_workbook
 from app.api.schemas import PayrollRunInput
 from app.config import Settings, get_settings
-from app.database.models import Employee, PayrollResult, PayrollRun, PayrollTrace, User
+from app.database.models import AiProposal, Employee, PayrollResult, PayrollRun, PayrollTrace, User
 from app.database.session import get_db
 from app.exporters.pdf.receipts import (
     PdfRendererUnavailable,
@@ -887,6 +892,283 @@ def proposals_list(
     if _is_htmx(request):
         return _render(request, "proposals/_table.html", **context)
     return _render(request, "proposals/list.html", **context)
+
+
+# ---------------------------------------------------------------------------
+# Alta de convenios: PDF + escalas analizados con Muse Spark
+# ---------------------------------------------------------------------------
+
+_ANALYSIS_UPLOAD_SUFFIXES = frozenset({".pdf", ".txt", ".md", ".csv"})
+MAX_ANALYSIS_UPLOAD_BYTES = 20 * 1024 * 1024
+
+
+def _ai_provider_label(settings: Settings) -> tuple[str, bool]:
+    """Nombre del proveedor IA activo y si es el mock offline."""
+
+    selected = (
+        getattr(settings, "ai_provider", "")
+        or os.environ.get("PAYROLL_AI_PROVIDER", "")
+        or ""
+    ).strip().lower()
+    if selected == "meta":
+        return "Muse Spark (Meta)", False
+    if selected == "mock" or (settings.environment or "").strip().lower() in {
+        "development",
+        "dev",
+        "test",
+        "testing",
+    }:
+        return "Mock offline (desarrollo)", True
+    return "Proveedor OpenAI-compatible", False
+
+
+def _decode_upload_text(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return content.decode("latin-1")
+
+
+def _extract_upload_text(filename: str, content: bytes) -> str:
+    """Texto de un adjunto de convenio/escala; el contenido sigue siendo no confiable."""
+
+    suffix = Path(filename or "").suffix.lower()
+    if suffix not in _ANALYSIS_UPLOAD_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail="Extensión no soportada. Adjunte PDF, TXT, MD o CSV.",
+        )
+    if suffix == ".pdf":
+        try:
+            reader = PdfReader(io.BytesIO(content))
+            if reader.is_encrypted:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El PDF está cifrado; suba una copia sin contraseña.",
+                )
+            text = "\n\n".join(
+                page for page in
+                ((page.extract_text() or "").strip() for page in reader.pages)
+                if page
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"No se pudo leer el PDF: {exc}"
+            ) from exc
+        if not text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="El PDF no tiene texto extraíble; si es un escaneo se necesita OCR.",
+            )
+        return text
+    text = _decode_upload_text(content)
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+    return text
+
+
+def _analysis_source_label(raw: dict[str, Any]) -> str:
+    for key in ("formulas", "concepts", "parameters"):
+        items = raw.get(key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("source")
+            if not isinstance(source, dict):
+                continue
+            article = str(source.get("article") or "").strip()
+            page = source.get("page")
+            if article and page is not None:
+                return f"{article}, página {page}"
+            if article:
+                return article
+            if page is not None:
+                return f"Página {page}"
+    return ""
+
+
+@protected_router.get("/propuestas-ia/nuevo", name="proposal_new")
+def proposal_new(request: Request, settings: SettingsDep) -> HTMLResponse:
+    provider_label, provider_is_mock = _ai_provider_label(settings)
+    return _render(
+        request,
+        "proposals/new.html",
+        page_title="Analizar convenio",
+        page_subtitle="Suba el PDF del convenio y sus escalas; la IA propone conceptos, parámetros y fórmulas para revisión humana.",
+        active_nav="proposals",
+        provider_label=provider_label,
+        provider_is_mock=provider_is_mock,
+        error=None,
+        form={},
+    )
+
+
+@protected_router.post("/propuestas-ia/nuevo", name="proposal_analyze")
+async def proposal_analyze(
+    request: Request,
+    data: DataSource,
+    user: WebUserDep,
+    db: SessionDep,
+    settings: SettingsDep,
+    document_id: Annotated[str, Form()] = "",
+    title: Annotated[str, Form()] = "",
+    version: Annotated[str, Form()] = "1",
+    convenio_text: Annotated[str, Form()] = "",
+    escalas_text: Annotated[str, Form()] = "",
+    convenio_file: Annotated[UploadFile | None, File()] = None,
+    escalas_file: Annotated[UploadFile | None, File()] = None,
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    if user.role not in {"admin", "editor"}:
+        raise HTTPException(status_code=403, detail="Permiso insuficiente.")
+    enforce_csrf(request, csrf_token, settings, user.id)
+    provider_label, provider_is_mock = _ai_provider_label(settings)
+    form = {
+        "document_id": document_id.strip(),
+        "title": title.strip(),
+        "version": version.strip() or "1",
+        "convenio_text": convenio_text,
+        "escalas_text": escalas_text,
+    }
+
+    def _form_error(message: str) -> HTMLResponse:
+        return _render(
+            request,
+            "proposals/new.html",
+            page_title="Analizar convenio",
+            page_subtitle="Suba el PDF del convenio y sus escalas; la IA propone conceptos, parámetros y fórmulas para revisión humana.",
+            active_nav="proposals",
+            provider_label=provider_label,
+            provider_is_mock=provider_is_mock,
+            error=message,
+            form=form,
+            status_code=422,
+        )
+
+    async def _read_upload(upload: UploadFile | None) -> tuple[bytes, str]:
+        if upload is None:
+            return b"", ""
+        filename = (upload.filename or "").strip()
+        if not filename:
+            return b"", ""
+        content = await upload.read()
+        if len(content) > MAX_ANALYSIS_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413, detail="El archivo supera los 20 MB."
+            )
+        return content, filename
+
+    try:
+        convenio_blob, convenio_name = await _read_upload(convenio_file)
+        escalas_blob, escalas_name = await _read_upload(escalas_file)
+        parts = [convenio_text.strip()]
+        if convenio_blob:
+            parts.append(
+                _extract_upload_text(convenio_name or "convenio.pdf", convenio_blob)
+            )
+        escalas = escalas_text.strip()
+        if escalas_blob:
+            extra = _extract_upload_text(escalas_name or "escalas", escalas_blob)
+            escalas = f"{escalas}\n{extra}" if escalas else extra
+        if escalas:
+            parts.append("ESCALAS SALARIALES:\n" + escalas)
+        full_text = "\n\n".join(part for part in parts if part)
+        if not document_id.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Indique el identificador del documento (ej. CCT-130-75).",
+            )
+        if not full_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Adjunte el PDF del convenio o pegue su texto; sin contenido no hay análisis.",
+            )
+        # Reutiliza la selección de proveedor y el pipeline supervisado de la API:
+        # Muse Spark con PAYROLL_AI_PROVIDER=meta, mock offline en desarrollo.
+        from app.api.ai import (
+            MAX_AGREEMENT_TEXT_CHARS,
+            AnalyzeAgreementRequest,
+            _ensure_valid_reports,
+            _reports_for_analysis,
+            _validation_summary,
+            _with_validation_reports,
+            get_ai_provider,
+        )
+
+        if len(full_text) > MAX_AGREEMENT_TEXT_CHARS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"El texto supera el límite de {MAX_AGREEMENT_TEXT_CHARS} caracteres.",
+            )
+        payload = AnalyzeAgreementRequest(
+            text=full_text,
+            document_id=document_id.strip()[:200],
+            title=title.strip() or None,
+            version=(version.strip() or "1")[:100],
+        )
+        provider = get_ai_provider(payload, settings)
+        analysis = analyze_agreement(
+            full_text,
+            provider,
+            payload.to_metadata(),
+            max_chars=MAX_AGREEMENT_TEXT_CHARS,
+        )
+        analysis = _with_validation_reports(analysis)
+        reports = _reports_for_analysis(analysis)
+        _ensure_valid_reports(reports)
+        validation = _validation_summary(reports)
+    except (HTTPException, ValidationError) as exc:
+        return _form_error(_error_message(exc))
+    except AIError as exc:
+        return _form_error(str(exc)[:300])
+
+    raw = analysis.model_dump(mode="json")
+    if user.is_demo or getattr(data, "is_demo", False):
+        rules = [
+            str(item.get("description") or item.get("code") or "").strip()
+            for item in raw.get("formulas", [])
+            if isinstance(item, dict)
+        ]
+        proposal = data.add_proposal(
+            title=analysis.agreement_title or title.strip() or analysis.document.document_id,
+            agreement=analysis.agreement_number or document_id.strip(),
+            document=title.strip() or convenio_name or analysis.document.document_id,
+            summary=analysis.summary,
+            rules=[rule for rule in rules if rule],
+            warnings=list(analysis.ambiguities) + list(analysis.security_warnings),
+            source_page=_analysis_source_label(raw),
+        )
+        return RedirectResponse(
+            url=str(request.url_for("proposal_detail", proposal_id=proposal.id)),
+            status_code=303,
+        )
+    try:
+        actor = _sql_user(db, user, data, {"admin", "editor"})
+        row = AiProposal(
+            organization_id=actor.organization_id,
+            document_id=analysis.document.document_id,
+            document_hash=analysis.document.content_hash,
+            title=(title.strip() or analysis.agreement_title or analysis.document.document_id)[:500],
+            raw_json=raw,
+            validation_json=validation,
+            status="draft",
+        )
+        db.add(row)
+        commit_or_conflict(db)
+        db.refresh(row)
+    except (HTTPException, ValidationError) as exc:
+        db.rollback()
+        return _form_error(_error_message(exc))
+    return RedirectResponse(
+        url=str(request.url_for("proposal_detail", proposal_id=row.id)),
+        status_code=303,
+    )
 
 
 @protected_router.get("/propuestas-ia/{proposal_id}", name="proposal_detail")
