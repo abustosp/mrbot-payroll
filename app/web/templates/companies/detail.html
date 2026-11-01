@@ -10,10 +10,13 @@
 
 {% block page_actions %}
   <a class="btn btn--outline" href="{{ url_for('companies_list') }}">{{ icon("arrow-left") }} Volver</a>
+  {% if not demo_mode and current_user.role in ["admin", "editor"] and company_row %}<a class="btn btn--outline" href="#editar-empresa">Editar</a>{% endif %}
   <a class="btn btn--primary" href="{{ url_for('employees_list') }}?company_id={{ company.id }}">{{ icon("employees") }} Ver empleados</a>
 {% endblock %}
 
 {% block content %}
+  {% if request.query_params.get("error") %}<div class="callout callout--warning" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
+  {% if request.query_params.get("notice") %}<div class="callout callout--success" role="status">{{ request.query_params.get("notice") }}</div>{% endif %}
   <div class="detail-grid">
     <div class="stack">
       <section class="card">
@@ -206,4 +209,27 @@
       </section>
     </div>
   </div>
+
+  {% if not demo_mode and current_user.role in ["admin", "editor"] and company_row %}
+  <section class="card" id="editar-empresa">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Editar empresa</h2>
+        <p class="card-subtitle">Actualizá los datos registrales. El CUIT se sigue validando y no puede repetirse en tu organización.</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('company_update', company_id=company.id) }}" class="filters-bar">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field field--grow"><label for="edit-legal-name">Razón social</label><input class="input" id="edit-legal-name" name="legal_name" maxlength="200" value="{{ company_row.legal_name }}" required></div>
+        <div class="field"><label for="edit-cuit">CUIT</label><input class="input" id="edit-cuit" name="cuit" maxlength="13" value="{{ company_row.cuit }}" required></div>
+        <div class="field"><label for="edit-trade-name">Nombre de fantasía</label><input class="input" id="edit-trade-name" name="trade_name" maxlength="200" value="{{ company_row.trade_name or '' }}" placeholder="Opcional"></div>
+        <div class="field"><label for="edit-tax-activity">Actividad</label><input class="input" id="edit-tax-activity" name="tax_activity" maxlength="120" value="{{ company_row.tax_activity or '' }}" placeholder="Opcional"></div>
+        <div class="field field--grow"><label for="edit-address">Dirección</label><input class="input" id="edit-address" name="address" maxlength="300" value="{{ company_row.address or '' }}" placeholder="Ej.: Av. Mitre 1234, Mendoza"></div>
+        <div class="field"><label for="edit-active">¿Empresa activa?</label><select class="select" id="edit-active" name="active"><option value="yes" {% if company_row.active %}selected{% endif %}>Sí</option><option value="no" {% if not company_row.active %}selected{% endif %}>No</option></select></div>
+        <button class="btn btn--primary" type="submit">Guardar cambios</button>
+      </form>
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

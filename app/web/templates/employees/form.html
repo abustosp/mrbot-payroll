@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+
+{% block title %}{{ form_title }}{% endblock %}
+
+{% block breadcrumb %}
+  <li><a href="{{ url_for('employees_list') }}">Empleados</a></li>
+  {% if is_edit and employee %}<li><a href="{{ url_for('employee_detail', employee_id=employee.id) }}">{{ employee.first_name }} {{ employee.last_name }}</a></li>{% endif %}
+  <li class="current" aria-current="page">{{ form_title }}</li>
+{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn--outline" href="{% if is_edit and employee %}{{ url_for('employee_detail', employee_id=employee.id) }}{% else %}{{ url_for('employees_list') }}{% endif %}">{{ icon("arrow-left") }} Volver</a>
+{% endblock %}
+
+{% block content %}
+  {% if request.query_params.get("error") %}<div class="callout" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">{{ form_title }}</h2>
+        <p class="card-subtitle">El legajo queda vinculado a su empresa, convenio y categoría.</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{{ form_action }}" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="grid-2" style="gap: 18px 28px;">
+          <div class="field">
+            <label for="emp-legajo">Legajo</label>
+            <input class="input" id="emp-legajo" name="legajo" maxlength="40" required
+                   value="{{ values.get('legajo', '') }}" placeholder="P. ej. L-001">
+            <small class="muted">Código interno único del empleado en la organización.</small>
+          </div>
+          <div class="field">
+            <label for="emp-cuil">CUIL</label>
+            <input class="input" id="emp-cuil" name="cuil" maxlength="13" required
+                   value="{{ values.get('cuil', '') }}" placeholder="20-12345678-6" inputmode="numeric">
+            <small class="muted">11 dígitos con dígito verificador válido.</small>
+          </div>
+          <div class="field">
+            <label for="emp-apellido">Apellido</label>
+            <input class="input" id="emp-apellido" name="apellido" maxlength="100" required
+                   value="{{ values.get('apellido', '') }}" autocomplete="family-name">
+          </div>
+          <div class="field">
+            <label for="emp-nombre">Nombre</label>
+            <input class="input" id="emp-nombre" name="nombre" maxlength="100" required
+                   value="{{ values.get('nombre', '') }}" autocomplete="given-name">
+          </div>
+          <div class="field">
+            <label for="emp-email">Correo (opcional)</label>
+            <input class="input" id="emp-email" name="email" type="email" maxlength="254"
+                   value="{{ values.get('email', '') }}" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="emp-hire">Fecha de ingreso</label>
+            <input class="input" id="emp-hire" name="hire_date" type="date" required
+                   value="{{ values.get('hire_date', '') }}">
+            <small class="muted">Inicio de la vinculación con la empresa.</small>
+          </div>
+        </div>
+        <div class="grid-2" style="gap: 18px 28px;">
+          <div class="field">
+            <label for="emp-company">Empresa</label>
+            <select class="select" id="emp-company" name="company_id" required>
+              <option value="">Seleccione la empresa…</option>
+              {% for company in companies %}
+                <option value="{{ company.id }}" {% if values.get('company_id') == company.id|string %}selected{% endif %}>{{ company.legal_name }}</option>
+              {% endfor %}
+            </select>
+            <small class="muted">Empleador que contrata. Obligatoria: sin empresa no hay legajo.</small>
+          </div>
+          <div class="field">
+            <label for="emp-agreement">Convenio (opcional)</label>
+            <select class="select" id="emp-agreement" name="agreement_id">
+              <option value="">Sin convenio…</option>
+              {% for agreement, categories in agreements %}
+                <option value="{{ agreement.id }}" {% if values.get('agreement_id') == agreement.id|string %}selected{% endif %}>CCT {{ agreement.code }} · {{ agreement.name }}</option>
+              {% endfor %}
+            </select>
+            <small class="muted">Convenio colectivo (CCT) que fija las reglas del sector.</small>
+          </div>
+          <div class="field">
+            <label for="emp-category">Categoría (opcional)</label>
+            <select class="select" id="emp-category" name="category_id">
+              <option value="">Sin categoría…</option>
+              {% for agreement, categories in agreements %}
+                {% if categories %}
+                <optgroup label="CCT {{ agreement.code }} · {{ agreement.name }}">
+                  {% for category in categories %}
+                    <option value="{{ category.id }}" {% if values.get('category_id') == category.id|string %}selected{% endif %}>{{ category.name }}</option>
+                  {% endfor %}
+                </optgroup>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <small class="muted">Puesto y escala salarial dentro del convenio. Si elige solo categoría, se toma su convenio.</small>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn--primary" type="submit">{{ icon("plus") }} {% if is_edit %}Guardar cambios{% else %}Crear legajo{% endif %}</button>
+          <a class="btn btn--ghost" href="{% if is_edit and employee %}{{ url_for('employee_detail', employee_id=employee.id) }}{% else %}{{ url_for('employees_list') }}{% endif %}">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock %}

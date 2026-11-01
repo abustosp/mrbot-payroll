@@ -62,9 +62,15 @@
         </div>
 
         <div class="field" style="margin-bottom: 14px;">
-          <label for="analyze-convenio-file">PDF del convenio</label>
-          <input id="analyze-convenio-file" type="file" name="convenio_file" accept=".pdf,.txt,.md,.csv">
-          <small class="muted">PDF con texto seleccionable (o TXT/MD/CSV). Si es un escaneo sin texto, se necesita OCR.</small>
+          <span class="label" id="analyze-convenio-label">PDF del convenio</span>
+          <label class="dropzone" data-dropzone for="analyze-convenio-file">
+            {{ icon("file") }}
+            <span class="dropzone-text"><strong>Arrastrá el archivo aquí</strong> o <u>elegí un archivo</u></span>
+            <small class="muted">PDF con texto seleccionable (o TXT/MD/CSV). Si es un escaneo sin texto, se necesita OCR.</small>
+            <span class="dropzone-file" data-dropzone-file hidden></span>
+          </label>
+          <input class="dropzone-input" id="analyze-convenio-file" type="file" name="convenio_file" accept=".pdf,.txt,.md,.csv" aria-labelledby="analyze-convenio-label" data-max-mb="20">
+          <p class="dropzone-error" id="analyze-convenio-error" role="alert" hidden></p>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label for="analyze-convenio-text">O pegue el texto del convenio</label>
@@ -73,9 +79,15 @@
         </div>
 
         <div class="field" style="margin-bottom: 14px;">
-          <label for="analyze-escalas-file">Escalas salariales (opcional)</label>
-          <input id="analyze-escalas-file" type="file" name="escalas_file" accept=".pdf,.txt,.md,.csv">
-          <small class="muted">Anexo de básicos por categoría. Se analiza junto al convenio.</small>
+          <span class="label" id="analyze-escalas-label">Escalas salariales (opcional)</span>
+          <label class="dropzone" data-dropzone for="analyze-escalas-file">
+            {{ icon("file") }}
+            <span class="dropzone-text"><strong>Arrastrá el archivo aquí</strong> o <u>elegí un archivo</u></span>
+            <small class="muted">Anexo de básicos por categoría. Se analiza junto al convenio.</small>
+            <span class="dropzone-file" data-dropzone-file hidden></span>
+          </label>
+          <input class="dropzone-input" id="analyze-escalas-file" type="file" name="escalas_file" accept=".pdf,.txt,.md,.csv" aria-labelledby="analyze-escalas-label" data-max-mb="20">
+          <p class="dropzone-error" id="analyze-escalas-error" role="alert" hidden></p>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label for="analyze-escalas-text">O pegue las escalas</label>
@@ -88,8 +100,9 @@
         </div>
       </div>
       <div class="card-footer">
-        <button class="btn btn--primary" type="submit">{{ icon("spark") }} Analizar con {{ provider_label }}</button>
+        <button class="btn btn--primary" type="submit" data-analyze-submit>{{ icon("spark") }} Analizar con {{ provider_label }}</button>
         <a class="btn btn--ghost" href="{{ url_for('proposals_list') }}">Cancelar</a>
+        <div class="dropzone-progress" data-analyze-progress role="progressbar" aria-label="Analizando convenio" hidden><span></span></div>
       </div>
     </form>
   </section>

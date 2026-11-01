@@ -6,18 +6,43 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Empresas</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar los servicios de alta de empresas">
-    {{ icon("plus") }} Nueva empresa
-  </button>
-  <small class="muted">Próximamente: alta de empresas</small>
+  {% if not demo_mode and current_user.role in ["admin", "editor"] %}
+  <a class="btn btn--primary" href="#nueva-empresa">{{ icon("plus") }} Nueva empresa</a>
+  {% else %}<small class="muted">{% if demo_mode %}Modo demo: solo lectura.{% else %}Su usuario tiene acceso de solo lectura.{% endif %}</small>{% endif %}
 {% endblock %}
 
 {% block content %}
+  {% if request.query_params.get("error") %}<div class="callout callout--warning" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
+  {% if request.query_params.get("notice") %}<div class="callout callout--success" role="status">{{ request.query_params.get("notice") }}</div>{% endif %}
+  {% if not demo_mode and current_user.role in ["admin", "editor"] %}
+  <section class="card" id="nueva-empresa">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Nueva empresa</h2>
+        <p class="card-subtitle">Dala de alta con su CUIT validado. Después la editás desde su ficha y le asociás empleados.</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('company_create') }}" class="filters-bar">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field field--grow"><label for="new-legal-name">Razón social</label><input class="input" id="new-legal-name" name="legal_name" maxlength="200" placeholder="Ej.: Andes Logística S.A." required></div>
+        <div class="field"><label for="new-cuit">CUIT</label><input class="input" id="new-cuit" name="cuit" maxlength="13" placeholder="Ej.: 30-71234567-1" required></div>
+        <div class="field"><label for="new-trade-name">Nombre de fantasía</label><input class="input" id="new-trade-name" name="trade_name" maxlength="200" placeholder="Opcional"></div>
+        <div class="field"><label for="new-tax-activity">Actividad</label><input class="input" id="new-tax-activity" name="tax_activity" maxlength="120" placeholder="Ej.: Logística"></div>
+        <div class="field field--grow"><label for="new-address">Dirección</label><input class="input" id="new-address" name="address" maxlength="300" placeholder="Ej.: Av. Mitre 1234, Mendoza"></div>
+        <div class="field"><label for="new-active">¿Empresa activa?</label><select class="select" id="new-active" name="active"><option value="yes" selected>Sí</option><option value="no">No</option></select></div>
+        <button class="btn btn--primary" type="submit">{{ icon("plus") }} Dar de alta</button>
+      </form>
+      <p class="muted">El CUIT acepta guiones, puntos o espacios y se valida el dígito verificador. No se puede repetir dentro de tu organización.</p>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="card">
     <div class="card-header">
       <div>
         <h2 class="card-title">Cartera de empresas</h2>
-        <p class="card-subtitle">Consulte empleadores, convenios y dotación.</p>
+        <p class="card-subtitle">Acá das de alta las empresas empleadoras, las editás desde su ficha y las buscás por razón social, CUIT, ciudad o actividad.</p>
       </div>
     </div>
 

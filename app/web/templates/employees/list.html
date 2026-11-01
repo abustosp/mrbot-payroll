@@ -6,18 +6,27 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Empleados</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar los servicios de alta de legajos">
-    {{ icon("plus") }} Nuevo empleado
-  </button>
-  <small class="muted">Próximamente: alta de legajos</small>
+  {% if can_edit %}
+  <a class="btn btn--primary" href="{{ url_for('employee_new') }}">{{ icon("plus") }} Nuevo empleado</a>
+  {% else %}<small class="muted">{% if demo_mode %}Modo demo: solo lectura.{% else %}Su usuario tiene acceso de solo lectura.{% endif %}</small>{% endif %}
 {% endblock %}
 
 {% block content %}
+  {% if request.query_params.get("notice") %}<div class="callout" role="status">{{ request.query_params.get("notice") }}</div>{% endif %}
+  {% if request.query_params.get("error") %}<div class="callout" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
   <section class="card">
     <div class="card-header">
       <div>
         <h2 class="card-title">Legajos</h2>
         <p class="card-subtitle">Dotación, categorías y convenios asignados.</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="callout">
+        <strong>Cómo leer un legajo:</strong> el <strong>legajo</strong> es el código interno
+        único del empleado en la organización; la <strong>empresa</strong> es el empleador que
+        lo contrata; el <strong>convenio</strong> (CCT) fija las reglas del sector y la
+        <strong>categoría</strong> define su puesto y su escala salarial dentro de ese convenio.
       </div>
     </div>
 

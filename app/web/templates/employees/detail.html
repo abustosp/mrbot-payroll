@@ -10,12 +10,17 @@
 
 {% block page_actions %}
   <a class="btn btn--outline" href="{{ url_for('employees_list') }}">{{ icon("arrow-left") }} Volver</a>
+  {% if can_edit %}
+    <a class="btn btn--primary" href="{{ url_for('employee_edit', employee_id=employee.id) }}">{{ icon("plus") }} Editar</a>
+  {% endif %}
   {% if company %}
-    <a class="btn btn--primary" href="{{ url_for('company_detail', company_id=company.id) }}">{{ icon("companies") }} Ver empresa</a>
+    <a class="btn btn--outline" href="{{ url_for('company_detail', company_id=company.id) }}">{{ icon("companies") }} Ver empresa</a>
   {% endif %}
 {% endblock %}
 
 {% block content %}
+  {% if request.query_params.get("notice") %}<div class="callout" role="status">{{ request.query_params.get("notice") }}</div>{% endif %}
+  {% if request.query_params.get("error") %}<div class="callout" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
   <div class="detail-grid">
     <div class="stack">
       <section class="card">

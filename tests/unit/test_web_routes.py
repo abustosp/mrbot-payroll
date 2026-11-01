@@ -472,19 +472,34 @@ def test_404_suggests_contextual_section(
 
 
 @pytest.mark.parametrize(
-    "path",
-    # "/propuestas-ia" ya tiene su analizador real en /propuestas-ia/nuevo.
-    ["/empresas", "/empleados", "/convenios"],
+    ("path", "expected"),
+    [
+        ("/empresas", "das de alta las empresas"),
+        ("/empleados", "Cómo leer un legajo"),
+        # Convenios explica la feature en page_actions y enlaza al analizador.
+        ("/convenios", "la IA propone y una persona revisa"),
+    ],
 )
-def test_future_actions_are_focusable_with_visible_note(
-    client: TestClient, path: str
+def test_list_pages_have_no_proximamente_and_explain_feature(
+    client: TestClient, path: str, expected: str
 ) -> None:
     response = client.get(path)
 
     assert response.status_code == 200
-    assert 'aria-disabled="true"' in response.text
-    assert "disabled title=" not in response.text
-    assert "Próximamente" in response.text
+    html = response.text
+    assert "ximamente" not in html
+    assert "coming soon" not in html.lower()
+    assert 'aria-disabled="true"' not in html
+    # Cada sección explica en 1-2 líneas qué hace la feature.
+    assert expected in html
+
+
+def test_agreements_list_links_to_analyzer(client: TestClient) -> None:
+    response = client.get("/convenios")
+
+    assert response.status_code == 200
+    assert "/propuestas-ia/nuevo" in response.text
+    assert "Analizar convenio" in response.text
 
 
 def test_demo_texts_show_in_demo_mode(client: TestClient) -> None:

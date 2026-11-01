@@ -39,6 +39,7 @@
               <td><span class="badge badge--{{ company.status | status_class }}">{{ company.status | status_label("company") }}</span></td>
               <td class="text-end">
                 <a class="btn btn--ghost btn--sm" href="{{ url_for('company_detail', company_id=company.id) }}">Ver ficha</a>
+                {% if not demo_mode and current_user.role in ["admin", "editor"] %}<a class="btn btn--ghost btn--sm" href="{{ url_for('company_detail', company_id=company.id) }}#editar-empresa">Editar</a>{% endif %}
               </td>
             </tr>
           {% endfor %}
