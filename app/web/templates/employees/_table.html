@@ -39,7 +39,7 @@
               <td class="nowrap">{{ employee.hire_date | date_ar }}</td>
               <td class="num">{{ employee.salary | money }}</td>
               <td><span class="badge badge--{{ employee.status | status_class }}">{{ employee.status | status_label("employee") }}</span></td>
-              <td class="text-end"><a class="btn btn--ghost btn--sm" href="{{ url_for('employee_detail', employee_id=employee.id) }}">Ficha</a></td>
+              <td class="text-end"><a class="btn btn--ghost btn--sm" href="{{ url_for('employee_detail', employee_id=employee.id) }}">Ficha</a>{% if can_edit %} <a class="btn btn--ghost btn--sm" href="{{ url_for('employee_edit', employee_id=employee.id) }}">Editar</a>{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>

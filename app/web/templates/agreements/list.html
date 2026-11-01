@@ -6,10 +6,10 @@
 {% block breadcrumb %}<li class="current" aria-current="page">Convenios</li>{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn--primary" type="button" aria-disabled="true" title="Se habilitará al conectar los servicios de convenios">
-    {{ icon("plus") }} Nuevo convenio
-  </button>
-  <small class="muted">Próximamente: alta de convenios</small>
+  <a class="btn btn--primary" href="{{ url_for('proposal_new') }}">
+    {{ icon("spark") }} Analizar convenio
+  </a>
+  <small class="muted">Alta manual o por archivo; la IA propone y una persona revisa antes de publicar.</small>
 {% endblock %}
 
 {% block content %}

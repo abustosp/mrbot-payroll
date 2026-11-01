@@ -28,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import ValidationError
 from pypdf import PdfReader
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.ai import AIError, analyze_agreement
@@ -42,9 +42,20 @@ from app.api.payroll_runs import (
     reopen_payroll_run,
 )
 from app.api.reports import export_f931_workbook
-from app.api.schemas import PayrollRunInput
+from app.api.schemas import CompanyInput, PayrollRunInput
 from app.config import Settings, get_settings
-from app.database.models import AiProposal, Employee, PayrollResult, PayrollRun, PayrollTrace, User
+from app.database.models import (
+    AgreementCategory,
+    AiProposal,
+    CollectiveAgreement,
+    Company,
+    Employee,
+    EmploymentContract,
+    PayrollResult,
+    PayrollRun,
+    PayrollTrace,
+    User,
+)
 from app.database.session import get_db
 from app.exporters.pdf.receipts import (
     PdfRendererUnavailable,
@@ -54,6 +65,15 @@ from app.exporters.pdf.receipts import (
     render_receipt_html,
     render_receipt_pdf,
     render_receipts_zip,
+)
+from app.importers.parsing import (
+    clean_legajo,
+    clean_text,
+    contains_html_chars,
+    is_valid_cuil,
+    is_valid_email,
+    normalize_cuil,
+    parse_date,
 )
 from app.web.auth import (
     WebUser,
@@ -536,7 +556,9 @@ def companies_list(
 
 
 @protected_router.get("/empresas/{company_id}", name="company_detail")
-def company_detail(request: Request, company_id: str, data: DataSource) -> HTMLResponse:
+def company_detail(
+    request: Request, company_id: str, data: DataSource, user: WebUserDep, db: SessionDep
+) -> HTMLResponse:
     company = data.get_company(company_id)
     if company is None:
         return _not_found(
@@ -548,6 +570,19 @@ def company_detail(request: Request, company_id: str, data: DataSource) -> HTMLR
     employees = data.employees_for_company(company.id)
     payrolls = data.list_payrolls(company_id=company.id)
     receipts = data.list_receipts(company_id=company.id)
+    company_row = None
+    if not user.is_demo and not getattr(data, "is_demo", False) and company_id.isdigit():
+        try:
+            actor = _sql_user(db, user, data, {"admin", "editor", "viewer"})
+        except HTTPException:
+            actor = None
+        if actor is not None:
+            company_row = db.scalar(
+                select(Company).where(
+                    Company.id == int(company_id),
+                    Company.organization_id == actor.organization_id,
+                )
+            )
     return _render(
         request,
         "companies/detail.html",
@@ -558,12 +593,368 @@ def company_detail(request: Request, company_id: str, data: DataSource) -> HTMLR
         employees=employees,
         payrolls=payrolls,
         receipts=receipts,
+        company_row=company_row,
+    )
+
+
+def _company_redirect(request: Request, company_id: int | str | None = None, **params: str) -> RedirectResponse:
+    if company_id is None:
+        url = str(request.url_for("companies_list"))
+    else:
+        url = str(request.url_for("company_detail", company_id=company_id))
+    if params:
+        url += "?" + urlencode(params)
+    return RedirectResponse(url, status_code=303)
+
+
+def _company_input(
+    *,
+    legal_name: str,
+    cuit: str,
+    trade_name: str = "",
+    tax_activity: str = "",
+    address: str = "",
+    active: str = "yes",
+) -> CompanyInput:
+    digits = re.sub(r"[-.\s]", "", cuit or "")
+    if len(digits) != 11 or not digits.isascii() or not digits.isdigit():
+        raise ValueError("El CUIT debe tener 11 dígitos (podés escribirlo con o sin guiones).")
+
+    def _optional(value: str) -> str | None:
+        cleaned = (value or "").strip()
+        return cleaned or None
+
+    return CompanyInput(
+        cuit=digits,
+        legal_name=(legal_name or "").strip(),
+        trade_name=_optional(trade_name),
+        tax_activity=_optional(tax_activity),
+        address=_optional(address),
+        active=(active or "yes").strip().lower() not in {"no", "false", "0", "off"},
+    )
+
+
+def _company_error_message(exc: Exception) -> str:
+    if isinstance(exc, HTTPException) and exc.status_code == 409:
+        return (
+            "Ya existe una empresa con ese CUIT en tu organización. "
+            "Revisá el CUIT o buscá la empresa en la lista."
+        )
+    return _error_message(exc)
+
+
+@protected_router.post("/empresas", name="company_create")
+def company_create(
+    request: Request, data: DataSource, user: WebUserDep, db: SessionDep, settings: SettingsDep,
+    legal_name: Annotated[str, Form()], cuit: Annotated[str, Form()],
+    trade_name: Annotated[str, Form()] = "", tax_activity: Annotated[str, Form()] = "",
+    address: Annotated[str, Form()] = "", active: Annotated[str, Form()] = "yes",
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    try:
+        payload = _company_input(
+            legal_name=legal_name, cuit=cuit, trade_name=trade_name,
+            tax_activity=tax_activity, address=address, active=active,
+        )
+        row = Company(organization_id=actor.organization_id, **payload.model_dump())
+        db.add(row)
+        commit_or_conflict(db)
+        db.refresh(row)
+    except (ValidationError, HTTPException, ValueError) as exc:
+        db.rollback()
+        return _company_redirect(request, error=_company_error_message(exc))
+    return _company_redirect(
+        request, row.id, notice="Empresa dada de alta. Ya podés ver su ficha y asociarle empleados."
+    )
+
+
+@protected_router.post("/empresas/{company_id}/editar", name="company_update")
+def company_update(
+    request: Request, company_id: int, data: DataSource, user: WebUserDep,
+    db: SessionDep, settings: SettingsDep,
+    legal_name: Annotated[str, Form()], cuit: Annotated[str, Form()],
+    trade_name: Annotated[str, Form()] = "", tax_activity: Annotated[str, Form()] = "",
+    address: Annotated[str, Form()] = "", active: Annotated[str, Form()] = "yes",
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    row = db.scalar(
+        select(Company).where(
+            Company.id == company_id, Company.organization_id == actor.organization_id
+        )
+    )
+    if row is None:
+        return _company_redirect(request, error="No existe esa empresa en tu organización.")
+    try:
+        payload = _company_input(
+            legal_name=legal_name, cuit=cuit, trade_name=trade_name,
+            tax_activity=tax_activity, address=address, active=active,
+        )
+        for key, value in payload.model_dump().items():
+            setattr(row, key, value)
+        commit_or_conflict(db)
+        db.refresh(row)
+    except (ValidationError, HTTPException, ValueError) as exc:
+        db.rollback()
+        return _company_redirect(request, row.id, error=_company_error_message(exc))
+    return _company_redirect(
+        request, row.id, notice="Cambios guardados. La ficha ya muestra los datos actualizados."
     )
 
 
 # ---------------------------------------------------------------------------
 # Empleados
 # ---------------------------------------------------------------------------
+
+
+def _can_edit_employees(request: Request, data: Any) -> bool:
+    """Indica si el usuario actual puede dar de alta o editar legajos."""
+
+    if getattr(data, "is_demo", False):
+        return False
+    user = getattr(request.state, "web_user", None)
+    return (
+        isinstance(user, WebUser)
+        and not user.is_demo
+        and user.role in {"admin", "editor"}
+    )
+
+
+def _employee_redirect(
+    request: Request, employee_id: int | None, *, notice: str = "", error: str = "",
+) -> RedirectResponse:
+    """Redirige a la ficha del legajo (o al listado) con un mensaje visible."""
+
+    params = {key: value for key, value in (("notice", notice), ("error", error)) if value}
+    if employee_id is None:
+        url = str(request.url_for("employees_list"))
+    else:
+        url = str(request.url_for("employee_detail", employee_id=employee_id))
+    if params:
+        url += "?" + urlencode(params)
+    return RedirectResponse(url, status_code=303)
+
+
+def _employee_companies(db: Session, organization_id: int) -> list[Company]:
+    return list(db.scalars(
+        select(Company)
+        .where(Company.organization_id == organization_id)
+        .order_by(Company.legal_name)
+    ).all())
+
+
+def _employee_agreements(db: Session) -> list[CollectiveAgreement]:
+    return list(db.scalars(
+        select(CollectiveAgreement).order_by(CollectiveAgreement.code, CollectiveAgreement.year)
+    ).all())
+
+
+def _employee_agreement_options(
+    db: Session,
+) -> list[tuple[CollectiveAgreement, list[AgreementCategory]]]:
+    """Convenios con sus categorías para los desplegables del formulario."""
+
+    agreements = _employee_agreements(db)
+    if not agreements:
+        return []
+    categories = db.scalars(
+        select(AgreementCategory)
+        .where(AgreementCategory.agreement_id.in_([item.id for item in agreements]))
+        .order_by(AgreementCategory.name)
+    ).all()
+    by_agreement: dict[int, list[AgreementCategory]] = {item.id: [] for item in agreements}
+    for category in categories:
+        by_agreement.setdefault(category.agreement_id, []).append(category)
+    return [(item, by_agreement.get(item.id, [])) for item in agreements]
+
+
+def _latest_contract(
+    db: Session, organization_id: int, employee_id: int,
+) -> EmploymentContract | None:
+    """Contrato vigente mostrado en la ficha: el más reciente de la organización."""
+
+    return db.scalar(
+        select(EmploymentContract)
+        .join(Company, Company.id == EmploymentContract.company_id)
+        .where(
+            EmploymentContract.employee_id == employee_id,
+            Company.organization_id == organization_id,
+        )
+        .order_by(EmploymentContract.valid_from.desc(), EmploymentContract.id.desc())
+    )
+
+
+def _assert_no_contract_overlap(
+    db: Session, employee_id: int, company_id: int, valid_from: date,
+    *, exclude_id: int | None = None,
+) -> None:
+    """Rechaza el solape con otro contrato activo del mismo empleado y empresa."""
+
+    statement = select(EmploymentContract.id).where(
+        EmploymentContract.employee_id == employee_id,
+        EmploymentContract.company_id == company_id,
+        EmploymentContract.active.is_(True),
+        EmploymentContract.valid_from <= valid_from,
+        or_(
+            EmploymentContract.valid_to.is_(None),
+            EmploymentContract.valid_to >= valid_from,
+        ),
+    )
+    if exclude_id is not None:
+        statement = statement.where(EmploymentContract.id != exclude_id)
+    if db.scalar(statement) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="El empleado ya tiene un contrato vigente en esa empresa para esa fecha.",
+        )
+
+
+def _parse_employee_form(
+    db: Session, organization_id: int, form: dict[str, str],
+    *, employee_id: int | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Valida el alta/edición con las mismas reglas que la carga por archivo.
+
+    Reutiliza ``app.importers.parsing`` (legajo, CUIL con dígito verificador,
+    email, fecha) para no duplicar la lógica de carga; aquí además se exige
+    la empresa porque el contrato web siempre vincula empleador, convenio y
+    categoría. Devuelve los campos del empleado y de su contrato.
+    """
+
+    legajo = clean_legajo(form.get("legajo", ""))
+    if not legajo:
+        raise HTTPException(status_code=400, detail="El legajo es obligatorio.")
+    if contains_html_chars(legajo):
+        raise HTTPException(
+            status_code=400, detail="El campo 'legajo' contiene caracteres no permitidos (< >)."
+        )
+    apellido = clean_text(form.get("apellido", ""))
+    if not apellido:
+        raise HTTPException(status_code=400, detail="El apellido es obligatorio.")
+    nombre = clean_text(form.get("nombre", ""))
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio.")
+    for field, value in (("apellido", apellido), ("nombre", nombre)):
+        if value is not None and contains_html_chars(value):
+            raise HTTPException(
+                status_code=400,
+                detail=f"El campo '{field}' contiene caracteres no permitidos (< >).",
+            )
+    raw_cuil = (form.get("cuil") or "").strip()
+    cuil = normalize_cuil(raw_cuil) if raw_cuil else None
+    if cuil is None or not is_valid_cuil(cuil):
+        raise HTTPException(
+            status_code=400,
+            detail="El CUIL no es válido o no coincide su dígito verificador. "
+            "Se esperan 11 dígitos (p. ej. 20-12345678-6).",
+        )
+    raw_email = (form.get("email") or "").strip()
+    email: str | None = None
+    if raw_email:
+        email = clean_text(raw_email)
+        if email is None or not is_valid_email(email):
+            raise HTTPException(status_code=400, detail="El email no tiene un formato válido.")
+        if contains_html_chars(email):
+            raise HTTPException(
+                status_code=400, detail="El campo 'email' contiene caracteres no permitidos (< >)."
+            )
+    hire_date = parse_date((form.get("hire_date") or "").strip())
+    if hire_date is None:
+        raise HTTPException(
+            status_code=400, detail="La fecha de ingreso no es válida (AAAA-MM-DD)."
+        )
+    raw_company = (form.get("company_id") or "").strip()
+    if not raw_company:
+        raise HTTPException(
+            status_code=400, detail="La empresa es obligatoria: el legajo debe quedar vinculado."
+        )
+    company: Company | None = None
+    if raw_company.isdigit():
+        company = db.scalar(select(Company).where(
+            Company.organization_id == organization_id,
+            Company.id == int(raw_company),
+        ))
+    if company is None:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+    raw_agreement = (form.get("agreement_id") or "").strip()
+    raw_category = (form.get("category_id") or "").strip()
+    agreement: CollectiveAgreement | None = None
+    if raw_agreement:
+        if not raw_agreement.isdigit():
+            raise HTTPException(status_code=422, detail="Convenio inexistente.")
+        agreement = db.get(CollectiveAgreement, int(raw_agreement))
+        if agreement is None:
+            raise HTTPException(status_code=422, detail="Convenio inexistente.")
+    category: AgreementCategory | None = None
+    if raw_category:
+        if not raw_category.isdigit():
+            raise HTTPException(status_code=422, detail="Categoría inexistente.")
+        category = db.get(AgreementCategory, int(raw_category))
+        if category is None:
+            raise HTTPException(status_code=422, detail="Categoría inexistente.")
+        if agreement is not None and category.agreement_id != agreement.id:
+            raise HTTPException(
+                status_code=422,
+                detail="La categoría no pertenece al convenio seleccionado.",
+            )
+        if agreement is None:
+            agreement = db.get(CollectiveAgreement, category.agreement_id)
+    code_statement = select(Employee.id).where(
+        Employee.organization_id == organization_id,
+        Employee.employee_code == legajo,
+    )
+    if employee_id is not None:
+        code_statement = code_statement.where(Employee.id != employee_id)
+    if db.scalar(code_statement) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Ya existe un empleado con ese legajo en la organización.",
+        )
+    cuil_statement = select(Employee.id).where(
+        Employee.organization_id == organization_id,
+        Employee.cuil == cuil,
+    )
+    if employee_id is not None:
+        cuil_statement = cuil_statement.where(Employee.id != employee_id)
+    if db.scalar(cuil_statement) is not None:
+        raise HTTPException(
+            status_code=409, detail="Ya existe un empleado con ese CUIL."
+        )
+    return {
+        "employee": {
+            "employee_code": legajo,
+            "first_name": nombre,
+            "last_name": apellido,
+            "cuil": cuil,
+            "email": email,
+            "hire_date": hire_date,
+        },
+        "contract": {
+            "company_id": company.id,
+            "agreement_id": agreement.id if agreement else None,
+            "category_id": category.id if category else None,
+            "valid_from": hire_date,
+        },
+    }
+
+
+def _employee_form_values(
+    employee: Employee, contract: EmploymentContract | None,
+) -> dict[str, str]:
+    return {
+        "legajo": employee.employee_code,
+        "apellido": employee.last_name,
+        "nombre": employee.first_name,
+        "cuil": employee.cuil or "",
+        "email": employee.email or "",
+        "hire_date": employee.hire_date.isoformat() if employee.hire_date else "",
+        "company_id": str(contract.company_id) if contract else "",
+        "agreement_id": str(contract.agreement_id) if contract and contract.agreement_id else "",
+        "category_id": str(contract.category_id) if contract and contract.category_id else "",
+    }
 
 
 @protected_router.get("/empleados", name="employees_list")
@@ -587,6 +978,7 @@ def employees_list(
         "company_id": company_id,
         "status": status,
         "status_options": EMPLOYEE_STATUS_OPTIONS,
+        "can_edit": _can_edit_employees(request, data),
         "active_nav": "employees",
         "page_title": "Empleados",
         "page_subtitle": "Legajos activos, categorías y convenios asignados.",
@@ -594,6 +986,68 @@ def employees_list(
     if _is_htmx(request):
         return _render(request, "employees/_table.html", **context)
     return _render(request, "employees/list.html", **context)
+
+
+@protected_router.get("/empleados/nuevo", name="employee_new")
+def employee_new(
+    request: Request, data: DataSource, user: WebUserDep, db: SessionDep,
+) -> HTMLResponse:
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    return _render(
+        request,
+        "employees/form.html",
+        page_title="Nuevo empleado",
+        page_subtitle="Alta de legajo con empresa, convenio y categoría.",
+        active_nav="employees",
+        employee=None,
+        values={},
+        companies=_employee_companies(db, actor.organization_id),
+        agreements=_employee_agreement_options(db),
+        form_action=str(request.url_for("employee_create")),
+        form_title="Nuevo legajo",
+        is_edit=False,
+    )
+
+
+@protected_router.post("/empleados", name="employee_create")
+def employee_create(
+    request: Request, data: DataSource, user: WebUserDep, db: SessionDep,
+    settings: SettingsDep,
+    legajo: Annotated[str, Form()] = "",
+    apellido: Annotated[str, Form()] = "",
+    nombre: Annotated[str, Form()] = "",
+    cuil: Annotated[str, Form()] = "",
+    email: Annotated[str, Form()] = "",
+    hire_date: Annotated[str, Form()] = "",
+    company_id: Annotated[str, Form()] = "",
+    agreement_id: Annotated[str, Form()] = "",
+    category_id: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    try:
+        values = _parse_employee_form(
+            db, actor.organization_id,
+            {
+                "legajo": legajo, "apellido": apellido, "nombre": nombre,
+                "cuil": cuil, "email": email, "hire_date": hire_date,
+                "company_id": company_id, "agreement_id": agreement_id,
+                "category_id": category_id,
+            },
+        )
+        employee = Employee(organization_id=actor.organization_id, **values["employee"])
+        db.add(employee)
+        db.flush()
+        db.add(EmploymentContract(employee_id=employee.id, **values["contract"]))
+        commit_or_conflict(db)
+    except HTTPException as exc:
+        db.rollback()
+        return _employee_redirect(request, None, error=_error_message(exc))
+    return _employee_redirect(
+        request, employee.id,
+        notice=f"Legajo {employee.employee_code} creado y vinculado a la empresa.",
+    )
 
 
 @protected_router.get("/empleados/{employee_id}", name="employee_detail")
@@ -618,6 +1072,95 @@ def employee_detail(request: Request, employee_id: str, data: DataSource) -> HTM
         employee=employee,
         company=company,
         receipts=receipts,
+        can_edit=_can_edit_employees(request, data),
+    )
+
+
+@protected_router.get("/empleados/{employee_id}/editar", name="employee_edit")
+def employee_edit(
+    request: Request, employee_id: int, data: DataSource, user: WebUserDep,
+    db: SessionDep,
+) -> HTMLResponse:
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    employee = db.scalar(select(Employee).where(
+        Employee.id == employee_id, Employee.organization_id == actor.organization_id
+    ))
+    if employee is None:
+        return _not_found(
+            request,
+            title="Empleado no encontrado",
+            message=f"No existe un legajo con identificador {employee_id!r}.",
+            active_nav="employees",
+        )
+    contract = _latest_contract(db, actor.organization_id, employee.id)
+    return _render(
+        request,
+        "employees/form.html",
+        page_title=f"Editar {employee.first_name} {employee.last_name}",
+        page_subtitle=f"Legajo {employee.employee_code}",
+        active_nav="employees",
+        employee=employee,
+        values=_employee_form_values(employee, contract),
+        companies=_employee_companies(db, actor.organization_id),
+        agreements=_employee_agreement_options(db),
+        form_action=str(request.url_for("employee_update", employee_id=employee.id)),
+        form_title="Editar legajo",
+        is_edit=True,
+    )
+
+
+@protected_router.post("/empleados/{employee_id}", name="employee_update")
+def employee_update(
+    request: Request, employee_id: int, data: DataSource, user: WebUserDep,
+    db: SessionDep, settings: SettingsDep,
+    legajo: Annotated[str, Form()] = "",
+    apellido: Annotated[str, Form()] = "",
+    nombre: Annotated[str, Form()] = "",
+    cuil: Annotated[str, Form()] = "",
+    email: Annotated[str, Form()] = "",
+    hire_date: Annotated[str, Form()] = "",
+    company_id: Annotated[str, Form()] = "",
+    agreement_id: Annotated[str, Form()] = "",
+    category_id: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    employee = db.scalar(select(Employee).where(
+        Employee.id == employee_id, Employee.organization_id == actor.organization_id
+    ))
+    if employee is None:
+        return _employee_redirect(request, None, error="Empleado no encontrado.")
+    try:
+        values = _parse_employee_form(
+            db, actor.organization_id,
+            {
+                "legajo": legajo, "apellido": apellido, "nombre": nombre,
+                "cuil": cuil, "email": email, "hire_date": hire_date,
+                "company_id": company_id, "agreement_id": agreement_id,
+                "category_id": category_id,
+            },
+            employee_id=employee.id,
+        )
+        for key, value in values["employee"].items():
+            setattr(employee, key, value)
+        contract = _latest_contract(db, actor.organization_id, employee.id)
+        if contract is None:
+            db.add(EmploymentContract(employee_id=employee.id, **values["contract"]))
+        else:
+            _assert_no_contract_overlap(
+                db, employee.id, values["contract"]["company_id"],
+                values["contract"]["valid_from"], exclude_id=contract.id,
+            )
+            for key, value in values["contract"].items():
+                setattr(contract, key, value)
+        commit_or_conflict(db)
+    except HTTPException as exc:
+        db.rollback()
+        return _employee_redirect(request, employee.id, error=_error_message(exc))
+    return _employee_redirect(
+        request, employee.id,
+        notice=f"Legajo {employee.employee_code} actualizado.",
     )
 
 

@@ -65,4 +65,138 @@
   } else if (desktop.addListener) {
     desktop.addListener(handleDesktopChange);
   }
+
+  // Alta de convenios: zonas de arrastre con la entrada nativa como
+  // alternativa accesible. Valida extensión y tamaño, muestra el archivo
+  // elegido y un indicador de progreso al enviar el análisis.
+  var ALLOWED_SUFFIXES = [".pdf", ".txt", ".md", ".csv"];
+
+  function dropzoneErrorId(input) {
+    return input.id + "-error";
+  }
+
+  function showDropzoneError(input, message) {
+    var notice = document.getElementById(dropzoneErrorId(input));
+    if (!notice) {
+      return;
+    }
+    if (!message) {
+      notice.hidden = true;
+      notice.textContent = "";
+      return;
+    }
+    notice.hidden = false;
+    notice.textContent = message;
+  }
+
+  function renderDropzoneFile(zone, file) {
+    var chip = zone.querySelector("[data-dropzone-file]");
+    if (!chip) {
+      return;
+    }
+    if (!file) {
+      chip.hidden = true;
+      chip.textContent = "";
+      return;
+    }
+    var sizeKb = Math.max(1, Math.round(file.size / 1024));
+    var sizeLabel = sizeKb >= 1024
+      ? (sizeKb / 1024).toFixed(1) + " MB"
+      : sizeKb + " KB";
+    chip.hidden = false;
+    chip.textContent = file.name + " (" + sizeLabel + ")";
+  }
+
+  function validateDropzoneFile(input, file) {
+    var name = (file.name || "").toLowerCase();
+    var okSuffix = ALLOWED_SUFFIXES.some(function (suffix) {
+      return name.slice(-suffix.length) === suffix;
+    });
+    if (!okSuffix) {
+      return "Extensión no soportada. Adjunte PDF, TXT, MD o CSV.";
+    }
+    var maxMb = parseInt(input.getAttribute("data-max-mb") || "20", 10);
+    if (file.size > maxMb * 1024 * 1024) {
+      return "El archivo supera los " + maxMb + " MB.";
+    }
+    if (file.size === 0) {
+      return "El archivo está vacío.";
+    }
+    return "";
+  }
+
+  function setDropzoneFile(zone, input, file) {
+    var problem = validateDropzoneFile(input, file);
+    if (problem) {
+      input.value = "";
+      renderDropzoneFile(zone, null);
+      showDropzoneError(input, problem);
+      return false;
+    }
+    showDropzoneError(input, "");
+    renderDropzoneFile(zone, file);
+    return true;
+  }
+
+  document.querySelectorAll("[data-dropzone]").forEach(function (zone) {
+    var targetId = zone.getAttribute("for");
+    var input = targetId ? document.getElementById(targetId) : null;
+    if (!input) {
+      return;
+    }
+
+    input.addEventListener("change", function () {
+      var file = input.files && input.files[0];
+      if (!file) {
+        renderDropzoneFile(zone, null);
+        showDropzoneError(input, "");
+        return;
+      }
+      setDropzoneFile(zone, input, file);
+    });
+
+    ["dragenter", "dragover"].forEach(function (eventName) {
+      zone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        zone.classList.add("dropzone--dragover");
+      });
+    });
+
+    ["dragleave", "drop"].forEach(function (eventName) {
+      zone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        zone.classList.remove("dropzone--dragover");
+      });
+    });
+
+    zone.addEventListener("drop", function (event) {
+      var files = event.dataTransfer && event.dataTransfer.files;
+      if (!files || files.length === 0) {
+        return;
+      }
+      if (typeof DataTransfer === "undefined") {
+        showDropzoneError(input, "Tu navegador no admite arrastrar archivos: usá el selector de archivos.");
+        return;
+      }
+      var transfer = new DataTransfer();
+      transfer.items.add(files[0]);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+
+  var analyzeForm = document.querySelector('form[action$="/propuestas-ia/nuevo"]');
+  if (analyzeForm) {
+    analyzeForm.addEventListener("submit", function () {
+      var button = analyzeForm.querySelector("[data-analyze-submit]");
+      var progress = analyzeForm.querySelector("[data-analyze-progress]");
+      if (progress) {
+        progress.hidden = false;
+      }
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Analizando…";
+      }
+    });
+  }
 })();
