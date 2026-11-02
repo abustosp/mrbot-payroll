@@ -201,12 +201,16 @@ def _resolve_agreement_category(
             .where(CollectiveAgreement.code == code, CollectiveAgreement.active.is_(True))
             .order_by(CollectiveAgreement.year.desc())
         )
-        category = agreement and db.scalar(
-            select(AgreementCategory).where(
-                AgreementCategory.agreement_id == agreement.id, AgreementCategory.code == key[1]
+        if agreement is None:
+            cache[key] = (None, None)
+        else:
+            category = db.scalar(
+                select(AgreementCategory).where(
+                    AgreementCategory.agreement_id == agreement.id,
+                    AgreementCategory.code == key[1],
+                )
             )
-        )
-        cache[key] = (agreement.id, category.id) if category else (None, None)
+            cache[key] = (agreement.id, category.id) if category is not None else (None, None)
     return cache[key]
 
 

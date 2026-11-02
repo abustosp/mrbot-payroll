@@ -9,7 +9,13 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.database.models import FormulaDefinition, FormulaVersion, Organization, PayrollConcept, User
+from app.database.models import (
+    FormulaDefinition,
+    FormulaVersion,
+    Organization,
+    PayrollConcept,
+    User,
+)
 from app.database.session import SessionLocal
 from scripts.seed_demo import DEMO_END, DEMO_START
 
