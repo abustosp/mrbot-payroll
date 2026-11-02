@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Importar empleados{% endblock %}
+{% block breadcrumb %}<li><a href="{{ url_for('employees_list') }}">Empleados</a></li><li class="current" aria-current="page">Importar</li>{% endblock %}
+{% block content %}
+  {% if request.query_params.get("error") %}<div class="callout" role="alert">{{ request.query_params.get("error") }}</div>{% endif %}
+  <section class="card">
+    <div class="card-header"><div><h2 class="card-title">Importar empleados</h2>
+      <p class="card-subtitle">Columnas: Legajo, Apellido, Nombre, CUIL, Fecha de ingreso, Categoría, Convenio, Email. Se valida el dígito verificador del CUIL y se muestra una vista previa antes de crear nada.</p></div></div>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('employees_import_post') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="card-body">
+        <div class="field"><label for="import-company">Empresa</label>
+          <select class="select" id="import-company" name="company_id" required>
+            {% for company in companies %}<option value="{{ company.id }}">{{ company.legal_name }}</option>{% endfor %}
+          </select></div>
+        <div class="field"><label for="employees-file">Archivo CSV o XLSX</label>
+          <input type="file" id="employees-file" name="file" accept=".csv,.xlsx,.xlsm" required></div>
+      </div>
+      <div class="card-footer"><button class="btn btn--primary" type="submit">Revisar archivo</button>
+        <a class="btn btn--ghost" href="{{ url_for('employees_list') }}">Cancelar</a></div>
+    </form>
+  </section>
+{% endblock %}

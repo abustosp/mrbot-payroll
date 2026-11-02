@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.ai import AIError, analyze_agreement
 from app.api.common import commit_or_conflict
-from app.api.imports import _read_upload, import_novelties
+from app.api.imports import _read_upload, import_employees, import_novelties
 from app.api.payroll_runs import (
     approve_payroll_run,
     calculate_run,
@@ -1007,6 +1007,50 @@ def employee_new(
         form_title="Nuevo legajo",
         is_edit=False,
     )
+
+
+@protected_router.get("/empleados/importar", name="employees_import")
+def employees_import(request: Request, data: DataSource, user: WebUserDep, db: SessionDep) -> HTMLResponse:
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    return _render(
+        request, "employees/import.html", page_title="Importar empleados",
+        page_subtitle="Cargue un CSV o XLSX: se revisa fila por fila antes de crear nada.",
+        active_nav="employees", companies=_employee_companies(db, actor.organization_id),
+    )
+
+
+@protected_router.post("/empleados/importar", name="employees_import_post")
+def employees_import_post(
+    request: Request, data: DataSource, user: WebUserDep, db: SessionDep, settings: SettingsDep,
+    file: Annotated[UploadFile, File()], company_id: Annotated[int, Form()],
+    csrf_token: Annotated[str, Form()] = "", confirmation: Annotated[str, Form()] = "",
+) -> Response:
+    """Revisión (dry-run) y confirmación de la importación de empleados, con el mismo patrón que las novedades."""
+    enforce_csrf(request, csrf_token, settings, user.id)
+    actor = _sql_user(db, user, data, {"admin", "editor"})
+    try:
+        content, filename = _read_upload(file)
+        preview = import_employees(file=file, dry_run=True, company_id=company_id, db=db, user=actor)
+        serializer = URLSafeTimedSerializer(settings.secret_key, salt="payroll-web-import-employees")
+        proof = {"company": company_id, "user": actor.id, "digest": hashlib.sha256(content).hexdigest()}
+        if confirmation:
+            try:
+                signed = serializer.loads(confirmation, max_age=3600)
+            except BadSignature as exc:
+                raise HTTPException(status_code=400, detail="La confirmación venció. Revise el archivo nuevamente.") from exc
+            if signed != proof:
+                raise HTTPException(status_code=400, detail="El archivo no coincide con el revisado.")
+            result = import_employees(file=file, dry_run=False, company_id=company_id, db=db, user=actor)
+            message = (f"Importación terminada: {result.get('created', 0)} empleados creados "
+                       f"({result.get('contracts_created', 0)} con contrato), {result.get('skipped', 0)} omitidos.")
+            return RedirectResponse(str(request.url_for("employees_list")) + "?" + urlencode({"notice": message}), status_code=303)
+        token = serializer.dumps(proof)
+    except HTTPException as exc:
+        db.rollback()
+        return RedirectResponse(str(request.url_for("employees_import")) + "?" + urlencode({"error": _error_message(exc)}), status_code=303)
+    return _render(request, "employees/import_preview.html", page_title="Revisar empleados",
+                   page_subtitle=f"Archivo {filename}", active_nav="employees", preview=preview,
+                   confirmation=token, filename=filename, company_id=company_id)
 
 
 @protected_router.post("/empleados", name="employee_create")

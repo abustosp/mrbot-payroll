@@ -44,7 +44,9 @@ from app.api.common import commit_or_conflict
 from app.api.payroll_runs import AnnulInput
 from app.auth.dependencies import require_role, require_user
 from app.database.models import (
+    AgreementCategory,
     AuditLog,
+    CollectiveAgreement,
     Company,
     Employee,
     EmploymentContract,
@@ -185,6 +187,29 @@ def _scoped_company(db: Session, company_id: int, organization_id: int) -> Compa
     return company
 
 
+def _resolve_agreement_category(
+    db: Session, convenio: str | None, categoria: str | None, cache: dict[tuple[str, str], tuple[int | None, int | None]]
+) -> tuple[int | None, int | None]:
+    """Convenio ("CCT 130/75" o "130/75") y categoría del CSV -> ids; (None, None) si no existen."""
+    if not convenio or not categoria:
+        return None, None
+    code = convenio.upper().replace("CCT", "").strip()
+    key = (code, categoria.strip().upper())
+    if key not in cache:
+        agreement = db.scalar(
+            select(CollectiveAgreement)
+            .where(CollectiveAgreement.code == code, CollectiveAgreement.active.is_(True))
+            .order_by(CollectiveAgreement.year.desc())
+        )
+        category = agreement and db.scalar(
+            select(AgreementCategory).where(
+                AgreementCategory.agreement_id == agreement.id, AgreementCategory.code == key[1]
+            )
+        )
+        cache[key] = (agreement.id, category.id) if category else (None, None)
+    return cache[key]
+
+
 def _commit_employees(
     db: Session,
     user: User,
@@ -216,6 +241,7 @@ def _commit_employees(
     created = 0
     skipped = 0
     contracts_created = 0
+    category_cache: dict[tuple[str, str], tuple[int | None, int | None]] = {}
     for index, row in enumerate(result.valid_rows):
         if not isinstance(row, EmployeeRow):
             continue
@@ -249,10 +275,15 @@ def _commit_employees(
                 db.add(employee)
                 db.flush()
                 if company is not None:
+                    agreement_id, category_id = _resolve_agreement_category(
+                        db, row.convenio, row.categoria, category_cache
+                    )
                     db.add(
                         EmploymentContract(
                             employee_id=employee.id,
                             company_id=company.id,
+                            agreement_id=agreement_id,
+                            category_id=category_id,
                             valid_from=row.fecha_ingreso,
                         )
                     )

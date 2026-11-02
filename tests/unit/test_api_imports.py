@@ -17,7 +17,9 @@ from app.api.imports import MAX_IMPORT_BYTES, router
 from app.auth.dependencies import require_user
 from app.database import Base
 from app.database.models import (
+    AgreementCategory,
     AuditLog,
+    CollectiveAgreement,
     Company,
     Employee,
     EmploymentContract,
@@ -568,6 +570,40 @@ def test_employees_commit_creates_contract_when_company_is_provided(api) -> None
         assert contract is not None
         assert contract.company_id == company_id
         assert contract.valid_from == date(2024, 5, 20)
+
+
+def test_employees_commit_assigns_agreement_and_category_from_csv(api) -> None:
+    client, factory, _ = api
+    with factory.begin() as session:
+        company = Company(organization_id=1, cuit="30711223344", legal_name="Empresa SA")
+        agreement = CollectiveAgreement(code="130/75", year=1975, name="Comercio")
+        session.add_all([company, agreement])
+        session.flush()
+        category = AgreementCategory(agreement_id=agreement.id, code="ADMIN_A", name="Admin A")
+        session.add(category)
+        session.flush()
+        company_id, agreement_id, category_id = company.id, agreement.id, category.id
+
+    content = employee_csv(
+        [
+            "E-31;López;Pedro;20-12345678-6;20/05/2024;ADMIN_A;CCT 130/75;pedro@example.com",
+            f"E-32;Pérez;Ana;{make_cuil('2712345678')};20/05/2024;INEXISTENTE;CCT 130/75;ana@example.com",
+        ]
+    )
+    response = _post_employee_file(client, content, "employees.csv", dry_run="false", company_id=company_id)
+
+    assert response.status_code == 200, response.text
+    with factory() as session:
+        contracts = {
+            code: session.scalar(
+                select(EmploymentContract)
+                .join(Employee, Employee.id == EmploymentContract.employee_id)
+                .where(Employee.employee_code == code)
+            )
+            for code in ("E-31", "E-32")
+        }
+    assert (contracts["E-31"].agreement_id, contracts["E-31"].category_id) == (agreement_id, category_id)
+    assert contracts["E-32"].category_id is None  # categoría desconocida: queda sin asignar
 
 
 def test_imports_require_authentication(api) -> None:

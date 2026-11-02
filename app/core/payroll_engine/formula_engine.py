@@ -223,6 +223,14 @@ class _Evaluator:
             elif name == "coalesce":
                 operator_result = None
                 for index, argument in enumerate(arguments):
+                    # Una variable ausente (p. ej. una novedad que el empleado no tiene este mes) cuenta como None.
+                    if (
+                        isinstance(argument, dict)
+                        and set(argument) == {"variable"}
+                        and argument["variable"] not in self.context.variables
+                    ):
+                        operator_result = None
+                        continue
                     operator_result = self.evaluate(argument, f"{path}.arguments[{index}]", child)
                     if operator_result is not None:
                         break

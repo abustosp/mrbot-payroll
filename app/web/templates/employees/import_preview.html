@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Revisar empleados{% endblock %}
+{% block breadcrumb %}<li><a href="{{ url_for('employees_list') }}">Empleados</a></li><li><a href="{{ url_for('employees_import') }}">Importar</a></li><li class="current">Revisar</li>{% endblock %}
+{% block content %}
+<section class="card"><div class="card-header"><h2 class="card-title">Vista previa: {{ filename }}</h2></div><div class="card-body">
+  <p><strong>{{ preview.valid_count }}</strong> filas válidas · <strong>{{ preview.error_count }}</strong> errores · <strong>{{ preview.duplicate_count }}</strong> duplicados</p>
+  {% for error in preview.errors[:10] %}<p role="alert">Fila {{ error.row }}: {{ error.message }}</p>{% endfor %}
+  {% for duplicate in preview.duplicates[:10] %}<p>Fila {{ duplicate.row }}: {{ duplicate.message }}</p>{% endfor %}
+  {% if preview.valid_rows %}
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Legajo</th><th>Apellido</th><th>Nombre</th><th>CUIL</th><th>Ingreso</th><th>Categoría</th><th>Convenio</th></tr></thead><tbody>
+  {% for row in preview.valid_rows[:12] %}<tr><td>{{ row.legajo }}</td><td>{{ row.apellido }}</td><td>{{ row.nombre }}</td><td>{{ row.cuil }}</td><td>{{ row.fecha_ingreso }}</td><td>{{ row.categoria or '' }}</td><td>{{ row.convenio or '' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if preview.valid_rows|length > 12 %}<p class="muted">… y {{ preview.valid_rows|length - 12 }} filas válidas más.</p>{% endif %}
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('employees_import_post') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation" value="{{ confirmation }}"><input type="hidden" name="company_id" value="{{ company_id }}">
+    <p>Seleccione el mismo archivo para confirmar la creación de los empleados válidos, cada uno con su contrato, convenio y categoría.</p>
+    <label for="confirmed-file">Archivo revisado</label> <input id="confirmed-file" type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
+    <button class="btn btn--primary" type="submit">Confirmar importación</button>
+  </form>{% endif %}
+  <p><a href="{{ url_for('employees_import') }}">Volver</a></p>
+</div></section>
+{% endblock %}
